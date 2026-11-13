@@ -1,0 +1,4 @@
+#!/bin/sh
+# Content guard: refuses game data, keys, blobs and generated code (tools/check_content.py).
+# Enabled by: git config core.hooksPath .githooks
+exec python3 "$(git rev-parse --show-toplevel)/tools/check_content.py" --staged

@@ -1,0 +1,44 @@
+# Game data and keys: never in the repository
+*.xci
+*.xcz
+*.nsp
+*.nsz
+*.nca
+*.nso
+*.nro
+*.npdm
+*.nacp
+*.tik
+*.cert
+*.keys
+prod.keys
+title.keys
+firmware/
+# Everything extracted from or generated out of the game
+extracted/
+generated/
+generated-*/
+build/
+stage/
+toolchain/
+install-temp/
+romfs/
+exefs/
+# Arch packaging outputs (makepkg runs in packaging/arch/)
+packaging/arch/src/
+packaging/arch/pkg/
+packaging/arch/*.pkg.tar*
+packaging/arch/hylian-melodies/
+# Caches, logs
+*.log
+logs/
+cache/
+shader-cache/
+*.cache
+__pycache__/
+.pytest_cache/
+# Upstream reference checkouts (read-only)
+refs/
+# Local settings
+config.local.toml
+.venv/
