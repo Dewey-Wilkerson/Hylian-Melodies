@@ -247,5 +247,28 @@ def not_yet(name):
     return step
 
 
-STEPS = {'check': check, 'extract': extract, 'lift': not_yet('lift'), 'compile': not_yet('compile'),
+LIFT_MODULES = (('main', 0x7000000000), ('sdk', 0x7004000000))  # must match runtime/rt.h MAIN_BASE, SDK_BASE
+
+
+def lift(c):
+    import subprocess
+    gen_dir = os.path.join(os.path.dirname(c.work), 'generated')
+    gen_py = os.path.join(c.a.root, 'recomp', 'gen.py')
+    for k, (name, base) in enumerate(LIFT_MODULES):
+        cmd = [sys.executable, gen_py, name, os.path.join(c.dest, 'exefs', name), hex(base),
+               os.path.join(gen_dir, name)]
+        c.log('lift: ' + ' '.join(cmd))
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                             env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
+        for line in p.stdout:
+            c.log('  ' + line.rstrip())
+            if ': progress ' in line:
+                done, total = line.rsplit(' ', 1)[1].split('/')
+                c.ev.progress('lift', 100 * (k + int(done) / int(total)) / len(LIFT_MODULES))
+        if p.wait():
+            raise SetupError('lift_failed', module=name, log=c.a.log_path)
+    return {'generated': gen_dir}
+
+
+STEPS = {'check': check, 'extract': extract, 'lift': lift, 'compile': not_yet('compile'),
          'shaders': not_yet('shaders'), 'cleanup': not_yet('cleanup')}

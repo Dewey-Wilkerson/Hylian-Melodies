@@ -14,3 +14,6 @@ One line each, newest last. Format: date, decision, reason.
 - 2026-11-12: hactool runs with explicit `-k`, `--disablekeywarns --suppresskeys`, filtered output, and `HOME` set to a private 0700 temp dir (so it never reads the user's `~/.switch`). Title keys from the cart's ticket go into a 0600 `title.keys` in that temp home, deleted right after, never on the command line or in logs. Reason: hactool prints key values in warnings; command lines are visible in `ps`.
 - 2026-11-12: The project's own code is MIT. Reason: brief 2.4 default.
 - 2026-11-12: Tests use the standard library `unittest` (pytest is not installed). Reason: fewer dependencies.
+- 2026-11-12: A resolved jump table's switch lists only its targets and calls `rt_jt_miss` (fatal) otherwise; the all-instruction-label fallback stays only for unresolved computed branches. Reason: a 50k-instruction function in `main` with 17 tables made clang use 19 GB under the all-label scheme.
+- 2026-11-12: Game code is linked statically into one executable (not LAS's separate game library). Reason: one binary to copy per user (brief 8.1), no loader for a game library needed.
+- 2026-11-12: Launcher and pacman hooks written early (during M3) because they are independent of the game; M9 still owns the PKGBUILD and the package build. Reason: used compile wait time.

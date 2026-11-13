@@ -1,0 +1,68 @@
+# pacman hooks for hylian-melodies-recomp. Everything inside a user's home runs as that folder's owner (runuser),
+# never as root. HM_GAME_DIR / HM_SUPPORT_DIR override the system folders (tests only).
+
+_game() { printf '%s' "${HM_GAME_DIR:-/usr/share/hylian-melodies}"; }
+_support() { printf '%s' "${HM_SUPPORT_DIR:-/usr/share/hylian-melodies-recomp}"; }
+
+# _as <user> <command...>: run as that user (directly when we already are that user, as in tests)
+_as() {
+    _u=$1; shift
+    if [ "$(id -un)" = "$_u" ]; then "$@"; else runuser -u "$_u" -- "$@"; fi
+}
+
+# "user home" for every account whose ~/.local/share/hylian-melodies was set up by the launcher
+_players() {
+    getent passwd | while IFS=: read -r _name _pw _uid _gid _gecos _home _shell; do
+        case $_home in /*) ;; *) continue ;; esac
+        [ -f "$_home/.local/share/hylian-melodies/.hylian-melodies" ] && printf '%s %s\n' "$_name" "$_home"
+    done
+}
+
+post_install() {
+    _copy=$(cat "$(_support)/desktop-copy" 2>/dev/null || true)
+    if [ -n "$_copy" ]; then
+        # the first existing folder up the chain decides the owner; never root's
+        _d=$(dirname "$_copy")
+        while [ ! -d "$_d" ] && [ "$_d" != / ]; do _d=$(dirname "$_d"); done
+        _owner=$(stat -c %U "$_d" 2>/dev/null || echo root)
+        if [ "$_owner" != root ] && [ ! -e "$_copy" ]; then
+            _as "$_owner" mkdir -p "$(dirname "$_copy")"
+            _as "$_owner" install -m 755 /usr/share/applications/hylian-melodies.desktop "$_copy"
+            _uid=$(id -u "$_owner")
+            if [ -S "/run/user/$_uid/bus" ] && command -v gio >/dev/null 2>&1; then
+                _as "$_owner" env DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$_uid/bus" \
+                    gio set "$_copy" metadata::trusted true 2>/dev/null || true
+            fi
+            echo "  Desktop shortcut: $_copy"
+        fi
+    fi
+    echo "  Hylian Melodies is installed in $(_game)."
+    echo "  Run 'hylian-melodies' (or use the menu entry). Each user's folder ~/.local/share/hylian-melodies"
+    echo "  (saves, settings, logs, caches) is created on their first start."
+}
+
+post_upgrade() {
+    post_install
+}
+
+pre_remove() {
+    _copy=$(cat "$(_support)/desktop-copy" 2>/dev/null || true)
+    case $_copy in
+        */hylian-melodies.desktop) [ -f "$_copy" ] && [ ! -L "$_copy" ] && rm -f "$_copy" ;;
+    esac
+    _g=$(_game)
+    _players | while read -r _user _home; do
+        _dir=$_home/.local/share/hylian-melodies
+        _as "$_user" sh -c '
+            g=$1 d=$2
+            for l in "$d"/* "$d"/.[!.]* "$d"/shader-cache/* "$d"/pipeline-cache/*; do
+                [ -L "$l" ] || continue
+                case $(readlink "$l") in "$g"/*) rm -f "$l" ;; esac
+            done
+            rm -f "$d/hylian-melodies" "$d/.stamp" "$d"/*.new "$d/.hylian-melodies"
+            rmdir "$d/shader-cache" "$d/pipeline-cache" "$d/profile" 2>/dev/null || true
+        ' sh "$_g" "$_dir"
+        echo "  Kept $_dir for $_user: saves, settings, mods, logs and caches are still there."
+    done
+    echo "  Delete those folders yourself once you have copied any saves you want to keep."
+}

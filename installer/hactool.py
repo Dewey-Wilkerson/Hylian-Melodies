@@ -48,7 +48,7 @@ class Hactool:
                 f.write(f'{rid} = {key.hex()}\n')
 
     def run(self, *args, what='hactool'):
-        cmd = [self.exe, '-k', self.keys, '--disablekeywarns', *map(str, args)]
+        cmd = [self.exe, '-k', self.keys, '--disablekeywarns', '--suppresskeys', *map(str, args)]
         env = dict(os.environ, HOME=self.home, USERPROFILE=self.home)
         r = subprocess.run(cmd, capture_output=True, text=True, errors='replace', env=env)
         filtered = filter_output(r.stdout + r.stderr)
