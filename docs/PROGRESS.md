@@ -12,7 +12,8 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M3 Lift | done: main+sdk lift (0 unsupported insns) and link with --no-undefined |
 | M4 Boot, headless | done: main loop runs headless (menu music, ~30 fps of presents, no crash); every stub documented in docs/services.md |
 | M5 Graphics | done: Vulkan renderer; loading screen, both splash videos and the title screen drawn correctly at 61 fps |
-| M6 Audio | next |
+| M6 Audio | done by measurement: 10 min, 0 gaps, card clock ~25 ppm from system clock, our latency share ~11-32 ms; not yet checked by ear |
+| M7 Input and saves | next |
 | M5-M8, M10 | not started |
 | M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
 
@@ -100,3 +101,14 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
    capture if LAS Recomp's audio code has it (`a->wav`), check pitch, gaps and drift over 10 minutes.
 2. Make `audout` pacing console-like (buffer release at 48 kHz, low and stable latency), add the latency setting
    (`audio_latency_ms`), measure and document it in docs/audio.md.
+- 2026-11-13 M6: audio stats (`HM_AUDIO_STATS`) and per-output PCM capture (`HM_AUDOUT_WAV`); device period and
+  queue made settings (`audio_period` 256, `audio_queue_ms` one period); default settings file
+  `packaging/hylian-melodies.ini`. 10-minute menu run: 0 gaps, release rate 47,998.6-47,999.6 frames/s each
+  minute (~-25 ppm against the system clock), constant 26.7 ms in our stream, 61 fps; capture clean. Details and
+  latency budget: docs/audio.md. Needs the owner's ears for the final word.
+
+## Next (M7: input and saves)
+
+1. SDL3 gamepad + keyboard into `runtime/hle/input.c` (`g_input_buttons`, `g_input_sticks`), polled at the start of
+   each game frame (the game reads `GetNpadState` once per frame); rumble through SDL; rebinding in the ini.
+2. Saves: the journal is in place (`services/fs.c`); test a save/load round trip that survives `kill -9`.

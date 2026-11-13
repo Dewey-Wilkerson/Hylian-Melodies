@@ -5,7 +5,8 @@
 #include "settings.h"
 
 Settings g_settings = {.aspect = ASPECT_ORIGINAL, .res_mode = RES_MATCH, .res_auto = true, .upscaler = UPSCALE_BILINEAR,
-                       .upscaler_auto = true, .antialias = AA_OFF, .volume = 1.0, .reverb = true, .movie_audio = true};
+                       .upscaler_auto = true, .antialias = AA_OFF, .volume = 1.0, .reverb = true, .movie_audio = true,
+                       .audio_period = 256, .audio_queue_ms = 0};
 int g_default_upscaler = UPSCALE_BILINEAR, g_default_res_mode = RES_MATCH;
 bool g_gpu_integrated;
 
@@ -28,6 +29,8 @@ void settings_load(void) {
         else if (!strcmp(key, "resolution")) g_settings.res_mode = (int)v, g_settings.res_auto = false;
         else if (!strcmp(key, "upscaler")) g_settings.upscaler = (int)v, g_settings.upscaler_auto = false;
         else if (!strcmp(key, "show_fps")) g_settings.show_fps = v != 0;
+        else if (!strcmp(key, "audio_period")) g_settings.audio_period = (int)v;
+        else if (!strcmp(key, "audio_queue_ms")) g_settings.audio_queue_ms = v;
         else if (!strcmp(key, "movie_audio")) g_settings.movie_audio = v != 0;
     }
     fclose(f);

@@ -10,4 +10,5 @@
 - Restored LAS Recomp renderer code still contains comments and dormant paths about Link's Awakening; the hooks are
   answered "off" (`runtime/nvn/las_feature_stubs.c`). To trim over time.
 - SMAA anti-aliasing is not built (not useful for pixel art anyway).
-- Audio (M6) has not been listened to or measured yet.
+- Audio is measured (docs/audio.md) but not yet checked by ear against the beat; end-to-end latency to the speakers
+  is not measured (use the game's calibration).

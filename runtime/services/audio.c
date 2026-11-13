@@ -1042,6 +1042,10 @@ typedef struct AudioOut {
     pthread_mutex_t lock;
     pthread_t thread;
     volatile bool quit;  // reboot (audio_reset)
+    // (diagnostics, logged every HM_AUDIO_STATS seconds: docs/audio.md)
+    int id;
+    uint64_t st_t0, st_frames, st_appends, st_underruns, st_wait_ns;
+    int st_max_queued, st_min_sdl, st_max_sdl;
 } AudioOut;
 
 // Every renderer / audio out of this boot: a reboot stops their threads (they read guest memory and signal this
@@ -1111,7 +1115,14 @@ static void *audout_thread(void *arg) {
         int dev_frames = 0;
         if (!SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(a->stream), &dev, &dev_frames) || dev_frames <= 0)
             dev_frames = 1024;
-        target = 2 * dev_frames * 2 * (int)ch;  // bytes of s16 at the source rate (close enough at 48 kHz)
+        // Release the next game buffer once the stream holds less than this: one device period by default
+        // (audio_queue_ms; LAS Recomp held two, 43 ms at its 1024-frame period). The game keeps two or three
+        // buffers queued behind it, so a late wake-up here doesn't starve the device.
+        double qms = getenv("HM_AUDIO_QUEUE_MS") ? atof(getenv("HM_AUDIO_QUEUE_MS")) : g_settings.audio_queue_ms;
+        target = qms > 0 ? (int)(qms * (a->rate ? a->rate : 48000) / 1000.0) * 2 * (int)ch : dev_frames * 2 * (int)ch;
+        LOG("[audio] out %d: device %s, %d Hz, %d ch, %d frames per period; release below %.1f ms queued\n", a->id,
+            SDL_GetAudioDeviceName(SDL_GetAudioStreamDevice(a->stream)), dev.freq, dev.channels, dev_frames,
+            target / (2.0 * ch) * 1000.0 / (a->rate ? a->rate : 48000));
     }
     while (!a->quit) {
         pthread_mutex_lock(&a->lock);
@@ -1122,14 +1133,25 @@ static void *audout_thread(void *arg) {
         uint64_t frames = size / (2 * ch);
         if (a->stream) {
             apply_gain(a->stream);
+            int before = SDL_GetAudioStreamQueued(a->stream);
+            if (before == 0 && a->st_frames) a->st_underruns++;  // (the device had nothing of ours left: a gap)
             if (data) SDL_PutAudioStreamData(a->stream, (const void *)(uintptr_t)data, (int)size);
+            int q = SDL_GetAudioStreamQueued(a->stream);
+            if (!a->st_appends || q < a->st_min_sdl) a->st_min_sdl = q;
+            if (q > a->st_max_sdl) a->st_max_sdl = q;
+            uint64_t w0 = plat_now_ns();
             while (SDL_GetAudioStreamQueued(a->stream) > target && !a->quit) { struct timespec ts = {0, 1000000}; nanosleep(&ts, NULL); }
+            a->st_wait_ns += plat_now_ns() - w0;
         } else {
             uint64_t ns = frames * 1000000000ull / (a->rate ? a->rate : 48000);
             struct timespec ts = {(time_t)(ns / 1000000000ull), (long)(ns % 1000000000ull)};
             nanosleep(&ts, NULL);
         }
-        if (a->wav && data) { fwrite((const void *)(uintptr_t)data, 1, size, a->wav); a->wav_bytes += (uint32_t)size; }
+        if (a->wav && data) {
+            fwrite((const void *)(uintptr_t)data, 1, size, a->wav);
+            fflush(a->wav);
+            a->wav_bytes += (uint32_t)size;
+        }
         pthread_mutex_lock(&a->lock);
         if (a->queued && a->tags[0] == tag) {
             if (a->released_n < 64) a->released[a->released_n++] = a->tags[0];
@@ -1139,7 +1161,28 @@ static void *audout_thread(void *arg) {
             a->queued--;
             a->played += frames;
         }
+        int inflight = a->queued;
         pthread_mutex_unlock(&a->lock);
+        {   // stats: frames released per second against the wall clock, the game's queue, SDL's queue
+            uint64_t now = plat_now_ns();
+            if (!a->st_t0) a->st_t0 = now;
+            a->st_frames += frames;
+            a->st_appends++;
+            if (inflight > a->st_max_queued) a->st_max_queued = inflight;
+            static double every = -1;
+            if (every < 0) every = getenv("HM_AUDIO_STATS") ? atof(getenv("HM_AUDIO_STATS")) : 0;
+            double el = (now - a->st_t0) / 1e9;
+            if (every > 0 && el >= every) {
+                double bpf = 2.0 * ch;
+                LOG("[audio] out %d: %.1f frames/s over %.1f s (%llu buffers of ~%llu frames), game queue up to %d, "
+                    "SDL queue %.1f-%.1f ms, %llu gaps, waiting %.0f%%\n", a->id, a->st_frames / el, el,
+                    (unsigned long long)a->st_appends, (unsigned long long)(a->st_frames / (a->st_appends ? a->st_appends : 1)),
+                    a->st_max_queued, a->st_min_sdl / bpf * 1000.0 / a->rate, a->st_max_sdl / bpf * 1000.0 / a->rate,
+                    (unsigned long long)a->st_underruns, 100.0 * a->st_wait_ns / 1e9 / el);
+                a->st_t0 = now, a->st_frames = a->st_appends = a->st_underruns = a->st_wait_ns = 0;
+                a->st_max_queued = a->st_max_sdl = 0;
+            }
+        }
         pthread_mutex_lock(&g_klock);
         kernel_signal(a->event);
         pthread_mutex_unlock(&g_klock);
@@ -1224,8 +1267,26 @@ SERVICE("audout:u", audout_u) {
         a->state = 1;
         pthread_mutex_init(&a->lock, NULL);
         a->event = kernel_create_event_pair(&a->ev_w, &a->ev_r);
-        if (getenv("HM_AUDOUT_WAV")) a->wav = fopen(getenv("HM_AUDOUT_WAV"), "wb");
+        static int g_audout_ids;
+        a->id = ++g_audout_ids;
+        if (getenv("HM_AUDOUT_WAV")) {  // raw s16le PCM, one file per output: <prefix>-<n>.raw
+            char path[512];
+            snprintf(path, sizeof path, "%s-%d.raw", getenv("HM_AUDOUT_WAV"), a->id);
+            a->wav = fopen(path, "wb");
+        }
         uint64_t open_t0 = plat_now_ns();
+        {   // the device period asked of the audio server (PipeWire / Pulse): small, as the console's (docs/audio.md)
+            static bool hinted;
+            if (!hinted) {
+                hinted = true;
+                char frames[16];
+                int p = getenv("HM_AUDIO_PERIOD") ? atoi(getenv("HM_AUDIO_PERIOD")) : g_settings.audio_period;
+                if (p > 0) {
+                    snprintf(frames, sizeof frames, "%d", p);
+                    SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, frames);
+                }
+            }
+        }
         if (!(getenv("HM_NO_AUDIO") && strcmp(getenv("HM_NO_AUDIO"), "0")) && SDL_InitSubSystem(SDL_INIT_AUDIO)) {
             SDL_AudioSpec spec = {SDL_AUDIO_S16, (int)a->channels, (int)a->rate};
             a->stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);

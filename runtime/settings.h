@@ -25,7 +25,9 @@ typedef struct {
     double volume;         // master volume 0..1
     bool reverb;           // (audio renderer only; unused by this game)
     bool movie_audio;
-    int audio_latency_ms;  // extra output latency compensation (rhythm calibration, M6)
+    int audio_latency_ms;  // (reserved: the game has its own calibration, see docs/audio.md)
+    int audio_period;      // device period asked of the audio server, frames at 48 kHz (default 256 = 5.3 ms)
+    double audio_queue_ms; // what the output stream may hold before the next game buffer is taken (0 = one period)
     // game
     char language[8];      // the game's language code, e.g. en-US ("language" in the ini; default: system)
 } Settings;
