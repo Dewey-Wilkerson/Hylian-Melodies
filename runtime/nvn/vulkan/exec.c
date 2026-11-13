@@ -2100,7 +2100,11 @@ static VkFormat vertex_format(uint32_t f) {
     case 0x3F: return VK_FORMAT_B10G11R11_UFLOAT_PACK32;
     case 0x40: return VK_FORMAT_E5B9G9R9_UFLOAT_PACK32;
     case 0x51: return VK_FORMAT_R8_UINT;
-    default: return VK_FORMAT_R32G32B32A32_SFLOAT;
+    default: {
+        static uint8_t told[256];
+        if (f < 256 && !told[f]++) LOG("[vk] vertex format %#x not mapped: read as 4 floats (wrong)\n", f);
+        return VK_FORMAT_R32G32B32A32_SFLOAT;
+    }
     }
 }
 
@@ -5946,6 +5950,17 @@ static void draw_(CmdRec *r, bool indexed) {
                 vx, vp[1] * vp_sy + vp_oy, vw, vp[3] * vp_sy, k, (unsigned long long)g_cur_fs_hash, sr.offset.x, sr.offset.y,
                 sr.extent.width, sr.extent.height, st.scissor[0][0], st.scissor[0][1], st.scissor[0][2], st.scissor[0][3], pass_w, pass_h,
                 vp_sx, vp_sy);
+            Range u = st.ubuf[1][0];  // (the fragment stage (NVN stage 1)'s binding 0 = the shader's c3: this game's per-sprite tint and parameters)
+            if (u.addr && u.size >= 16) {
+                const float *f = (const float *)(uintptr_t)u.addr;
+                char vals[400] = "";
+                for (unsigned i = 0; i < u.size / 4 && i < 24; i++) {
+                    char one[24];
+                    snprintf(one, sizeof one, "%s%.3f", i && i % 4 == 0 ? " | " : " ", f[i]);
+                    strcat(vals, one);
+                }
+                LOG("[draw]   fs c3 size %llu:%s\n", (unsigned long long)u.size, vals);
+            }
         }
     }
     apply_scissor();

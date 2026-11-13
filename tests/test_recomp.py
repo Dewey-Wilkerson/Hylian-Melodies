@@ -88,6 +88,33 @@ class JumpTables(unittest.TestCase):
         self.assertEqual(mi.r[1], 0x12034)
 
 
+class SimdWrites(unittest.TestCase):
+    """FP/SIMD words name V registers in their destination field, except the moves/conversions to a GPR."""
+
+    def test_classification(self):
+        from jumptables import writes_gpr_from_simd
+        fsub_d8 = 0x1E603800 | (15 << 16) | (2 << 5) | 8      # fsub d8, d2, d15: writes v8, not x8
+        scvtf_d10 = 0x1E620000 | (8 << 5) | 10               # scvtf d10, w8: writes v10
+        fmov_x0_d1 = 0x9E660020                              # fmov x0, d1: writes x0
+        fcvtzs_w0 = 0x1E780000 | (1 << 5)                    # fcvtzs w0, s1: writes w0
+        umov_w0 = 0x0E043C20                                 # umov w0, v1.s[0]: writes w0
+        self.assertFalse(writes_gpr_from_simd(fsub_d8))
+        self.assertFalse(writes_gpr_from_simd(scvtf_d10))
+        self.assertTrue(writes_gpr_from_simd(fmov_x0_d1))
+        self.assertTrue(writes_gpr_from_simd(fcvtzs_w0))
+        self.assertTrue(writes_gpr_from_simd(umov_w0))
+
+    def test_table_through_fp_work(self):
+        # cmp/b.hi guard, table lookup, then FP work writing d8 before `br x8` (the case that crashed the game)
+        n = 14
+        words = [cmp_imm_w(0, 3), b_cond(n - 1, 8), adr(9, n * 4 - 8), ldrb_reg(10, 9, 0), adr(8, 0x28 - 0x10),
+                 add_ext_sxtb_lsl2(8, 8, 10), 0x1E603800 | (15 << 16) | (2 << 5) | 8, 0x1E603800 | (3 << 16) | (4 << 5) | 9,
+                 br(8)] + [0xD65F03C0] * 5
+        m = FakeMod(words, bytes([0, 1, 2, 3]))
+        t = run_window(m, 0x1000, 0x1000 + n * 4, 0x1000, 0x1000, 0x1020, [0], 4)
+        self.assertEqual(t, [0x1028, 0x102c, 0x1030, 0x1034])
+
+
 class Marker(unittest.TestCase):
     def test_generator_marker_matches_checker(self):
         self.assertIn(check_content.GENERATED_MARKER, gen.MARKER)

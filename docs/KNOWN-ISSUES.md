@@ -15,3 +15,4 @@
 - SMAA anti-aliasing is not built (not useful for pixel art anyway).
 - Audio is measured (docs/audio.md) but not yet checked by ear against the beat; end-to-end latency to the speakers
   is not measured (use the game's calibration).
+- Underground colours were wrong (fixed 2026-11-13: 3D texture layout). Thin flickering lines remain (investigating: render scale 0.9667).

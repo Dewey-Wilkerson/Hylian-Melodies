@@ -26,6 +26,12 @@ void tegra_layout_init(TexLayout *t) {
     uint32_t hb = div_up(t->height, t->fmt->bh);
     t->block_height_log2 = tegra_default_block_height_log2(hb);
     t->block_depth_log2 = t->depth > 1 ? block_depth_for(t->depth) : 0;
+    // 3D textures (ours, not LAS Recomp's: its game had none): a block holds at most 16 GOBs, so a deep block gets a
+    // shorter height. Found on this game's 16x16x16 colour-grading LUT, whose data is only smooth with 1 x 16 GOBs
+    // (height x depth), not the 2 x 16 the 2D rule gives (docs/DECISIONS.md, 2026-11-13). One texture's evidence:
+    // check new 3D textures with HM_DUMP_3D=1.
+    if (t->depth > 1 && t->block_height_log2 + t->block_depth_log2 > 4)
+        t->block_height_log2 = t->block_depth_log2 >= 4 ? 0 : 4 - t->block_depth_log2;
 }
 
 // Block height shrinks with the level so a block never exceeds the level height.

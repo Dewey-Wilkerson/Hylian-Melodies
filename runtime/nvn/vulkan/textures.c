@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "../rqueue.h"
 #include "vk.h"
@@ -703,6 +704,14 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
                 tegra_deswizzle(src, lin, l.wb, l.hb, l.d, fi->bpb, l.block_height_log2, l.block_depth_log2);
             }
             if (b->tp > 0 && layer == 0) texpatch_apply(b->tp - 1, lv, lin, l.w, l.h, row);
+            if (l.d > 1 && lv == 0 && getenv("HM_DUMP_3D")) {  // (diagnostics: 3D textures as uploaded, raw)
+                char path[160];
+                mkdir("build", 0755);
+                snprintf(path, sizeof path, "build/tex3d_%llx_%ux%ux%u_f%x_bh%u_bd%u.raw", (unsigned long long)t->addr, l.w, l.h,
+                         l.d, t->format, l.block_height_log2, l.block_depth_log2);
+                FILE *f = fopen(path, "wb");
+                if (f) { fwrite(lin, 1, (size_t)row * l.hb * l.d, f); fclose(f); LOG("[vk] dumped %s\n", path); }
+            }
             if (expand) {  // RGB8 -> RGBA8
                 uint8_t *o = s.ptr;
                 uint64_t n = (uint64_t)l.wb * l.hb * l.d;
