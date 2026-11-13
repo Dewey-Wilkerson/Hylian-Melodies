@@ -4,7 +4,13 @@
 
 #include "settings.h"
 
-Settings g_settings = {.volume = 1.0, .reverb = true, .audio_latency_ms = 0};
+Settings g_settings = {.aspect = ASPECT_ORIGINAL, .res_mode = RES_MATCH, .res_auto = true, .upscaler = UPSCALE_BILINEAR,
+                       .upscaler_auto = true, .antialias = AA_OFF, .volume = 1.0, .reverb = true, .movie_audio = true};
+int g_default_upscaler = UPSCALE_BILINEAR, g_default_res_mode = RES_MATCH;
+bool g_gpu_integrated;
+
+// Defaults that depend on the GPU (LAS Recomp chose lower ones for integrated GPUs; this 2D game needs no change).
+void settings_resolve_defaults(bool integrated) { g_gpu_integrated = integrated; }
 
 void settings_load(void) {
     FILE *f = fopen("hylian-melodies.ini", "r");
@@ -17,6 +23,12 @@ void settings_load(void) {
         if (sscanf(line, " %63[a-z_] = %lf", key, &v) != 2) continue;
         if (!strcmp(key, "volume")) g_settings.volume = v;
         else if (!strcmp(key, "audio_latency_ms")) g_settings.audio_latency_ms = (int)v;
+        else if (!strcmp(key, "fullscreen")) g_settings.fullscreen = v != 0;
+        else if (!strcmp(key, "aspect_unlocked")) g_settings.aspect = v != 0 ? ASPECT_UNLOCKED : ASPECT_ORIGINAL;
+        else if (!strcmp(key, "resolution")) g_settings.res_mode = (int)v, g_settings.res_auto = false;
+        else if (!strcmp(key, "upscaler")) g_settings.upscaler = (int)v, g_settings.upscaler_auto = false;
+        else if (!strcmp(key, "show_fps")) g_settings.show_fps = v != 0;
+        else if (!strcmp(key, "movie_audio")) g_settings.movie_audio = v != 0;
     }
     fclose(f);
 }

@@ -11,7 +11,8 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M2 Extraction | done: hactool built from pinned commit; check+extract verified, resume after kill tested |
 | M3 Lift | done: main+sdk lift (0 unsupported insns) and link with --no-undefined |
 | M4 Boot, headless | done: main loop runs headless (menu music, ~30 fps of presents, no crash); every stub documented in docs/services.md |
-| M5 Graphics | next |
+| M5 Graphics | done: Vulkan renderer; loading screen, both splash videos and the title screen drawn correctly at 61 fps |
+| M6 Audio | next |
 | M5-M8, M10 | not started |
 | M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
 
@@ -85,3 +86,17 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
    VMA header; build it instead of `nvn/null_backend.c` when not headless.
 2. SDL3 window + present loop replacing `runtime/ui_headless.c` (LAS Recomp's ui_run without its menus).
 3. First frame, then the title screen; frame dumps for comparison (kept outside the repo).
+- 2026-11-13 M5 **done**: LAS Recomp's Vulkan backend, Maxwell translator and SDL3 window restored and adapted
+  (`tools/build_game.py --target game`). Fixes along the way: TLD4 (texture gather) in the translator; the present's
+  crop (the stand-in left it unset: one texel stretched over the window); the movie decoder writing into the game's
+  own buffer (green videos); the "format changed" event (a 5 s stall at the second video). Verified with window
+  captures (`HM_WINDOW_SHOT`, kept outside the repo): loading screen, both splash videos, and the title screen
+  matching the console's, at a steady 61 fps on the RX 7600 XT with no translation failure and no skipped draw.
+  Not yet: input (M7), integer pixel scaling (M10).
+
+## Next (M6: audio)
+
+1. Listen: FMOD -> `audout` -> SDL3 (the menu music already plays). Record the output with `HM_AUDIO_WAV`-style
+   capture if LAS Recomp's audio code has it (`a->wav`), check pitch, gaps and drift over 10 minutes.
+2. Make `audout` pacing console-like (buffer release at 48 kHz, low and stable latency), add the latency setting
+   (`audio_latency_ms`), measure and document it in docs/audio.md.

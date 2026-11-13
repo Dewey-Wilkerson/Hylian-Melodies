@@ -402,6 +402,8 @@ typedef struct {
     AVPacket *pkt;
     bool video;
     uint64_t events[4];  // input available, output available, format changed, error
+    uint64_t st_in, st_frames, st_acq, st_rel;
+    bool format_signalled;  // the "output format changed" event (2) went out once, with the first decoded frame  // (diagnostics: per-decoder counts, logged at stop)
     uint8_t *in_mem[NIN];
     uint32_t in_cap;
     bool in_busy[NIN];
@@ -531,7 +533,9 @@ static void dec_stop(Cpu *c) {
     pthread_mutex_lock(&d->lock);
     if (!d->stopped) {
         d->stopped = true;
-        LOG("[movie] decoder %s stopped\n", d->video ? "video" : "audio");
+        LOG("[movie] decoder %s stopped: %llu inputs, %llu frames decoded, %llu outputs taken, %llu released\n",
+            d->video ? "video" : "audio", (unsigned long long)d->st_in, (unsigned long long)d->st_frames,
+            (unsigned long long)d->st_acq, (unsigned long long)d->st_rel);
         uint64_t saved[8];
         memcpy(saved, c->x, sizeof saved);
         for (int i = 0; i < 4; i++)
@@ -648,8 +652,10 @@ static void dec_send_input(Cpu *c) {
     int idx = (int)c->x[1], off = (int)c->x[2], size = (int)c->x[3];
     int64_t time = (int64_t)c->x[4];
     uint32_t flags = (uint32_t)c->x[5];
+    if (d->st_in++ == 0) LOG("[movie] %s decoder: first input (size %d)\n", d->video ? "video" : "audio", size);
     if ((flags || size <= 0) && getenv("HM_LOG_MOVIE"))
-        LOG("[movie] input idx %d off %d size %d time %lld flags %#x\n", idx, off, size, (long long)time, flags);
+        LOG("[movie] %s input idx %d off %d size %d time %lld flags %#x\n", d->video ? "video" : "audio", idx, off, size,
+            (long long)time, flags);
     pthread_mutex_lock(&d->lock);
     if (size > 0 && idx >= 0 && idx < NIN) {
         av_packet_unref(d->pkt);
@@ -672,6 +678,7 @@ static void dec_send_input(Cpu *c) {
             }
         }
         n_frames++;
+        if (d->st_frames++ == 0) LOG("[movie] %s decoder: first frame decoded\n", d->video ? "video" : "audio");
         produced = true;
     }
     if (flags & MOVIE_EOS) { d->eos_pending = true; d->eos_time = time; }
@@ -679,6 +686,10 @@ static void dec_send_input(Cpu *c) {
     if (idx >= 0 && idx < NIN) d->in_busy[idx] = false;
     pthread_mutex_unlock(&d->lock);
     dec_signal(c, d, 0);
+    if (produced && !d->format_signalled && !getenv("HM_MOVIE_NO_FORMAT_EVENT")) {
+        d->format_signalled = true;  // (the media framework reports the output format before the first output)
+        dec_signal(c, d, 2);
+    }
     if (produced) dec_signal(c, d, 1);
     c->x[0] = 0;
 }
@@ -689,6 +700,7 @@ static void dec_acquire_output(Cpu *c) {
     pthread_mutex_lock(&d->lock);
     if (!d->nready) { pthread_mutex_unlock(&d->lock); c->x[0] = 1; return; }
     OutReady r = d->ready[0];
+    if (d->st_acq++ == 0) LOG("[movie] %s decoder: first output taken\n", d->video ? "video" : "audio");
     memmove(d->ready, d->ready + 1, --d->nready * sizeof *d->ready);
     int remaining = d->nready;
     pthread_mutex_unlock(&d->lock);
@@ -705,6 +717,12 @@ static void dec_get_output_buffer(Cpu *c) {
     int i = (int)c->x[1];
     MBuffer *b = BUF(c->x[2]);
     if (i < 0 || i >= NOUT) { c->x[0] = 1; return; }
+    {
+        static int logged[2];
+        bool tex = d->video && b->base && b->capacity == 8;
+        if (!logged[tex]++) LOG("[movie] %s output in %s mode (buffer capacity %llu)\n", d->video ? "video" : "audio",
+                                tex ? "texture" : "memory", (unsigned long long)b->capacity);
+    }
     if (d->video && b->base && b->capacity == 8) {
         // texture output mode: the buffer points at the game's NVNtexture; write RGBA into it
         NvnTexture *t = *(NvnTexture **)(uintptr_t)b->base;
@@ -729,6 +747,35 @@ static void dec_get_output_buffer(Cpu *c) {
         c->x[0] = 0;
         return;
     }
+    // The caller's own buffer (this game: its video textures' memory, Y plane then UV plane, sized for one frame):
+    // the decoder writes into it, as the movie library does. LAS Recomp's game passed an empty buffer and was handed
+    // the decoder's memory instead, which is still what happens without one.
+    if (b->base && b->capacity) {
+        uint8_t *dst = (uint8_t *)(uintptr_t)b->base;
+        uint32_t n = d->out_size[i];
+        if (d->video) {  // tight NV12: rows of width bytes, UV right after width * height
+            int w = d->width, h = d->height, uv_src = d->stride * ((h + 15) & ~15);
+            uint64_t need = (uint64_t)w * h * 3 / 2;
+            if (need <= b->capacity) {
+                for (int y = 0; y < h; y++) memcpy(dst + (size_t)y * w, d->out_mem[i] + (size_t)y * d->stride, (size_t)w);
+                for (int y = 0; y < h / 2; y++)
+                    memcpy(dst + (size_t)w * h + (size_t)y * w, d->out_mem[i] + uv_src + (size_t)y * d->stride, (size_t)w);
+                n = (uint32_t)need;
+            } else {
+                static int warned;
+                if (!warned++) LOG("[movie] video output buffer too small (%llu < %llu)\n", (unsigned long long)b->capacity,
+                                   (unsigned long long)need);
+                n = 0;
+            }
+        } else {
+            if (n > b->capacity) n = (uint32_t)b->capacity;
+            memcpy(dst, d->out_mem[i], n);
+        }
+        b->offset = 0;
+        b->size = (int32_t)n;
+        c->x[0] = 0;
+        return;
+    }
     memset(b, 0, sizeof *b);
     b->base = (uint64_t)(uintptr_t)d->out_mem[i];
     b->capacity = d->out_cap;
@@ -743,6 +790,7 @@ static void dec_release_output(Cpu *c) {
     int i = (int)c->x[1];
     pthread_mutex_lock(&d->lock);
     if (i >= 0 && i < NOUT) d->out_busy[i] = false;
+    d->st_rel++;
     bool produced = flush_pending(d);
     pthread_mutex_unlock(&d->lock);
     if (produced) dec_signal(c, d, 1);

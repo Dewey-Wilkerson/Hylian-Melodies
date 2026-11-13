@@ -27,7 +27,6 @@ uint64_t renderer_submit_seq(void) { return seq; }
 uint64_t renderer_issued_seq(void) { return seq; }
 void renderer_flush(void) {}
 void renderer_sync(void) {}
-void shader_prep_boot(const char *romfs) { (void)romfs; }
 uint64_t null_backend_presented(void) { return presented; }
 uint64_t null_backend_executed(void) { return executed; }
 void renderer_upload_rgba(NvnTexture *t, const void *rgba, uint32_t w, uint32_t h, uint32_t stride) {
@@ -37,3 +36,4 @@ bool renderer_upload_nv12(NvnTexture *t, const void *nv12, uint32_t w, uint32_t 
     (void)t; (void)nv12; (void)w; (void)h; (void)stride; (void)uv_off;
     return true;  // (taken: nothing to draw headless)
 }
+void shader_prep_boot(const char *romfs) { (void)romfs; }  // (the Vulkan build prepares shaders: nvn/shader_prep.c)

@@ -529,6 +529,12 @@ NVN(nvnTextureWriteTexels) {
     NvnTexture *t = HOST(NvnTexture, A(0));
     const int32_t *r = AP(2);  // xoffset, yoffset, zoffset, width, height, depth
     LevelLayout l = tegra_level(&t->layout, 0);
+    {
+        static int n;
+        if (getenv("HM_LOG_TEXELS") && n++ < 12)
+            LOG("[nvn] WriteTexels %ux%u fmt %#x region %d,%d %dx%d at %llx\n", t->width, t->height, t->format,
+                r ? r[0] : -1, r ? r[1] : -1, r ? r[3] : -1, r ? r[4] : -1, (unsigned long long)t->addr);
+    }
     if (r && r[0] == 0 && r[1] == 0 && (uint32_t)r[3] == t->width && (uint32_t)r[4] == t->height) {
         tegra_swizzle(AP(3), (uint8_t *)(uintptr_t)t->addr + l.offset, l.wb, l.hb, r[5] > 0 ? (uint32_t)r[5] : 1,
                       t->layout.fmt->bpb, l.block_height_log2, l.block_depth_log2);

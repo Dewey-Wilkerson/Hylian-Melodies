@@ -10,6 +10,7 @@
 #include "../hle.h"
 #include "../settings.h"
 #include "../ipc.h"
+#include "../platform.h"
 
 // ------------------------------------------------------------------ audren: a CPU mixer modelled on
 // Ryujinx's AudioRenderer (VoiceState / DataSourceHelper / StateUpdater; MIT, Ryujinx Team and Contributors,
@@ -1224,6 +1225,7 @@ SERVICE("audout:u", audout_u) {
         pthread_mutex_init(&a->lock, NULL);
         a->event = kernel_create_event_pair(&a->ev_w, &a->ev_r);
         if (getenv("HM_AUDOUT_WAV")) a->wav = fopen(getenv("HM_AUDOUT_WAV"), "wb");
+        uint64_t open_t0 = plat_now_ns();
         if (!(getenv("HM_NO_AUDIO") && strcmp(getenv("HM_NO_AUDIO"), "0")) && SDL_InitSubSystem(SDL_INIT_AUDIO)) {
             SDL_AudioSpec spec = {SDL_AUDIO_S16, (int)a->channels, (int)a->rate};
             a->stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
@@ -1244,7 +1246,7 @@ SERVICE("audout:u", audout_u) {
         Service *svc = service_new("IAudioOut", audio_out, a);
         svc->on_close = audout_close;
         ipc_return_object(resp, svc);
-        LOG("[audout] opened %u Hz, %u ch\n", a->rate, a->channels);
+        LOG("[audout] opened %u Hz, %u ch (%.1f ms)\n", a->rate, a->channels, (plat_now_ns() - open_t0) / 1e6);
         break;
     }
     default: LOG("[audout] cmd %u (ok)\n", req->cmd);

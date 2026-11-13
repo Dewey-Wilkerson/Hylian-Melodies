@@ -12,6 +12,7 @@ needs the owner's approval first.
 | LAS Recomp CPU/runtime headers | same | `579fdad` | MIT | `runtime/cpu.h`, `runtime/simd.h`, `runtime/simd_fp.h`, `runtime/dispatch.c`, `runtime/rt.h` | copied (header added); adapted further from M4 |
 | LAS Recomp runtime core | https://github.com/peiikai/LASRecomp | `579fdad` | MIT | `runtime/{kernel,ipc,loader,crash_explain,fnprof,romfs_build}.c`, `runtime/{kernel,ipc,hle,platform,rumble,romfs_build}.h`, `runtime/hle/{heaps,libc,movie,nvn_boot,swkbd,vi}.c`, `runtime/services/{acc,am,audio,hid_set,misc,time}.c`, `runtime/platform/{linux.c,linux_compat.h,posix_log.h}` | copied, then adapted (names, log paths, Link's Awakening features removed) |
 | LAS Recomp NVN front end | https://github.com/peiikai/LASRecomp | `579fdad` | MIT | `runtime/nvn/{astc,cmdbuf,formats,objects,rqueue,tegra}.c`, `runtime/nvn/{astc,nvn,renderer,rqueue,tegra,tex_hash}.h` | copied (header added); `null_backend.c` is ours |
+| LAS Recomp Vulkan backend and Maxwell translator | https://github.com/peiikai/LASRecomp | `579fdad` | MIT | `runtime/nvn/vulkan/*`, `runtime/nvn/maxwell/*`, `runtime/nvn/{output_scale,pace,slowframe,shader_prep,shader_seen}.c` and their headers, `runtime/nvn/{screen_filter,recolour,texpatch}.h` | copied (header added), then adapted: Link's Awakening hooks answered by `runtime/nvn/las_feature_stubs.c` (ours), its shader list and its shader-signature fix removed, TLD4 (texture gather) added to the translator (ours), window title/app id renamed |
 | LAS Recomp fs service | same | `579fdad` | MIT | `runtime/services/fs.c` | host file system with crash-safe save commits kept; RomFS/DLC part rewritten |
 | LAS Recomp boot sequence | same | `579fdad` | MIT | `runtime/main.c` | rewritten after its `main.c` (no start screen, reboot, randomizer) |
 
@@ -24,6 +25,8 @@ needs the owner's approval first.
 | Vulkan loader / headers | system | Apache-2.0 |
 | python-lz4 | installer/lifter dependency | BSD-3-Clause |
 | Capstone | lifter dependency (disassembly) | BSD-3-Clause |
+| Vulkan Memory Allocator | system header (`/usr/include/vk_mem_alloc.h`), compiled by `runtime/nvn/vulkan/vma.cpp` | MIT |
+| shaderc | system library (GLSL to SPIR-V for translated shaders) | Apache-2.0 |
 | FFmpeg (libavformat, libavcodec, libavutil, libswscale) | system libraries, dynamically linked, for the game's videos (`runtime/hle/movie.c`) | LGPL-2.1+ (Arch builds it with GPL parts enabled; see docs/OPEN-QUESTIONS.md) |
 
 ## License texts

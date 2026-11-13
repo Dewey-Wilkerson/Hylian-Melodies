@@ -1,8 +1,13 @@
 # Known issues
 
-- The game does not run yet: the boot stops at graphics setup (NVN not implemented). See PROGRESS.md.
-- Input is a placeholder (`runtime/hle/input_stub.c`); rumble is ignored.
-- The software keyboard returns the initial text unchanged (`runtime/hle/swkbd.c`).
-- The shared-font service (`pl:u`) and input bindings were removed with LAS Recomp's UI; re-add if the trace shows
-  the game needs them.
-- Some LAS Recomp comments in restored runtime files still describe Link's Awakening behaviour.
+- Input is not connected yet (M7): the game runs but can't be controlled; the controller check is answered as
+  "player 1 connected".
+- Pixel-art scaling: LAS Recomp's resolution logic renders at a fraction of the window (dynamic resolution) and
+  scales with bilinear filtering, so the image is slightly soft. Wanted for this game: render at 1280x720 and scale
+  by whole numbers with nearest filtering (M10).
+- Loading and the splash videos run at 30 fps (the game's own choice while loading; to confirm on hardware).
+- No overlay menu (M10); the software keyboard returns the initial text unchanged.
+- Restored LAS Recomp renderer code still contains comments and dormant paths about Link's Awakening; the hooks are
+  answered "off" (`runtime/nvn/las_feature_stubs.c`). To trim over time.
+- SMAA anti-aliasing is not built (not useful for pixel art anyway).
+- Audio (M6) has not been listened to or measured yet.

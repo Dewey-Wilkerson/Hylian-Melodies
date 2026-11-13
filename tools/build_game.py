@@ -4,7 +4,8 @@
   python3 tools/build_game.py --gen DIR --out DIR [--target linkcheck|game] [--march v3|v2|native] [-j N]
 
 linkcheck: every generated object + tests/c/linkcheck_stub.c linked as a shared object with --no-undefined
-(M3 acceptance: zero unresolved symbols). game: the runtime + generated code into the game executable (M4+).
+(M3 acceptance: zero unresolved symbols). game: the runtime with the Vulkan backend and the SDL3 window + generated
+code -> hylian-melodies. headless: the null backend, no window -> hylian-melodies-headless (M4 boot tests).
 The -march level defaults to x86-64-v3 when the CPU has AVX2/FMA/BMI2, else x86-64-v2.
 """
 
@@ -36,7 +37,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--gen', required=True)
     ap.add_argument('--out', required=True)
-    ap.add_argument('--target', choices=('linkcheck', 'game'), default='linkcheck')
+    ap.add_argument('--target', choices=('linkcheck', 'game', 'headless'), default='game')
     ap.add_argument('--march', default=None)
     ap.add_argument('--cc', default=os.environ.get('HM_CC', 'clang'))
     ap.add_argument('-j', type=int, default=os.cpu_count() or 4)
@@ -79,25 +80,43 @@ def main():
         lines.append('  ldflags = -shared -Wl,--no-undefined')
         lines.append(f'default {nj(out)}/linkcheck.so')
     else:
-        rtflags = (f'-O2 -g -std=gnu11 -D_GNU_SOURCE -fno-strict-aliasing -Wall -Wno-unused-function -Wno-format '
-                   f'-Wno-unused-variable -Wno-unused-but-set-variable -march={march} -I{shlex.quote(rt)} '
-                   f'-I{shlex.quote(os.path.join(rt, "nvn"))} '
-                   + subprocess.run(['pkg-config', '--cflags', 'sdl3', 'libavformat', 'libavcodec', 'libavutil', 'libswscale'], capture_output=True, text=True).stdout.strip())
-        lines.insert(2, f'rtflags = {rtflags}')
+        # game: Vulkan backend + SDL3 window (hylian-melodies); headless: the NVN front end with the null backend,
+        # no window (hylian-melodies-headless, the M4 boot tests). Both share the generated objects.
+        headless = a.target == 'headless'
+        pkgs = ['sdl3', 'libavformat', 'libavcodec', 'libavutil', 'libswscale'] + ([] if headless else ['vulkan', 'shaderc'])
+        cflags = subprocess.run(['pkg-config', '--cflags', *pkgs], capture_output=True, text=True).stdout.strip()
+        libs = subprocess.run(['pkg-config', '--libs', *pkgs], capture_output=True, text=True).stdout.strip()
+        inc = ' '.join(f'-I{shlex.quote(os.path.join(rt, d))}' for d in ('', 'nvn', 'nvn/vulkan', 'nvn/maxwell'))
+        version = open(os.path.join(ROOT, 'VERSION')).read().strip()
+        common = (f'-O2 -g -DHM_VERSION=\\"{version}\\" -D_GNU_SOURCE -fno-strict-aliasing -Wall -Wno-unused-function -Wno-format '
+                  f'-Wno-unused-variable -Wno-unused-but-set-variable -march={march} {inc} {cflags}')
+        lines.insert(2, f'rtflags = -std=gnu11 {common}')
+        lines.insert(3, f'rtcxxflags = -std=gnu++17 {common}')
         lines += ['rule rtcc', '  command = $cc $rtflags -MD -MF $out.d -c $in -o $out', '  depfile = $out.d',
-                  '  deps = gcc', '  description = CC $in']
-        rsrcs = sorted(glob.glob(os.path.join(rt, '*.c')) + glob.glob(os.path.join(rt, 'hle', '*.c')) +
-                       glob.glob(os.path.join(rt, 'services', '*.c')) + glob.glob(os.path.join(rt, 'nvn', '*.c')) +
-                       [os.path.join(rt, 'platform', 'linux.c')])
-        for s in rsrcs:
-            o = os.path.join(out, 'rt', os.path.relpath(s, rt)[:-2] + '.o')
+                  '  deps = gcc', '  description = CC $in',
+                  'rule rtcxx', f'  command = {a.cc}++ $rtcxxflags -MD -MF $out.d -c $in -o $out', '  depfile = $out.d',
+                  '  deps = gcc', '  description = CXX $in']
+        rsrcs = (glob.glob(os.path.join(rt, '*.c')) + glob.glob(os.path.join(rt, 'hle', '*.c')) +
+                 glob.glob(os.path.join(rt, 'services', '*.c')) + glob.glob(os.path.join(rt, 'nvn', '*.c')) +
+                 [os.path.join(rt, 'platform', 'linux.c')])
+        if headless:  # (the renderer's helpers that need the Vulkan backend stay out)
+            vk_only = ('pace.c', 'output_scale.c', 'shader_prep.c', 'shader_seen.c', 'slowframe.c', 'las_feature_stubs.c')
+            rsrcs = [x for x in rsrcs if os.path.basename(x) not in vk_only]
+        else:
+            rsrcs = [x for x in rsrcs if os.path.basename(x) not in ('null_backend.c', 'ui_headless.c')]
+            rsrcs += (glob.glob(os.path.join(rt, 'nvn', 'vulkan', '*.c')) + glob.glob(os.path.join(rt, 'nvn', 'vulkan', '*.cpp'))
+                      + glob.glob(os.path.join(rt, 'nvn', 'maxwell', '*.c')) + glob.glob(os.path.join(rt, 'ui', '*.c')))
+        rtdir = 'rt-headless' if headless else 'rt'
+        for src in sorted(rsrcs):
+            rel = os.path.relpath(src, rt)
+            o = os.path.join(out, rtdir, rel.rsplit('.', 1)[0] + '.o')
             objs.append(o)
-            lines.append(f'build {nj(o)}: rtcc {nj(s)}')
-        libs = subprocess.run(['pkg-config', '--libs', 'sdl3', 'libavformat', 'libavcodec', 'libavutil', 'libswscale'], capture_output=True, text=True).stdout.strip()
-        lines.append(f'build {nj(out)}/hylian-melodies: link {" ".join(map(nj, objs))}')
-        lines.append('  ldflags = -rdynamic')
-        lines.append(f'  libs = {libs} -lpthread -ldl -lm')
-        lines.append(f'default {nj(out)}/hylian-melodies')
+            lines.append(f'build {nj(o)}: {"rtcxx" if src.endswith(".cpp") else "rtcc"} {nj(src)}')
+        exe = 'hylian-melodies-headless' if headless else 'hylian-melodies'
+        lines.append(f'build {nj(out)}/{exe}: link {" ".join(map(nj, objs))}')
+        lines.append('  ldflags = -rdynamic' + ('' if headless else ' -DHM_GAME'))
+        lines.append(f'  libs = {libs} -lstdc++ -lpthread -ldl -lm')
+        lines.append(f'default {nj(out)}/{exe}')
     with open(os.path.join(out, 'build.ninja'), 'w') as f:
         f.write('\n'.join(lines) + '\n')
     r = subprocess.run(['ninja', '-C', out, f'-j{a.j}'])

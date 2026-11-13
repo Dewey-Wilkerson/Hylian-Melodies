@@ -5,6 +5,7 @@
 // Data is found next to the real executable (/proc/self/exe): romfs/, aoc/, exefs/main.npdm, profile/ (saves).
 // HM_GAME_DIR overrides that folder (development). HM_HEADLESS=1 runs without a window (M4 boot traces).
 #include <limits.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,17 +72,65 @@ static char *join(const char *a, const char *b) {
 
 int g_headless;
 
+// HM_DUMP_AT=<seconds>[,<seconds>...]: log every guest thread and what it waits on at those times (diagnostics).
+static void *dump_timer(void *arg) {
+    (void)arg;
+    extern void kernel_dump_threads(const char *prefix);
+    double prev = 0;
+    for (const char *p = getenv("HM_DUMP_AT"); p && *p;) {
+        double at = strtod(p, (char **)&p);
+        if (at > prev) usleep((useconds_t)((at - prev) * 1e6));
+        prev = at;
+        LOG("[dump] at %.1f s\n", at);
+        kernel_dump_threads("[dump]");
+        if (*p == ',') p++; else break;
+    }
+    return NULL;
+}
+
+// HM_RUN_SECONDS=N: end a run (windowed or headless) after N seconds (test runs; the runtime takes SIGTERM).
+static void *run_timer(void *arg) {
+    sleep((unsigned)(uintptr_t)arg);
+    extern void kernel_dump_threads(const char *prefix);
+    kernel_dump_threads("[exit]");
+    LOG("[boot] run ended after %u s (HM_RUN_SECONDS)\n", (unsigned)(uintptr_t)arg);
+    fflush(stderr);
+    _exit(0);
+    return NULL;
+}
+
+#ifndef HM_VERSION
+#define HM_VERSION "dev"
+#endif
+const char *hm_version(void) { return HM_VERSION; }  // (VERSION, passed by tools/build_game.py)
+
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
     plat_init();
     setvbuf(stderr, NULL, _IOLBF, 0);
     g_headless = getenv("HM_HEADLESS") && strcmp(getenv("HM_HEADLESS"), "0");
+    if (getenv("HM_DUMP_AT")) {
+        pthread_t t;
+        if (!pthread_create(&t, NULL, dump_timer, NULL)) pthread_detach(t);
+    }
+    if (getenv("HM_RUN_SECONDS") && atoi(getenv("HM_RUN_SECONDS")) > 0) {
+        pthread_t t;
+        if (!pthread_create(&t, NULL, run_timer, (void *)(uintptr_t)atoi(getenv("HM_RUN_SECONDS")))) pthread_detach(t);
+    }
     g_game_dir = game_dir();
     g_romfs_dir = join(g_game_dir, "romfs");
     g_aoc_dir = join(g_game_dir, "aoc");
     if (chdir(g_game_dir)) { perror(g_game_dir); return 1; }
     LOG("[boot] Hylian Melodies, game folder %s%s\n", g_game_dir, g_headless ? " (headless)" : "");
 
+    if (!g_headless) {  // the window and graphics device first, so the guest heap can be the driver's memory before any
+        // game thread runs (LAS Recomp: runtime/nvn/vulkan/exec.c backend_guest_heap_prepare)
+        extern void ui_window_init(void) __attribute__((weak));
+        extern void backend_guest_heap_prepare(void) __attribute__((weak));
+        if (!ui_window_init) FATAL("this build has no window: run hylian-melodies-headless with HM_HEADLESS=1\n");
+        ui_window_init();
+        backend_guest_heap_prepare();
+    }
     loader_load("exefs");
     kernel_init();
     dispatch_init();
@@ -110,9 +159,11 @@ int main(int argc, char **argv) {
             sleep((unsigned)atoi(secs));
             extern void kernel_dump_threads(const char *prefix);
             kernel_dump_threads("[exit]");
-            extern uint64_t null_backend_presented(void), null_backend_executed(void);
+            extern uint64_t null_backend_presented(void) __attribute__((weak));
+            extern uint64_t null_backend_executed(void) __attribute__((weak));
             LOG("[boot] headless run ended after %s s: %llu frames presented, %llu command lists run\n", secs,
-                (unsigned long long)null_backend_presented(), (unsigned long long)null_backend_executed());
+                (unsigned long long)(null_backend_presented ? null_backend_presented() : 0),
+                (unsigned long long)(null_backend_executed ? null_backend_executed() : 0));
             fflush(stderr);
             _exit(0);
         }

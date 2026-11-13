@@ -47,6 +47,11 @@ git config core.hooksPath .githooks          # once per clone
 python3 -m unittest discover -s tests        # all tests
 python3 tools/check_content.py --staged      # what the hook runs
 python3 tools/build_hactool.py --out ~/.cache/hylian-melodies/toolchain/hactool
+python3 recomp/gen.py main ~/.cache/hylian-melodies/dev/exefs/main 0x7000000000 ~/.cache/hylian-melodies/gen/main
+python3 recomp/gen.py sdk  ~/.cache/hylian-melodies/dev/exefs/sdk  0x7004000000 ~/.cache/hylian-melodies/gen/sdk
+python3 tools/build_game.py --gen ~/.cache/hylian-melodies/gen --out ~/.cache/hylian-melodies/build --target game
+HM_GAME_DIR=~/.cache/hylian-melodies/dev HM_RUN_SECONDS=20 HM_WINDOW_SHOT=800 ~/.cache/hylian-melodies/build/hylian-melodies
+    # log: <build>/logs/hylian-melodies.log; captures: <game dir>/build/window_*.png (outside the repo)
 python3 -m installer --base cadence-base.xci --keys prod.keys --dest ~/.cache/hylian-melodies/dev \
     --temp ~/.cache/hylian-melodies/temp --hactool ~/.cache/hylian-melodies/toolchain/hactool/hactool
 ```
@@ -63,6 +68,10 @@ python3 -m installer --base cadence-base.xci --keys prod.keys --dest ~/.cache/hy
 - devkitPro hactool reads `~/.switch/prod.keys` by default and prints key values: always via `installer/hactool.py`.
 - The 1.4.0 patch NCA uses rights-ID crypto: extraction needs the cart's ticket title key (handled in a temp HOME).
 - Running scripts from `~/refs` against game files may be blocked by the agent safety check; write own tools.
+- The runtime takes SIGTERM: end test runs with `HM_RUN_SECONDS` (and `timeout -s KILL` as a backstop).
+- `pkill -f <pattern>` matches the shell running it; kill test runs by PID (`pgrep -x hylian-melodies`).
+- When adapting LAS Recomp code: rename its user-visible strings and `LARECOMP_*` variables at once, and drop
+  anything keyed to Link's Awakening's shader words, hashes or game data.
 
 ## Status
 
