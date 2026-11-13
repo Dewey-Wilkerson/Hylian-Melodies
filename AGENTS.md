@@ -27,7 +27,7 @@ installer/       setup stages (check, extract, lift, compile, shaders, cleanup);
 recomp/          lifter (ARM64 -> C) and install-time patch location (no game bytes)
 runtime/         C runtime: loader, kernel, IPC services, NVN-on-Vulkan, audio, input, saves
 tools/           build_hactool.py, fetch_refs.sh, check_content.py
-packaging/arch/  PKGBUILD, launcher, .install hooks (brief section 8)
+packaging/arch/  PKGBUILD, launcher, .install hooks, desktop entry (docs/packaging.md); packaging/*.ini/*.svg
 docs/            RECON, DECISIONS, PROGRESS, OPEN-QUESTIONS, KNOWN-ISSUES, architecture, building, installer
 tests/           unittest suites (python3 -m unittest discover -s tests)
 .githooks/       pre-commit content guard
@@ -69,7 +69,8 @@ python3 -m installer --base cadence-base.xci --keys prod.keys --dest ~/.cache/hy
 - The 1.4.0 patch NCA uses rights-ID crypto: extraction needs the cart's ticket title key (handled in a temp HOME).
 - Running scripts from `~/refs` against game files may be blocked by the agent safety check; write own tools.
 - The runtime takes SIGTERM: end test runs with `HM_RUN_SECONDS` (and `timeout -s KILL` as a backstop).
-- `pkill -f <pattern>` matches the shell running it; kill test runs by PID (`pgrep -x hylian-melodies`).
+- `pkill -f`/`pgrep -f <pattern>` match the shell running them (it killed the agent's shell twice); find processes
+  by exact name (`pgrep -x`, `ps -eo comm`) or put the command in a script file.
 - When adapting LAS Recomp code: rename its user-visible strings and `LARECOMP_*` variables at once, and drop
   anything keyed to Link's Awakening's shader words, hashes or game data.
 

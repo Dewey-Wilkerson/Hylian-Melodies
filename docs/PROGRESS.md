@@ -15,7 +15,8 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M6 Audio | done by measurement: 10 min, 0 gaps, card clock ~25 ppm from system clock, our latency share ~11-32 ms; not yet checked by ear |
 | M7 Input and saves | done: real gamepad verified by the owner, scripted input, saves survive kill -9; keyboard and rumble not yet tried by hand |
 | M8 Playable | done: a 7-minute owner session (title, crypt, castle, a dungeon area) at 61 fps with saves and a clean window close; DLC served |
-| M9 Packaging | next (launcher and hooks already tested) |
+| M9 Packaging | done: `makepkg` builds the package from a clean directory and resumes after interruption; contents and build-path checks pass (docs/packaging.md) |
+| M10 Polish | next |
 | M5-M8, M10 | not started |
 | M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
 
@@ -156,3 +157,10 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 2. Installer stages still missing: compile (tools/build_game.py --target game into the stage), shaders (first run
    compiles them today; decide whether a prepare step is worth it), cleanup.
 3. `makepkg` from a clean directory, resume after interruption, `pacman -Qlp` checks, build-path grep (brief 8.5).
+- 2026-11-13 M9 **done**: `packaging/arch/PKGBUILD` (owner's decisions: /opt/hylian-melodies, XDG user data, XCI
+  only, no firmware, no shader step), installer compile + cleanup steps, the game's own icon from the dump for the
+  menu entry, `--fullscreen` / `--windowed`, build paths mapped out of the executable. Checks (brief 8.5): clean
+  `makepkg -Cf` in ~2 min; interrupted mid-compile then `makepkg -f` resumed (extract and lift skipped) and
+  finished; `pacman -Qlp`: game under /opt/hylian-melodies, no settings/profile/logs/cache/setup record inside it,
+  launcher, icon, desktop entry, licence, support files; no file names the build directory; launcher and
+  pre_remove tests pass. Building is done; installing is the owner's.

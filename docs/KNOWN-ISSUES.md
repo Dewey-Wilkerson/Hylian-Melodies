@@ -1,7 +1,6 @@
 # Known issues
 
-- Input: a real gamepad works (8BitDo Ultimate 2 Wireless: A, B, X, L, R, ZL, ZR, d-pad and combinations reached
-  the game in a 2-minute hands-on run). Not yet confirmed by hand: + / -, the sticks, the keyboard, rumble.
+- Input: gamepad (8BitDo Ultimate 2 Wireless), + / - and the keyboard confirmed by the owner; rumble not yet tested.
 - Black around small rooms (castle interiors) is the game's own framing, not a fault.
 - Occasional hitches: one 833 ms frame at an early load, a few 50-80 ms frames in a 7-minute session.
 - Loading and the splash videos run at 30 fps (the game's own choice while loading; to confirm on hardware).
@@ -11,3 +10,4 @@
 - SMAA anti-aliasing is not built (not useful for pixel art anyway).
 - Audio is measured (docs/audio.md) but not yet checked by ear against the beat; end-to-end latency to the speakers
   is not measured (use the game's calibration).
+- The package is built for this machine's CPU level (x86-64-v3 here); build it on the machine that plays it.
