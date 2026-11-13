@@ -1,41 +1,39 @@
-# Services and stubs (M4 trace)
+# Services and stubs (M4)
 
-From the first headless boots (`HM_HEADLESS=1 HM_GAME_DIR=<install> build/hylian-melodies`, log in
-`<exe dir>/logs/hylian-melodies.log`). Updated as the boot gets further. Service names and command IDs only.
+From headless boots: `HM_HEADLESS=1 HM_HEADLESS_SECONDS=30 HM_GAME_DIR=<install> build/hylian-melodies`; the log
+is `<exe dir>/logs/hylian-melodies.log`. Service names and command IDs only.
 
-## Reached so far (2026-11-13, second pass)
+## Where the boot gets (2026-11-13)
 
-Headless (NVN front end + null backend): engine init completes (memory pools, all textures loaded, audio
-objects, save file created through the journal), the controller check passes, and the boot stops at the first
-`movie::` call: the movie HLE (LAS Recomp's `runtime/hle/movie.c` over FFmpeg) is next.
+SDK init -> both modules' constructors -> RomFS mounted -> display layer -> graphics device (recorded, not drawn) ->
+all textures and audio objects loaded -> save file created -> controller check -> two splash videos decoded and
+played to the end -> network found offline -> main-menu music playing -> **main loop running**: 904 frames presented
+in a 30 s run, no crash, no unimplemented call.
 
-## First pass (2026-11-13)
+## Services the game opens
 
-SDK init, both modules' constructors, the game's logger, RomFS mounted through `fsp-srv` (layout of 679 files),
-time shared memory, display layer created (vi HLE), then the graphics device setup stops at the first NVN buffer
-map: NVN is not implemented yet (it is LAS Recomp's `runtime/nvn/`, to be restored next).
-
-## Services opened
-
-| Service | Implementation | State |
+| Service | Implementation | Notes |
 |---|---|---|
-| `sm:` | ipc.c | real |
-| `lm` | services/am.c | logger, prints to our log |
-| `appletOE` | services/am.c | ISelfController 11, 13, 14, 16, 91 and IWindowController 10 answered "ok" without effect (documented stubs) |
-| `apm` | services/am.c | performance mode stub |
-| `pctl`, `pctl:s`, `pctl:a`, `pctl:r` | services/misc.c | no restrictions |
-| `aoc:u` | services/misc.c | to check: must report the four DLC titles |
-| `fsp-srv` | services/fs.c | RomFS image laid out from `romfs/`; DLC from `aoc/<title>/` (OpenDataStorageByDataId); saves in `profile/` |
-| `time:u` | services/time.c | host clock |
-| `hid` | services/hid_set.c | opened; input arrives in M7 |
+| `sm:` | `ipc.c` | real |
+| `lm` | `services/am.c` | the game's log lines go to our log |
+| `appletOE` | `services/am.c` | documented stubs, answered "ok" with no effect: ISelfController 11 (operation-mode change notification), 13 (focus handling mode), 14 (restart message), 16 (out-of-focus suspending), 91; IWindowController 10 (acquire foreground rights). None changes what the game does on PC. |
+| `apm` | `services/am.c` | performance mode: normal |
+| `pctl`, `pctl:s`, `pctl:a`, `pctl:r` | `services/misc.c` | no restrictions; IParentalControlService 1 (initialise) answered "ok" |
+| `acc:u0` | `services/acc.c` | one local user |
+| `aoc:u` | `services/misc.c` | to verify in M8: the four DLC must be listed |
+| `fsp-srv` | `services/fs.c` | RomFS laid out from `romfs/`, DLC from `aoc/<title>/`, saves in `profile/` with journaled creates and writes |
+| `time:u` | `services/time.c` | host clock |
+| `hid` | `services/hid_set.c` + `hle/input.c` | player 1 connected, no buttons until M7 |
+| `audout:u` | `services/audio.c` | FMOD's output: opened at 48 kHz stereo; tuning in M6 |
+| `nifm:u` | `services/net.c` | offline: requests never accepted, "no connection" |
+| `bsd:u` | `services/net.c` | sockets fail with "network down" |
 
-## HLE (host replacements by symbol)
+## Host replacements (HLE by symbol)
 
-- `nn::vi` display/layer functions: `runtime/hle/vi.c` (layer scaling mode added for this game).
-- libc `mem*`/`str*`: `runtime/hle/libc.c`.
-- NVN: LAS Recomp's front end (`runtime/nvn/objects.c`, `cmdbuf.c`, `rqueue.c`, ...) with a headless null backend
-  (`runtime/nvn/null_backend.c`): 0 unimplemented NVN calls; 352 command lists recorded at boot.
-- `nn::hid`: `runtime/hle/input.c` (player 1 = connected full-key controller, no buttons until M7; vibration
-  accepted) and `runtime/hle/controller_applet.c` (the "connect a controller" applet returns player 1 at once).
-- `movie::`: 3 calls reached (allocator, extractor, media data) and unimplemented: next.
-- `movie::` (subsdk0) and `glslc*` (subsdk1): not reached yet; resolved to "unimplemented" stubs by the loader.
+- `nn::vi` display/layer (`hle/vi.c`), libc `mem*`/`str*` (`hle/libc.c`), software keyboard (`hle/swkbd.c`:
+  returns the initial text).
+- NVN: LAS Recomp's front end with `nvn/null_backend.c` (headless; M5 brings the Vulkan backend).
+- `nn::hid` state, vibration and the controller-support applet (`hle/input.c`, `hle/controller_applet.c`).
+- `movie::` over FFmpeg (`hle/movie.c`): the extractor reports end of stream with the movie library's status
+  `0x2000`, which this game checks for (LAS Recomp's game accepted any non-zero value).
+- `glslc*` (subsdk1): never called so far.

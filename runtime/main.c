@@ -110,7 +110,9 @@ int main(int argc, char **argv) {
             sleep((unsigned)atoi(secs));
             extern void kernel_dump_threads(const char *prefix);
             kernel_dump_threads("[exit]");
-            LOG("[boot] headless run ended after %s s\n", secs);
+            extern uint64_t null_backend_presented(void), null_backend_executed(void);
+            LOG("[boot] headless run ended after %s s: %llu frames presented, %llu command lists run\n", secs,
+                (unsigned long long)null_backend_presented(), (unsigned long long)null_backend_executed());
             fflush(stderr);
             _exit(0);
         }

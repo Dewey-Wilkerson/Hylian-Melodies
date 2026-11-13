@@ -10,7 +10,8 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M1 Skeleton and guardrails | done: hook rejects keys/NSO/blobs, proven by tests/test_check_content.py |
 | M2 Extraction | done: hactool built from pinned commit; check+extract verified, resume after kill tested |
 | M3 Lift | done: main+sdk lift (0 unsupported insns) and link with --no-undefined |
-| M4 Boot, headless | in progress: engine init completes headless; stops at the first video (movie HLE next) |
+| M4 Boot, headless | done: main loop runs headless (menu music, ~30 fps of presents, no crash); every stub documented in docs/services.md |
+| M5 Graphics | next |
 | M5-M8, M10 | not started |
 | M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
 
@@ -71,3 +72,16 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 2. Continue the headless boot until the main loop runs (presents through the null backend); document every stub in
    docs/services.md; then M4 is done.
 3. M5: Vulkan backend (`runtime/nvn/vulkan/`), SDL3 window replacing `runtime/ui_headless.c`, Maxwell translator.
+- 2026-11-13 M4 **done**: movie HLE (LAS Recomp's, over FFmpeg) with this game's end-of-stream status `0x2000`
+  (found by reading how the game checks the result); offline `nifm`/`bsd` (`services/net.c`). Headless: both
+  splash videos play to the end, the network is found offline, the main-menu music plays, the main loop presents
+  904 frames in 30 s with no crash and no unimplemented call. Acceptance: docs/services.md lists every service and
+  each stub. Not yet checked: the DLC listing (`aoc:u`).
+
+## Next (M5: graphics)
+
+1. Restore LAS Recomp's Vulkan backend (`git show 9c20fa2:runtime/nvn/vulkan/...`: device, exec, record, shaders,
+   textures, vma) and the Maxwell translator (`runtime/nvn/maxwell/`), shaderc (`pkg-config shaderc`), the system
+   VMA header; build it instead of `nvn/null_backend.c` when not headless.
+2. SDL3 window + present loop replacing `runtime/ui_headless.c` (LAS Recomp's ui_run without its menus).
+3. First frame, then the title screen; frame dumps for comparison (kept outside the repo).

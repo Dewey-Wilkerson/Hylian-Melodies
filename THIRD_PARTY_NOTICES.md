@@ -10,7 +10,7 @@ needs the owner's approval first.
 | LAS Recomp lifter | https://github.com/peiikai/LASRecomp | `579fdad` | MIT, Copyright (c) 2026 Peiikai | `recomp/lifter.py`, `recomp/simd_c.py`, `recomp/nso.py` | copied (header added) |
 | LAS Recomp generator | same | `579fdad` | MIT | `recomp/gen.py`, `recomp/jumptables.py` | adapted from `tools/gen.py`: partitioning, scan, emitter, jump-table pattern search; Unicorn replaced by our own interpreter; game-specific hooks removed |
 | LAS Recomp CPU/runtime headers | same | `579fdad` | MIT | `runtime/cpu.h`, `runtime/simd.h`, `runtime/simd_fp.h`, `runtime/dispatch.c`, `runtime/rt.h` | copied (header added); adapted further from M4 |
-| LAS Recomp runtime core | https://github.com/peiikai/LASRecomp | `579fdad` | MIT | `runtime/{kernel,ipc,loader,crash_explain,fnprof,romfs_build}.c`, `runtime/{kernel,ipc,hle,platform,rumble,romfs_build}.h`, `runtime/hle/{heaps,libc,nvn_boot,swkbd,vi}.c`, `runtime/services/{acc,am,audio,hid_set,misc,time}.c`, `runtime/platform/{linux.c,linux_compat.h,posix_log.h}` | copied, then adapted (names, log paths, Link's Awakening features removed) |
+| LAS Recomp runtime core | https://github.com/peiikai/LASRecomp | `579fdad` | MIT | `runtime/{kernel,ipc,loader,crash_explain,fnprof,romfs_build}.c`, `runtime/{kernel,ipc,hle,platform,rumble,romfs_build}.h`, `runtime/hle/{heaps,libc,movie,nvn_boot,swkbd,vi}.c`, `runtime/services/{acc,am,audio,hid_set,misc,time}.c`, `runtime/platform/{linux.c,linux_compat.h,posix_log.h}` | copied, then adapted (names, log paths, Link's Awakening features removed) |
 | LAS Recomp NVN front end | https://github.com/peiikai/LASRecomp | `579fdad` | MIT | `runtime/nvn/{astc,cmdbuf,formats,objects,rqueue,tegra}.c`, `runtime/nvn/{astc,nvn,renderer,rqueue,tegra,tex_hash}.h` | copied (header added); `null_backend.c` is ours |
 | LAS Recomp fs service | same | `579fdad` | MIT | `runtime/services/fs.c` | host file system with crash-safe save commits kept; RomFS/DLC part rewritten |
 | LAS Recomp boot sequence | same | `579fdad` | MIT | `runtime/main.c` | rewritten after its `main.c` (no start screen, reboot, randomizer) |
@@ -24,6 +24,7 @@ needs the owner's approval first.
 | Vulkan loader / headers | system | Apache-2.0 |
 | python-lz4 | installer/lifter dependency | BSD-3-Clause |
 | Capstone | lifter dependency (disassembly) | BSD-3-Clause |
+| FFmpeg (libavformat, libavcodec, libavutil, libswscale) | system libraries, dynamically linked, for the game's videos (`runtime/hle/movie.c`) | LGPL-2.1+ (Arch builds it with GPL parts enabled; see docs/OPEN-QUESTIONS.md) |
 
 ## License texts
 

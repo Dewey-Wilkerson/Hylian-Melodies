@@ -82,7 +82,7 @@ def main():
         rtflags = (f'-O2 -g -std=gnu11 -D_GNU_SOURCE -fno-strict-aliasing -Wall -Wno-unused-function -Wno-format '
                    f'-Wno-unused-variable -Wno-unused-but-set-variable -march={march} -I{shlex.quote(rt)} '
                    f'-I{shlex.quote(os.path.join(rt, "nvn"))} '
-                   + subprocess.run(['pkg-config', '--cflags', 'sdl3'], capture_output=True, text=True).stdout.strip())
+                   + subprocess.run(['pkg-config', '--cflags', 'sdl3', 'libavformat', 'libavcodec', 'libavutil', 'libswscale'], capture_output=True, text=True).stdout.strip())
         lines.insert(2, f'rtflags = {rtflags}')
         lines += ['rule rtcc', '  command = $cc $rtflags -MD -MF $out.d -c $in -o $out', '  depfile = $out.d',
                   '  deps = gcc', '  description = CC $in']
@@ -93,7 +93,7 @@ def main():
             o = os.path.join(out, 'rt', os.path.relpath(s, rt)[:-2] + '.o')
             objs.append(o)
             lines.append(f'build {nj(o)}: rtcc {nj(s)}')
-        libs = subprocess.run(['pkg-config', '--libs', 'sdl3'], capture_output=True, text=True).stdout.strip()
+        libs = subprocess.run(['pkg-config', '--libs', 'sdl3', 'libavformat', 'libavcodec', 'libavutil', 'libswscale'], capture_output=True, text=True).stdout.strip()
         lines.append(f'build {nj(out)}/hylian-melodies: link {" ".join(map(nj, objs))}')
         lines.append('  ldflags = -rdynamic')
         lines.append(f'  libs = {libs} -lpthread -ldl -lm')
