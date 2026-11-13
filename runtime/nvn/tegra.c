@@ -1,3 +1,5 @@
+// From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/tegra.c), MIT, Copyright (c) 2026 Peiikai.
+// See THIRD_PARTY_NOTICES.md.
 // Tegra X1 block-linear layout. A GOB is 64 bytes x 8 rows; blocks stack GOBs vertically
 // (block height) and in depth (block depth). Levels shrink their block height as they shrink.
 #include "tegra.h"

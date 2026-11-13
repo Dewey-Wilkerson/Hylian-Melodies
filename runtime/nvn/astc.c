@@ -1,3 +1,5 @@
+// From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/astc.c), MIT, Copyright (c) 2026 Peiikai.
+// See THIRD_PARTY_NOTICES.md.
 // ASTC LDR decoder, 2D only (Khronos Data Format spec, ASTC chapter). Matches ARM astcenc's 8-bit
 // decode bit for bit (the decode_unorm8 path its CLI uses for -dl / -ds into 8-bit images):
 //   endpoints expand to 16 bits (linear: v * 257, sRGB: v << 8 | 0x80, all four channels),

@@ -1,3 +1,5 @@
+// From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/nvn.h), MIT, Copyright (c) 2026 Peiikai.
+// See THIRD_PARTY_NOTICES.md.
 // NVN implemented on the host. Guest NVN objects hold a pointer to a host object at offset 0;
 // builders and small state objects store their fields directly in guest memory.
 #pragma once

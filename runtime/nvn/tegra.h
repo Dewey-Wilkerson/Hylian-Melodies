@@ -1,3 +1,5 @@
+// From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/tegra.h), MIT, Copyright (c) 2026 Peiikai.
+// See THIRD_PARTY_NOTICES.md.
 // Tegra X1 texture layout: formats and block-linear (GOB) swizzling.
 #pragma once
 #include <stdbool.h>

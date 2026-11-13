@@ -1,3 +1,5 @@
+// From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/rqueue.c), MIT, Copyright (c) 2026 Peiikai.
+// See THIRD_PARTY_NOTICES.md.
 // The render thread: see rqueue.h.
 //
 // The game's GPU thread records command lists and submits them; translating them into Metal / Vulkan work took
@@ -13,7 +15,7 @@
 // of work; latency stays one frame), and the queue has a fixed size. Waits by guest threads give up while the
 // kernel stops them for a reboot (g_rt_unwind), as kernel waits do.
 //
-// Hang dump: part of runtime/kernel.c's "[hang]" watch (LARECOMP_HANG_DUMP=<seconds>, default 30, 0 = off; this side
+// Hang dump: part of runtime/kernel.c's "[hang]" watch (HM_HANG_DUMP=<seconds>, default 30, 0 = off; this side
 // armed at the game's GPU device setup, render thread on or off): when no frame was presented twice that long after
 // the device setup, presenting stops for that long, or a wait noted with rq_watch() lasts that long, the dump adds
 // the queue (counts, the last items, the one running and for how long) and what each noted thread waits on to the
@@ -53,12 +55,12 @@ typedef struct {
 static Item items[RQ_CAP];
 static uint64_t gpu_seq_of[RQ_HIST];  // per item number: the backend submission it ended with
 static uint8_t kind_of[RQ_HIST];      // (hang dump) per item number: its kind
-static uint64_t enq_ns[RQ_HIST], done_ns[RQ_HIST];  // (LARECOMP_LOG_PACE fence stats) per item: queued, translated
+static uint64_t enq_ns[RQ_HIST], done_ns[RQ_HIST];  // (HM_LOG_PACE fence stats) per item: queued, translated
 static uint64_t q_enq, q_done, q_cur;  // items queued / finished / in progress (0: none)
 static int presents_pending;
-static uint64_t last_present_q;  // (LARECOMP_LOG_PACE fence stats) the latest present's item
+static uint64_t last_present_q;  // (HM_LOG_PACE fence stats) the latest present's item
 extern __thread uint64_t rq_fence_q;
-uint64_t rq_trace_t0;  // (debug: LARECOMP_RQ_TRACE's time base)
+uint64_t rq_trace_t0;  // (debug: HM_RQ_TRACE's time base)
 static uint64_t exec_frame;  // (the render thread) the frame whose lists it runs now: see rq_frame
 static _Atomic uint64_t presents_done, cur_since;  // (hang dump) presents the thread finished; when q_cur started
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -79,8 +81,8 @@ static pthread_once_t once = PTHREAD_ONCE_INIT;
 static void start(void) {
     extern uint64_t kernel_current_thread_id(void);
     uint64_t asker = kernel_current_thread_id();
-    if (getenv("LARECOMP_RQ_START_DELAY_MS")) usleep((unsigned)atoi(getenv("LARECOMP_RQ_START_DELAY_MS")) * 1000u);  // (test: the race)
-    const char *e = getenv("LARECOMP_RENDER_THREAD");
+    if (getenv("HM_RQ_START_DELAY_MS")) usleep((unsigned)atoi(getenv("HM_RQ_START_DELAY_MS")) * 1000u);  // (test: the race)
+    const char *e = getenv("HM_RENDER_THREAD");
     int want = !e || atoi(e) != 0;
     if (want) {
         pthread_attr_t attr;
@@ -206,7 +208,7 @@ static bool all_done(uint64_t a) { (void)a; return q_done == q_enq; }
 static bool item_done(uint64_t q) { return q_done >= q; }
 static bool has_work(uint64_t a) { (void)a; return q_done < q_enq || atomic_load(&stopping); }
 
-static void lock_timed(void) {  // (LARECOMP_LOG_PACE: the game thread's time waiting for this lock)
+static void lock_timed(void) {  // (HM_LOG_PACE: the game thread's time waiting for this lock)
     if (pthread_mutex_trylock(&lock) == 0) return;
     uint64_t t0 = plat_now_ns();
     pthread_mutex_lock(&lock);
@@ -258,11 +260,11 @@ static void *run(void *arg) {
         q_cur = q;
         atomic_store_explicit(&cur_since, plat_now_ns(), memory_order_relaxed);
         pthread_mutex_unlock(&lock);
-        static long stall_at = -1;  // (test) LARECOMP_RQ_STALL_AT=<item>: the thread stops there for 60 s (hang dump test)
-        if (stall_at < 0) stall_at = getenv("LARECOMP_RQ_STALL_AT") ? atol(getenv("LARECOMP_RQ_STALL_AT")) : 0;
-        if (stall_at && q == (uint64_t)stall_at) { rq_watch("LARECOMP_RQ_STALL_AT (test)", q); sleep(60); rq_watch(NULL, 0); }
-        static int stats = -1;  // (LARECOMP_LOG_PACE) the thread's wall vs CPU time per item kind
-        if (stats < 0) stats = getenv("LARECOMP_LOG_PACE") != NULL;
+        static long stall_at = -1;  // (test) HM_RQ_STALL_AT=<item>: the thread stops there for 60 s (hang dump test)
+        if (stall_at < 0) stall_at = getenv("HM_RQ_STALL_AT") ? atol(getenv("HM_RQ_STALL_AT")) : 0;
+        if (stall_at && q == (uint64_t)stall_at) { rq_watch("HM_RQ_STALL_AT (test)", q); sleep(60); rq_watch(NULL, 0); }
+        static int stats = -1;  // (HM_LOG_PACE) the thread's wall vs CPU time per item kind
+        if (stats < 0) stats = getenv("HM_LOG_PACE") != NULL;
         uint64_t c0 = stats ? plat_thread_cpu_ns() : 0, w0 = stats ? plat_now_ns() : 0;
         void *pool = backend_pool_push();
         switch (it.kind) {
@@ -274,7 +276,7 @@ static void *run(void *arg) {
         }
         backend_pool_pop(pool);
         uint64_t gs = renderer_issued_seq(), c1 = plat_thread_cpu_ns();  // (its last submission; renderer_wait_seq waits for it)
-        atomic_store_explicit(&render_cpu_ns, c1, memory_order_relaxed);  // (LARECOMP_LOG_PACE: pace.c)
+        atomic_store_explicit(&render_cpu_ns, c1, memory_order_relaxed);  // (HM_LOG_PACE: pace.c)
         if (stats) {
             static uint64_t n[5], wall[5], cpu[5], items;
             int k = it.kind % 5;
@@ -286,10 +288,10 @@ static void *run(void *arg) {
                 memset(n, 0, sizeof n), memset(wall, 0, sizeof wall), memset(cpu, 0, sizeof cpu);
             }
         }
-        {   // (debug) LARECOMP_RQ_TRACE=<frame>: that frame's and the next 2 frames' items, times in ms from its first
+        {   // (debug) HM_RQ_TRACE=<frame>: that frame's and the next 2 frames' items, times in ms from its first
             static long tr_at = -1;
             static uint64_t tr_t0;
-            if (tr_at < 0) tr_at = getenv("LARECOMP_RQ_TRACE") ? atol(getenv("LARECOMP_RQ_TRACE")) : 0;
+            if (tr_at < 0) tr_at = getenv("HM_RQ_TRACE") ? atol(getenv("HM_RQ_TRACE")) : 0;
             if (tr_at && exec_frame >= (uint64_t)tr_at && exec_frame < (uint64_t)tr_at + 3) {
                 uint64_t now = plat_now_ns(), e = enq_ns[q % RQ_HIST];
                 if (!tr_t0) tr_t0 = e / 1000000000ull * 1000000000ull;
@@ -389,7 +391,7 @@ uint64_t rq_wait_item(uint64_t q) {
     return gs;
 }
 
-// (LARECOMP_LOG_PACE) a fence's item: how many items were queued after it, and whether it's in the frame being
+// (HM_LOG_PACE) a fence's item: how many items were queued after it, and whether it's in the frame being
 // recorded (after the latest present) or an earlier one.
 bool rq_fence_info(uint64_t q, uint64_t *behind, bool *untranslated) {
     lock_timed();
@@ -401,7 +403,7 @@ bool rq_fence_info(uint64_t q, uint64_t *behind, bool *untranslated) {
     return cur;
 }
 
-// (LARECOMP_LOG_PACE) after rq_fence_info + the waits: the item's translation time (queued to done) and how long
+// (HM_LOG_PACE) after rq_fence_info + the waits: the item's translation time (queued to done) and how long
 // before the wait began it was done (its GPU head start; 0 when the wait had to wait for it)
 __thread uint64_t rq_fence_q;
 void rq_fence_times(uint64_t wait_start, uint64_t *translate_ns, uint64_t *head_ns) {
@@ -463,7 +465,7 @@ void rq_flush(void) {
     rq_drain();
 }
 
-// ---- the hang dump's renderer side (runtime/kernel.c's hang watch: one "[hang]" facility, LARECOMP_HANG_DUMP)
+// ---- the hang dump's renderer side (runtime/kernel.c's hang watch: one "[hang]" facility, HM_HANG_DUMP)
 
 static void hang_state(const char *pfx) {
     uint64_t now = plat_now_ns();

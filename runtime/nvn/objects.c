@@ -1,3 +1,5 @@
+// From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/objects.c), MIT, Copyright (c) 2026 Peiikai.
+// See THIRD_PARTY_NOTICES.md.
 // NVN objects, builders, and state objects (everything except command recording).
 #include <pthread.h>
 #include <stdlib.h>
@@ -43,7 +45,7 @@ NVN(nvnDeviceInitialize) {
         rq_hang_watch_start();  // (before anything of the renderer can hang: rqueue.c)
         backend_init();
         extern void shader_prep_boot(const char *romfs);
-        shader_prep_boot(g_romfs_dir);  // (LARECOMP_SHADER_PREP=1, tests: what the start screen's setup does)
+        shader_prep_boot(g_romfs_dir);  // (HM_SHADER_PREP=1, tests: what the start screen's setup does)
     }
     LOG("[nvn] device initialized\n");
     RET(1);
@@ -170,17 +172,17 @@ void renderer_flush(void);
 NVN(nvnSyncWait) {  // NVN_SYNC_WAIT_RESULT_ALREADY_SIGNALED
     static int flush = -1;
     static uint64_t n;
-    if (flush < 0) flush = getenv("LARECOMP_SYNC_FLUSH") ? 1 : 0;
-    if (getenv("LARECOMP_LOG_SYNC") && n++ % 60 == 0) LOG("[nvn] SyncWait #%llu (lr %llx)\n", (unsigned long long)n, c->x[30]);
-    static int whole = -1;  // LARECOMP_SYNC_ALL=1: old behaviour, wait for all submitted work
-    if (whole < 0) whole = getenv("LARECOMP_SYNC_ALL") ? 1 : 0;
+    if (flush < 0) flush = getenv("HM_SYNC_FLUSH") ? 1 : 0;
+    if (getenv("HM_LOG_SYNC") && n++ % 60 == 0) LOG("[nvn] SyncWait #%llu (lr %llx)\n", (unsigned long long)n, c->x[30]);
+    static int whole = -1;  // HM_SYNC_ALL=1: old behaviour, wait for all submitted work
+    if (whole < 0) whole = getenv("HM_SYNC_ALL") ? 1 : 0;
     uint64_t t0 = 0;
     if (flush) { if (rq_on()) rq_flush(); else { t0 = plat_now_ns(); renderer_flush(); } }
     else if (whole) { if (rq_on()) rq_drain(); t0 = plat_now_ns(); rq_watch("SyncWait (all): the GPU", 0); renderer_sync(); }
     else {  // only the submission that holds this fence
         uint64_t seq = sync_of(A(0))->seq, q = seq;
-        static int stats = -1;  // (LARECOMP_LOG_PACE: which fences the game waits on, and how long)
-        if (stats < 0) stats = getenv("LARECOMP_LOG_PACE") != NULL;
+        static int stats = -1;  // (HM_LOG_PACE: which fences the game waits on, and how long)
+        if (stats < 0) stats = getenv("HM_LOG_PACE") != NULL;
         uint64_t behind = 0, w0 = 0;
         bool cur = false, untranslated = false;
         if (seq && rq_on()) {
@@ -190,8 +192,8 @@ NVN(nvnSyncWait) {  // NVN_SYNC_WAIT_RESULT_ALREADY_SIGNALED
         t0 = plat_now_ns();
         rq_watch("SyncWait: the GPU, submission", seq);
         renderer_wait_seq(seq);
-        static long tr_at = -1;  // (debug, rqueue.c LARECOMP_RQ_TRACE) the game thread's fence waits in those frames
-        if (tr_at < 0) tr_at = getenv("LARECOMP_RQ_TRACE") ? atol(getenv("LARECOMP_RQ_TRACE")) : 0;
+        static long tr_at = -1;  // (debug, rqueue.c HM_RQ_TRACE) the game thread's fence waits in those frames
+        if (tr_at < 0) tr_at = getenv("HM_RQ_TRACE") ? atol(getenv("HM_RQ_TRACE")) : 0;
         extern uint64_t renderer_present_count(void);
         if (tr_at && renderer_present_count() >= (uint64_t)tr_at && renderer_present_count() < (uint64_t)tr_at + 4)
         {
@@ -267,7 +269,7 @@ NVN(nvnMemoryPoolInitialize) {
     p->size = G(uint64_t, A(1), 0x18);
     p->flags = G(uint32_t, A(1), 8);
     SET_HOST(A(0), p);
-    if (getenv("LARECOMP_LOG_BINDS")) LOG("[pool] %llx + %llu KB flags %#x\n", (unsigned long long)p->storage, (unsigned long long)(p->size >> 10), p->flags);
+    if (getenv("HM_LOG_BINDS")) LOG("[pool] %llx + %llu KB flags %#x\n", (unsigned long long)p->storage, (unsigned long long)(p->size >> 10), p->flags);
     if (npools < 256) pools[npools++] = *p;  // (debug: nvn_pool_flags_at)
     RET(1);
 }
@@ -402,7 +404,7 @@ static void builder_layout(uint64_t b, TexLayout *t) {
     // from the driver default: NVNpackagedTextureLayout's low word is log2(GOBs per block).
     uint64_t pl = G(uint64_t, b, 0x50);
     if (pl && (uint32_t)pl <= 5) t->block_height_log2 = (uint32_t)pl;
-    if (pl && getenv("LARECOMP_LOG_PACKAGED")) {
+    if (pl && getenv("HM_LOG_PACKAGED")) {
         static int n;
         if (n++ < 4000) LOG("[nvn] packaged layout %016llx fmt %#x %ux%u lv %u -> default bh %u\n", pl, G(uint32_t, b, 0x20), t->width, t->height, t->levels, t->block_height_log2);
     }
@@ -787,9 +789,9 @@ NVN(nvnWindowGetNumTextures) { RET(WIN->num); }
 NVN(nvnWindowGetNumActiveTextures) { RET(WIN->active); }
 NVN(nvnWindowSetNumActiveTextures) { WIN->active = (int)A(1); }
 NVN(nvnWindowGetPresentInterval) { RET(WIN->interval); }
-NVN(nvnWindowSetPresentInterval) {  // (the game's 60 / 30 fps mode: 1 / 2; LARECOMP_LOG_INTERVAL=1 logs each change)
+NVN(nvnWindowSetPresentInterval) {  // (the game's 60 / 30 fps mode: 1 / 2; HM_LOG_INTERVAL=1 logs each change)
     static int log = -1;
-    if (log < 0) log = getenv("LARECOMP_LOG_INTERVAL") != NULL;
+    if (log < 0) log = getenv("HM_LOG_INTERVAL") != NULL;
     if (log && WIN->interval != (int)A(1)) LOG("[nvn] present interval %d -> %d\n", WIN->interval, (int)A(1));
     WIN->interval = (int)A(1);
 }

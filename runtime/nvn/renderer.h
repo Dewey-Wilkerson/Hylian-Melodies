@@ -1,3 +1,5 @@
+// From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/renderer.h), MIT, Copyright (c) 2026 Peiikai.
+// See THIRD_PARTY_NOTICES.md.
 // Interface between the NVN executor (renderer.m) and the Metal plumbing (metal.m).
 #pragma once
 #ifdef __OBJC__

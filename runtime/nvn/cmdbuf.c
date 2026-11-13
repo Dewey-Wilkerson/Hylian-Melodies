@@ -1,3 +1,5 @@
+// From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/cmdbuf.c), MIT, Copyright (c) 2026 Peiikai.
+// See THIRD_PARTY_NOTICES.md.
 // NVN command buffers: commands are recorded into the guest-provided command memory as CmdRec
 // records, so the game's own memory management and out-of-memory callbacks work as designed.
 // A command handle is the guest address of a list's first record.
@@ -321,10 +323,10 @@ NVN(nvnCommandBufferClearTextureui) { clear_texture(c, 2); }
 PLAIN(nvnCommandBufferClearBuffer, CMD_CLEAR_BUFFER)
 // DiscardColor(cmdbuf, index): the target's contents become undefined. On the Switch a discarded (compressed)
 // target reads back cleared; areas the game then leaves undrawn (e.g. a pit after a floor tile falls away) stay
-// black there. Treated as a clear to (0,0,0,0) (LARECOMP_KEEP_DISCARD=1: old no-op behaviour).
+// black there. Treated as a clear to (0,0,0,0) (HM_KEEP_DISCARD=1: old no-op behaviour).
 NVN(nvnCommandBufferDiscardColor) {
     static int keep = -1, logged;
-    if (keep < 0) keep = getenv("LARECOMP_KEEP_DISCARD") != NULL;
+    if (keep < 0) keep = getenv("HM_KEEP_DISCARD") != NULL;
     if (logged < 5) { logged++; LOG("[nvn] DiscardColor index %llu%s\n", (unsigned long long)c->x[1], keep ? " (kept)" : " -> clear"); }
     if (keep) return;
     Snap s = snap(c);
@@ -338,10 +340,10 @@ NVN(nvnCommandBufferDiscardDepthStencil) { (void)c; }
 // ---- draws (all integer arguments fit in x1..x7)
 NVN(nvnCommandBufferDrawArrays) { Snap s = snap(c); CmdRec *r = record(c, CMD_DRAW_ARRAYS, 0, &s); r->x[3] = 0; r->x[4] = 1; }
 NVN(nvnCommandBufferDrawArraysInstanced) { Snap s = snap(c); record(c, CMD_DRAW_ARRAYS, 0, &s); }
-// Debug: LARECOMP_TRACE_COUNT=<n> logs the guest call chain of indexed draws with n indices.
+// Debug: HM_TRACE_COUNT=<n> logs the guest call chain of indexed draws with n indices.
 static void trace_draw(Cpu *c, uint64_t count) {
     static long want = -2;
-    if (want == -2) want = getenv("LARECOMP_TRACE_COUNT") ? atol(getenv("LARECOMP_TRACE_COUNT")) : -1;
+    if (want == -2) want = getenv("HM_TRACE_COUNT") ? atol(getenv("HM_TRACE_COUNT")) : -1;
     if (want < 0 || (long)count != want) return;
     static int n;
     if (n++ > 40) return;

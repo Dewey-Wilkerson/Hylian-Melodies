@@ -1,3 +1,5 @@
+// From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/astc.h), MIT, Copyright (c) 2026 Peiikai.
+// See THIRD_PARTY_NOTICES.md.
 // ASTC LDR decoder (2D blocks) to RGBA8, for GPUs without native ASTC (desktop NVIDIA / AMD).
 // Bit-exact with ARM astcenc's 8-bit (decode_unorm8) decode, -dl (srgb = false) / -ds (srgb = true).
 #pragma once

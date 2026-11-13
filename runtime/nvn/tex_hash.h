@@ -1,5 +1,7 @@
+// From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/tex_hash.h), MIT, Copyright (c) 2026 Peiikai.
+// See THIRD_PARTY_NOTICES.md.
 // Texture upload checks' hashes (vulkan/textures.c and metal.m upload_texture), written for this project.
-// LARECOMP_TEX_FASTHASH=0: each backend's previous hashes instead (A/B tests).
+// HM_TEX_FASTHASH=0: each backend's previous hashes instead (A/B tests).
 //
 // tex_hash_full: eight independent lanes, each a chain of bijective steps (xor the next word, multiply by an odd
 // constant, xor-shift), folded in order at the end. A change of any one 64-bit word always changes its lane, so it
@@ -67,9 +69,9 @@ static inline uint64_t tex_hash_sample(const uint8_t *p, uint64_t n) {
     return r ^ (r >> 31);
 }
 
-// LARECOMP_TEX_FASTHASH (default on)
+// HM_TEX_FASTHASH (default on)
 static inline int tex_fast_hash(void) {
     static int on = -1;
-    if (on < 0) { const char *e = getenv("LARECOMP_TEX_FASTHASH"); on = !e || atoi(e) != 0; }
+    if (on < 0) { const char *e = getenv("HM_TEX_FASTHASH"); on = !e || atoi(e) != 0; }
     return on;
 }
