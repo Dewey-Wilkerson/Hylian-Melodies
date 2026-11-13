@@ -20,7 +20,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from jumptables import run_window  # noqa: E402
+from jumptables import run_window, writes_gpr_from_simd  # noqa: E402
 from lifter import Insn, Lifter, Unsupported, bits, emit_asm_batch, hx, sext  # noqa: E402
 from nso import Nso, R_AARCH64_RELATIVE  # noqa: E402
 
@@ -161,7 +161,7 @@ class Module:
     def _jt_fallthrough(self, br_pc, entry, end):
         a = br_pc - 4
         guard = cmp = None
-        while a >= entry and br_pc - a <= 4 * 16:
+        while a >= entry and br_pc - a <= 4 * 32:  # (the compiler may schedule FP work between the check and the br)
             w = self.word(a)
             if (w & 0xFF000010) == 0x54000000 and bits(w, 0, 4) in (8, 2):
                 guard = a
@@ -197,10 +197,13 @@ class Module:
     def computed_target(self, br_pc, entry):
         rn = bits(self.word(br_pc), 5, 5)
         a = br_pc - 4
-        while a >= entry and br_pc - a <= 4 * 16:
+        while a >= entry and br_pc - a <= 4 * 32:
             w = self.word(a)
             if self.lift(a).kind not in ('op', 'asm'):
                 return False
+            if (w >> 25) & 7 == 7 and not writes_gpr_from_simd(w):
+                a -= 4
+                continue  # (an FP/SIMD write: its register field names a V register, not x<rn>)
             if (w & 31) == rn:
                 return (w & 0x1F000000) == 0x0B000000 or (w & 0x9F000000) == 0x10000000
             a -= 4

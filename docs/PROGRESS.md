@@ -131,3 +131,11 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
    moments), pixel-perfect scaling, the overlay menu.
 - 2026-11-13 M7 (cont.): the owner connected an 8BitDo Ultimate 2 Wireless and played two minutes: recognised by
   SDL, every button tried reached the game (`HM_LOG_INPUT=1` logs held buttons), 12 saves committed in play.
+- 2026-11-13 M8 (started): the owner played. Fixed: a crash ("no function at ...") from a jump table the lifter
+  missed (FP registers d8/d9 mistaken for x8; bounds-check search widened to 32 instructions): main 716 / sdk 516
+  tables. Debug dump key: P with `HM_DEBUG_KEYS=1` (the desktop takes F9). Open: wrong colours and flickering lines
+  **underground only**. Diagnosis so far: every sprite uses one shader whose per-draw tint comes from constant
+  buffer 3; underground tints vary per tile. Suspect LAS Recomp's "GPU overlap" (the game writes the next frame's
+  data while the GPU still reads this one). Test running: `HM_GPU_OVERLAP=0`; if the owner confirms it fixes the
+  colours, make overlap off the default (or fix its uniform snapshot) and re-test. Also open: image drawn shrunk
+  into the window's corner at times (dynamic resolution).

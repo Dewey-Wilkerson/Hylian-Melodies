@@ -17,6 +17,16 @@ from lifter import bits, decode_bit_masks, sext
 M64 = (1 << 64) - 1
 
 
+def writes_gpr_from_simd(w):
+    """FP/SIMD-class words (bits 27-25 = 111) that write a general register: FMOV/FCVT*/FJCVTZS to Xd/Wd, UMOV/SMOV."""
+    if (w & 0x5F200000) == 0x1E200000 and bits(w, 10, 6) == 0:   # conversion between FP and integer
+        rmode_op = (bits(w, 19, 2) << 3) | bits(w, 16, 3)
+        return rmode_op not in (0b00010, 0b00011, 0b00111, 0b01111)  # (SCVTF, UCVTF, FMOV to FP: write Vd)
+    if (w & 0x9FE08400) == 0x0E000400 and bits(w, 11, 4) in (0b0101, 0b0111):  # SMOV / UMOV
+        return True
+    return False
+
+
 def _ext(v, option, shift):
     v &= M64
     if option == 0: v &= 0xFF
@@ -173,8 +183,10 @@ class Mini:
             return False                                         # B, B.cond, CBZ/CBNZ, TBZ/TBNZ, BR/BLR/RET
         if (w & 0x0A000000) == 0x08000000 and bits(w, 22, 1) == 0:
             return True                                          # other stores (no GPR written, mostly)
-        if (w & 0x0E000000) == 0x0E000000 and bits(w, 28, 1) == 0:
-            return True                                          # FP/SIMD data processing (V registers only)
+        if (w >> 25) & 7 == 7:                                   # FP/SIMD data processing: V registers, except
+            if writes_gpr_from_simd(w):                          # the moves/conversions into a general register
+                self.put(rd, None, 1)
+            return True
         if (w & 0xFFFFF01F) == 0xD503201F:
             return True                                          # hints (NOP)
         self.put(rd, None, 1, sp=True)                           # unknown: forget the destination

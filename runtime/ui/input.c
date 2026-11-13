@@ -186,6 +186,23 @@ static void ensure_init(void) {
 
 void input_handle_event(const SDL_Event *e) {
     ensure_init();
+    if (getenv("HM_LOG_INPUT")) {  // (diagnostics: what the window receives)
+        if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat)
+            LOG("[input] key down: %s\n", SDL_GetScancodeName(e->key.scancode));
+        else if (e->type == SDL_EVENT_WINDOW_FOCUS_GAINED || e->type == SDL_EVENT_WINDOW_FOCUS_LOST)
+            LOG("[input] window %s keyboard focus\n", e->type == SDL_EVENT_WINDOW_FOCUS_GAINED ? "got" : "lost");
+    }
+    static int debug_keys = -1;
+    if (debug_keys < 0) debug_keys = getenv("HM_DEBUG_KEYS") && atoi(getenv("HM_DEBUG_KEYS")) != 0;
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
+        (e->key.scancode == SDL_SCANCODE_F9 || (debug_keys && e->key.scancode == SDL_SCANCODE_P))) {
+        // F9 (or P with HM_DEBUG_KEYS=1: desktops often take F9): dump the next frame's render passes and draw list
+        // (build/pass_*.png and the log; diagnostics)
+        extern volatile int g_debug_frame_request;
+        g_debug_frame_request = 1;
+        LOG("[input] F9: debug frame requested\n");
+        return;
+    }
     switch (e->type) {
     case SDL_EVENT_KEY_DOWN: case SDL_EVENT_KEY_UP: recompute_keys(); break;
     case SDL_EVENT_WINDOW_FOCUS_LOST: atomic_store(&key_bits, 0); break;  // (keys released while away)
