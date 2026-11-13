@@ -10,7 +10,7 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M1 Skeleton and guardrails | done: hook rejects keys/NSO/blobs, proven by tests/test_check_content.py |
 | M2 Extraction | done: hactool built from pinned commit; check+extract verified, resume after kill tested |
 | M3 Lift | done: main+sdk lift (0 unsupported insns) and link with --no-undefined |
-| M4 Boot, headless | in progress: boots through SDK init, game constructors, RomFS mount, display layer; stops at NVN |
+| M4 Boot, headless | in progress: engine init completes headless; stops at the first video (movie HLE next) |
 | M5-M8, M10 | not started |
 | M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
 
@@ -59,3 +59,15 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 2. Check `aoc:u` reports the four DLC; check `movie::`/`glslc` when reached (HLE in hle/movie.c over FFmpeg; glslc
    over glslang/shaderc).
 3. Then M5: SDL3 window + Vulkan backend (`ui_headless.c` replaced), shader translation, title screen.
+- 2026-11-13 M4 (cont.): NVN front end restored with a headless null backend (0 unimplemented NVN calls);
+  `nn::hid` HLE + controller applet; save journaling of new files (bug found by a killed run, fixed, verified by a
+  rollback in a later run); `HM_HEADLESS_SECONDS`. **Boots** headless through the engine's whole init (pools,
+  textures, audio objects, save file) to the first `movie::` call. Side study on a NecroDancer mod: not worth it.
+
+## Next (updated 2026-11-13)
+
+1. `movie::` HLE: restore LAS Recomp's `runtime/hle/movie.c` (FFmpeg), adapt, add `-lavformat -lavcodec -lavutil
+   -lswscale` to `tools/build_game.py`; or stub "no video" first to see what follows.
+2. Continue the headless boot until the main loop runs (presents through the null backend); document every stub in
+   docs/services.md; then M4 is done.
+3. M5: Vulkan backend (`runtime/nvn/vulkan/`), SDL3 window replacing `runtime/ui_headless.c`, Maxwell translator.

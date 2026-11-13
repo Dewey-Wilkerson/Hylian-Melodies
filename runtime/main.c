@@ -104,7 +104,16 @@ int main(int argc, char **argv) {
     uint64_t fini_fn = hle_register("<rtld_init_main>", rtld_init_main);
     KThread *t = kernel_create_main_thread(start, stack_size, prio);
     kernel_run_main(t, t->handle, 0, init_fn, fini_fn);
-    if (g_headless) {
+    if (g_headless) {  // HM_HEADLESS_SECONDS=N: stop after N seconds (test runs; SIGTERM is taken by the runtime)
+        const char *secs = getenv("HM_HEADLESS_SECONDS");
+        if (secs && atoi(secs) > 0) {
+            sleep((unsigned)atoi(secs));
+            extern void kernel_dump_threads(const char *prefix);
+            kernel_dump_threads("[exit]");
+            LOG("[boot] headless run ended after %s s\n", secs);
+            fflush(stderr);
+            _exit(0);
+        }
         for (;;) pause();
     }
     return ui_run();

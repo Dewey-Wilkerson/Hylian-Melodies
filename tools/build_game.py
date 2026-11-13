@@ -81,12 +81,14 @@ def main():
     else:
         rtflags = (f'-O2 -g -std=gnu11 -D_GNU_SOURCE -fno-strict-aliasing -Wall -Wno-unused-function -Wno-format '
                    f'-Wno-unused-variable -Wno-unused-but-set-variable -march={march} -I{shlex.quote(rt)} '
+                   f'-I{shlex.quote(os.path.join(rt, "nvn"))} '
                    + subprocess.run(['pkg-config', '--cflags', 'sdl3'], capture_output=True, text=True).stdout.strip())
         lines.insert(2, f'rtflags = {rtflags}')
         lines += ['rule rtcc', '  command = $cc $rtflags -MD -MF $out.d -c $in -o $out', '  depfile = $out.d',
                   '  deps = gcc', '  description = CC $in']
         rsrcs = sorted(glob.glob(os.path.join(rt, '*.c')) + glob.glob(os.path.join(rt, 'hle', '*.c')) +
-                       glob.glob(os.path.join(rt, 'services', '*.c')) + [os.path.join(rt, 'platform', 'linux.c')])
+                       glob.glob(os.path.join(rt, 'services', '*.c')) + glob.glob(os.path.join(rt, 'nvn', '*.c')) +
+                       [os.path.join(rt, 'platform', 'linux.c')])
         for s in rsrcs:
             o = os.path.join(out, 'rt', os.path.relpath(s, rt)[:-2] + '.o')
             objs.append(o)

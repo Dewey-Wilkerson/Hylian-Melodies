@@ -343,6 +343,24 @@ static void commit(HostFs *fs) {
         } else LOG("[save] committed %s\n", path);
     }
     fs->npending = 0;
+    DIR *d = opendir(fs->root);  // files created since the last commit are now part of the save
+    struct dirent *e;
+    bool any = false;
+    while (d && (e = readdir(d))) {
+        size_t l = strlen(e->d_name);
+        if (l > 4 && !strcmp(e->d_name + l - 4, ".new")) {
+            char mark[1300];
+            snprintf(mark, sizeof mark, "%s/%s", fs->root, e->d_name);
+            unlink(mark);
+            any = true;
+        }
+    }
+    if (d) closedir(d);
+    if (any) {
+        char probe[1100];
+        snprintf(probe, sizeof probe, "%s/.", fs->root);
+        sync_dir_of(probe);
+    }
 }
 // Recover pairs before dropping abandoned working copies: deleting the data copy first would make an
 // uncommitted sidecar look committed. No format change: existing .flagsx files still contain just flag bytes.
@@ -479,6 +497,9 @@ static void directory(Service *s, IpcReq *req, IpcResp *resp) {
         struct dirent *e;
         while (n < max && (e = readdir(d->d))) {
             if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+            size_t nl = strlen(e->d_name);  // (the journal's own files are not the game's)
+            if ((nl > 4 && !strcmp(e->d_name + nl - 4, ".new")) || (nl > 8 && !strcmp(e->d_name + nl - 8, ".pending")))
+                continue;
 #ifdef _WIN32  // no d_type
             char full[2048];
             struct stat es;
@@ -509,8 +530,13 @@ static void directory(Service *s, IpcReq *req, IpcResp *resp) {
         rewinddir(d->d);
         int64_t n = 0;
         struct dirent *e;
-        while ((e = readdir(d->d)))
-            if (strcmp(e->d_name, ".") && strcmp(e->d_name, "..")) n++;
+        while ((e = readdir(d->d))) {
+            size_t nl = strlen(e->d_name);
+            if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+            if ((nl > 4 && !strcmp(e->d_name + nl - 4, ".new")) || (nl > 8 && !strcmp(e->d_name + nl - 8, ".pending")))
+                continue;
+            n++;
+        }
         seekdir(d->d, pos);
         OUT(int64_t, 0) = n;
         resp_size(resp, 8);
@@ -543,9 +569,22 @@ static void filesystem(Service *s, IpcReq *req, IpcResp *resp) {
         if (fd < 0) { resp->result = errno_result(); break; }
         if (ftruncate(fd, IN(int64_t, 8))) resp->result = errno_result();
         close(fd);
+        if (fs->journaled) {  // a new file is part of the save only once committed: <file>.new marks it until then
+            char mark[1200];
+            snprintf(mark, sizeof mark, "%s.new", p);
+            int m = open(mark, O_CREAT | O_WRONLY, 0644);
+            if (m >= 0) close(m);
+            sync_dir_of(p);
+        }
         break;
     }
-    case 1: if (unlink(p)) resp->result = errno_result(); break;
+    case 1: {  // DeleteFile (and its uncommitted-create marker)
+        if (unlink(p)) { resp->result = errno_result(); break; }
+        char mark[1200];
+        snprintf(mark, sizeof mark, "%s.new", p);
+        unlink(mark);
+        break;
+    }
     case 2: if (mkdir(p, 0755)) resp->result = errno_result(); break;
     case 3: if (rmdir(p)) resp->result = errno_result(); break;
     case 4: if (rm_rf(p, false)) resp->result = errno_result(); break;
@@ -643,6 +682,13 @@ static Service *open_host_fs(const char *sub) {
                 char stale[1300];
                 snprintf(stale, sizeof stale, "%s/%s", fs->root, e->d_name);
                 LOG("[save] dropping uncommitted %s\n", stale);
+                unlink(stale);
+            } else if (l > 4 && !strcmp(e->d_name + l - 4, ".new")) {  // created, never committed: rolled back
+                char stale[1300];
+                snprintf(stale, sizeof stale, "%s/%.*s", fs->root, (int)(l - 4), e->d_name);
+                LOG("[save] dropping uncommitted new file %s\n", stale);
+                unlink(stale);
+                snprintf(stale, sizeof stale, "%s/%s", fs->root, e->d_name);
                 unlink(stale);
             }
         }

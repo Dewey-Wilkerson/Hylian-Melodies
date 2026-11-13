@@ -1,4 +1,4 @@
-// Placeholder until M7 (SDL3 gamepad/keyboard into the hid shared memory): rumble is accepted and ignored.
+// Rumble placeholder until M7: accepted and ignored.
 #include "../rumble.h"
 static bool permitted = true;
 void input_rumble_send(uint32_t handle, const RumbleValue *value) { (void)handle; (void)value; }

@@ -3,7 +3,13 @@
 From the first headless boots (`HM_HEADLESS=1 HM_GAME_DIR=<install> build/hylian-melodies`, log in
 `<exe dir>/logs/hylian-melodies.log`). Updated as the boot gets further. Service names and command IDs only.
 
-## Reached so far (2026-11-13)
+## Reached so far (2026-11-13, second pass)
+
+Headless (NVN front end + null backend): engine init completes (memory pools, all textures loaded, audio
+objects, save file created through the journal), the controller check passes, and the boot stops at the first
+`movie::` call: the movie HLE (LAS Recomp's `runtime/hle/movie.c` over FFmpeg) is next.
+
+## First pass (2026-11-13)
 
 SDK init, both modules' constructors, the game's logger, RomFS mounted through `fsp-srv` (layout of 679 files),
 time shared memory, display layer created (vi HLE), then the graphics device setup stops at the first NVN buffer
@@ -27,5 +33,9 @@ map: NVN is not implemented yet (it is LAS Recomp's `runtime/nvn/`, to be restor
 
 - `nn::vi` display/layer functions: `runtime/hle/vi.c` (layer scaling mode added for this game).
 - libc `mem*`/`str*`: `runtime/hle/libc.c`.
-- NVN: 152 distinct calls reached as "unimplemented, returning 0" before the crash. Next: restore the NVN layer.
+- NVN: LAS Recomp's front end (`runtime/nvn/objects.c`, `cmdbuf.c`, `rqueue.c`, ...) with a headless null backend
+  (`runtime/nvn/null_backend.c`): 0 unimplemented NVN calls; 352 command lists recorded at boot.
+- `nn::hid`: `runtime/hle/input.c` (player 1 = connected full-key controller, no buttons until M7; vibration
+  accepted) and `runtime/hle/controller_applet.c` (the "connect a controller" applet returns player 1 at once).
+- `movie::`: 3 calls reached (allocator, extractor, media data) and unimplemented: next.
 - `movie::` (subsdk0) and `glslc*` (subsdk1): not reached yet; resolved to "unimplemented" stubs by the loader.
