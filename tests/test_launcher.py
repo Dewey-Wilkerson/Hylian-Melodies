@@ -23,8 +23,8 @@ class Launcher(unittest.TestCase):
         os.makedirs(os.path.join(self.game, 'romfs'))
         open(os.path.join(self.game, 'romfs', 'a.dat'), 'w').close()
         open(os.path.join(self.game, 'data.txt'), 'w').close()
-        os.makedirs(os.path.join(self.game, 'shader-cache'))
-        open(os.path.join(self.game, 'shader-cache', 'pack'), 'w').close()
+        os.makedirs(os.path.join(self.game, 'cache'))
+        open(os.path.join(self.game, 'cache', 'pack'), 'w').close()
         with open(os.path.join(self.support, 'hylian-melodies.ini'), 'w') as f:
             f.write('default=1\n')
         self.dir = os.path.join(self.home, '.local', 'share', 'hylian-melodies')
@@ -38,7 +38,7 @@ class Launcher(unittest.TestCase):
         os.utime(p, (t, t))
 
     def run_launcher(self, *args):
-        env = dict(os.environ, HOME=self.home, HM_GAME_DIR=self.game, HM_SUPPORT_DIR=self.support)
+        env = dict({k: v for k, v in os.environ.items() if k != 'XDG_DATA_HOME'}, HOME=self.home, HM_GAME_DIR=self.game, HM_SUPPORT_DIR=self.support)
         r = subprocess.run(['sh', LAUNCHER, *args], env=env, capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stderr)
         return r
@@ -52,8 +52,8 @@ class Launcher(unittest.TestCase):
         self.assertTrue(os.path.isdir(self.p('profile')))
         self.assertTrue(os.path.isfile(self.p('hylian-melodies')) and not os.path.islink(self.p('hylian-melodies')))
         self.assertTrue(os.path.islink(self.p('romfs')) and os.path.islink(self.p('data.txt')))
-        self.assertTrue(os.path.isdir(self.p('shader-cache')) and not os.path.islink(self.p('shader-cache')))
-        self.assertTrue(os.path.islink(self.p('shader-cache', 'pack')))
+        self.assertTrue(os.path.isdir(self.p('cache')) and not os.path.islink(self.p('cache')))
+        self.assertTrue(os.path.islink(self.p('cache', 'pack')))
         with open(self.p('hylian-melodies.ini')) as f:
             self.assertEqual(f.read(), 'default=1\n')
         with open(os.path.join(self.home, 'ran.txt')) as f:
@@ -77,10 +77,10 @@ class Launcher(unittest.TestCase):
     def test_dangling_links_pruned(self):
         self.run_launcher()
         os.remove(os.path.join(self.game, 'data.txt'))
-        os.remove(os.path.join(self.game, 'shader-cache', 'pack'))
+        os.remove(os.path.join(self.game, 'cache', 'pack'))
         self.run_launcher()
         self.assertFalse(os.path.lexists(self.p('data.txt')))
-        self.assertFalse(os.path.lexists(self.p('shader-cache', 'pack')))
+        self.assertFalse(os.path.lexists(self.p('cache', 'pack')))
 
     def test_user_file_never_overwritten(self):
         os.makedirs(self.dir)
@@ -108,9 +108,18 @@ class Launcher(unittest.TestCase):
         with open(self.p('hylian-melodies.ini')) as f:
             self.assertEqual(f.read(), 'kept=1\n')
 
+    def test_xdg_data_home(self):
+        xdg = os.path.join(self.t, 'xdg')
+        env = {k: v for k, v in os.environ.items() if k != 'XDG_DATA_HOME'}
+        env.update(HOME=self.home, XDG_DATA_HOME=xdg, HM_GAME_DIR=self.game, HM_SUPPORT_DIR=self.support)
+        r = subprocess.run(['sh', LAUNCHER], env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(os.path.isfile(os.path.join(xdg, 'hylian-melodies', '.hylian-melodies')))
+        self.assertFalse(os.path.exists(self.dir))
+
     def test_missing_install_fails_clearly(self):
         os.remove(os.path.join(self.game, 'hylian-melodies'))
-        env = dict(os.environ, HOME=self.home, HM_GAME_DIR=self.game, HM_SUPPORT_DIR=self.support)
+        env = dict({k: v for k, v in os.environ.items() if k != 'XDG_DATA_HOME'}, HOME=self.home, HM_GAME_DIR=self.game, HM_SUPPORT_DIR=self.support)
         r = subprocess.run(['sh', LAUNCHER], env=env, capture_output=True, text=True)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn('is hylian-melodies-recomp installed', r.stderr)

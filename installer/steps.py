@@ -12,7 +12,7 @@ from .events import SetupError
 from .hactool import Hactool
 
 GiB = 1 << 30
-ORDER = ['check', 'extract', 'lift', 'compile', 'shaders', 'cleanup']
+ORDER = ['check', 'extract', 'lift', 'compile', 'cleanup']  # (no shader step: compiled on first use, docs/DECISIONS.md)
 
 
 class Ctx:
@@ -270,5 +270,40 @@ def lift(c):
     return {'generated': gen_dir}
 
 
-STEPS = {'check': check, 'extract': extract, 'lift': lift, 'compile': not_yet('compile'),
-         'shaders': not_yet('shaders'), 'cleanup': not_yet('cleanup')}
+def compile_game(c):
+    import re
+    import subprocess
+    temp = os.path.dirname(c.work)
+    gen_dir, build_dir = os.path.join(temp, 'generated'), os.path.join(temp, 'build')
+    cmd = [sys.executable, os.path.join(c.a.root, 'tools', 'build_game.py'), '--gen', gen_dir, '--out', build_dir,
+           '--target', 'game']
+    c.log('compile: ' + ' '.join(cmd))
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
+    for line in p.stdout:
+        c.log('  ' + line.rstrip())
+        m = re.match(r'\[(\d+)/(\d+)\]', line)
+        if m:
+            c.ev.progress('compile', 99 * int(m.group(1)) / int(m.group(2)))
+    if p.wait():
+        raise SetupError('compile_failed', log=c.a.log_path)
+    exe = os.path.join(build_dir, 'hylian-melodies')
+    part = os.path.join(c.dest, 'hylian-melodies.new')
+    shutil.copy2(exe, part)
+    os.chmod(part, 0o755)
+    os.replace(part, os.path.join(c.dest, 'hylian-melodies'))
+    return {'executable': 'hylian-melodies'}
+
+
+def cleanup(c):
+    temp = os.path.dirname(c.work)
+    for d in ('work', 'generated', 'build'):  # (the run logs stay)
+        shutil.rmtree(os.path.join(temp, d), ignore_errors=True)
+    for name in os.listdir(c.dest):
+        if name.startswith('.partial'):
+            shutil.rmtree(os.path.join(c.dest, name), ignore_errors=True)
+    c.ev.progress('cleanup', 100)
+    return {}
+
+
+STEPS = {'check': check, 'extract': extract, 'lift': lift, 'compile': compile_game, 'cleanup': cleanup}

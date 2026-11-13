@@ -5,7 +5,6 @@ STEPS = {
     'extract': 'Extracting game files',
     'lift': 'Recompiling game code to C',
     'compile': 'Compiling the game',
-    'shaders': 'Preparing shaders',
     'cleanup': 'Cleaning up',
 }
 
@@ -26,6 +25,7 @@ MESSAGES = {
     'disk_space': 'Not enough free space in {path}: {free} GiB free, about {need} GiB needed',
     'found_version': 'Found base {base} with update {version} and {aoc} DLC pack(s)',
     'resume': 'Resuming: {step} already done',
+    'compile_failed': 'Compiling the game failed (log: {log})',
     'lift_failed': 'Recompiling {module} failed (log: {log})',
     'not_implemented': 'Step {step} is not implemented yet in this version of the installer',
     'done': 'Setup finished: {dest}',

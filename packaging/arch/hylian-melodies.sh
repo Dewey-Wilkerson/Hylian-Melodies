@@ -1,16 +1,17 @@
 #!/bin/sh
 # /usr/bin/hylian-melodies: start Hylian Melodies from the player's own writable folder.
-# The game is installed read-only in /usr/share/hylian-melodies and finds its data next to its own executable
+# The game is installed read-only in /opt/hylian-melodies and finds its data next to its own executable
 # (/proc/self/exe), where it also writes settings, saves, logs and caches. So each player gets
-# ~/.local/share/hylian-melodies with a copy of the executable (a symlink would resolve back to /usr/share) and
-# symlinks to everything else. HM_GAME_DIR / HM_SUPPORT_DIR override the system folders (tests only).
+# $XDG_DATA_HOME/hylian-melodies (~/.local/share/hylian-melodies) with a copy of the executable (a symlink would
+# resolve back to /opt) and symlinks to everything else. HM_GAME_DIR / HM_SUPPORT_DIR override the system folders
+# (tests only). Arguments go to the game (--fullscreen, --windowed).
 set -eu
 
-game=${HM_GAME_DIR:-/usr/share/hylian-melodies}
+game=${HM_GAME_DIR:-/opt/hylian-melodies}
 support=${HM_SUPPORT_DIR:-/usr/share/hylian-melodies-recomp}
 exe=hylian-melodies
 settings=hylian-melodies.ini
-caches="shader-cache pipeline-cache"
+caches="cache logs"  # (the folders the game writes into)
 
 case ${HOME:-} in
     /*) ;;
@@ -20,7 +21,11 @@ if [ ! -x "$game/$exe" ]; then
     echo "hylian-melodies: $game/$exe not found (is hylian-melodies-recomp installed?)" >&2
     exit 1
 fi
-dir=$HOME/.local/share/hylian-melodies
+case ${XDG_DATA_HOME:-} in
+    /*) data=$XDG_DATA_HOME ;;
+    *) data=$HOME/.local/share ;;  # (XDG: unset or relative means the default)
+esac
+dir=$data/hylian-melodies
 
 # 1. the folder, saves, the cache folders the game writes into, the marker the package's hooks look for
 mkdir -p "$dir/profile"

@@ -1276,6 +1276,12 @@ void ui_window_init(void) {
     window = SDL_CreateWindow("Hylian Melodies", win_w, win_h, wflags);
     if (!window) FATAL("SDL_CreateWindow: %s\n", SDL_GetError());
     // the Fullscreen setting applies from the start screen on (not only once the game runs); test windows stay windows
+    {   // --fullscreen / --windowed on the command line win over the ini (runtime/main.c)
+        extern int g_cli_fullscreen;
+        if (g_cli_fullscreen >= 0) g_settings.fullscreen = g_cli_fullscreen != 0;
+    }
+    // (SDL3: no display mode set = borderless fullscreen at the desktop's own resolution; the game renders at its
+    // native size and the present scales it to fill, runtime/nvn/vulkan/shaders.c present.frag)
     if (g_settings.fullscreen && !getenv("HM_WINDOW") && !getenv("HM_HIDDEN")) SDL_SetWindowFullscreen(window, true);
     create_instance();
     if (!SDL_Vulkan_CreateSurface(window, g_vk.inst, NULL, &g_vk.surface)) FATAL("SDL_Vulkan_CreateSurface: %s\n", SDL_GetError());

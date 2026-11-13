@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Hylian Melodies
+Comment=Native Linux build of your own copy of the rhythm game (personal use)
+Exec=hylian-melodies
+Icon=hylian-melodies
+Terminal=false
+Categories=Game;
+StartupWMClass=hylian-melodies
+Actions=Fullscreen;
+
+[Desktop Action Fullscreen]
+Name=Play fullscreen
+Exec=hylian-melodies --fullscreen

@@ -104,8 +104,21 @@ static void *run_timer(void *arg) {
 #endif
 const char *hm_version(void) { return HM_VERSION; }  // (VERSION, passed by tools/build_game.py)
 
+int g_cli_fullscreen = -1;  // --fullscreen / --windowed (overrides the ini; runtime/nvn/vulkan/device.c)
+
+static void usage(void) {
+    fprintf(stderr, "usage: hylian-melodies [--fullscreen | --windowed]\n"
+                    "  --fullscreen  borderless fullscreen at the desktop's resolution\n"
+                    "  --windowed    a window (the default; or fullscreen = 1 in hylian-melodies.ini)\n");
+}
+
 int main(int argc, char **argv) {
-    (void)argc; (void)argv;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--fullscreen") || !strcmp(argv[i], "-f")) g_cli_fullscreen = 1;
+        else if (!strcmp(argv[i], "--windowed") || !strcmp(argv[i], "-w")) g_cli_fullscreen = 0;
+        else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(); return 0; }
+        else { fprintf(stderr, "hylian-melodies: unknown option %s\n", argv[i]); usage(); return 2; }
+    }
     plat_init();
     setvbuf(stderr, NULL, _IOLBF, 0);
     g_headless = getenv("HM_HEADLESS") && strcmp(getenv("HM_HEADLESS"), "0");

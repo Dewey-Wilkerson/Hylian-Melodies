@@ -1,7 +1,7 @@
 # pacman hooks for hylian-melodies-recomp. Everything inside a user's home runs as that folder's owner (runuser),
 # never as root. HM_GAME_DIR / HM_SUPPORT_DIR override the system folders (tests only).
 
-_game() { printf '%s' "${HM_GAME_DIR:-/usr/share/hylian-melodies}"; }
+_game() { printf '%s' "${HM_GAME_DIR:-/opt/hylian-melodies}"; }
 _support() { printf '%s' "${HM_SUPPORT_DIR:-/usr/share/hylian-melodies-recomp}"; }
 
 # _as <user> <command...>: run as that user (directly when we already are that user, as in tests)
@@ -10,7 +10,8 @@ _as() {
     if [ "$(id -un)" = "$_u" ]; then "$@"; else runuser -u "$_u" -- "$@"; fi
 }
 
-# "user home" for every account whose ~/.local/share/hylian-melodies was set up by the launcher
+# "user home" for every account whose ~/.local/share/hylian-melodies was set up by the launcher (a player with
+# another XDG_DATA_HOME is not found here: their folder keeps its links, which point at nothing once removed)
 _players() {
     getent passwd | while IFS=: read -r _name _pw _uid _gid _gecos _home _shell; do
         case $_home in /*) ;; *) continue ;; esac
@@ -37,8 +38,9 @@ post_install() {
         fi
     fi
     echo "  Hylian Melodies is installed in $(_game)."
-    echo "  Run 'hylian-melodies' (or use the menu entry). Each user's folder ~/.local/share/hylian-melodies"
-    echo "  (saves, settings, logs, caches) is created on their first start."
+    echo "  Run 'hylian-melodies' (or use the menu entry; 'hylian-melodies --fullscreen' for fullscreen)."
+    echo "  Each user's folder ~/.local/share/hylian-melodies (saves, settings, logs, caches) is created on their"
+    echo "  first start."
 }
 
 post_upgrade() {
@@ -55,12 +57,12 @@ pre_remove() {
         _dir=$_home/.local/share/hylian-melodies
         _as "$_user" sh -c '
             g=$1 d=$2
-            for l in "$d"/* "$d"/.[!.]* "$d"/shader-cache/* "$d"/pipeline-cache/*; do
+            for l in "$d"/* "$d"/.[!.]* "$d"/cache/* "$d"/logs/*; do
                 [ -L "$l" ] || continue
                 case $(readlink "$l") in "$g"/*) rm -f "$l" ;; esac
             done
             rm -f "$d/hylian-melodies" "$d/.stamp" "$d"/*.new "$d/.hylian-melodies"
-            rmdir "$d/shader-cache" "$d/pipeline-cache" "$d/profile" 2>/dev/null || true
+            rmdir "$d/cache" "$d/logs" "$d/profile" 2>/dev/null || true
         ' sh "$_g" "$_dir"
         echo "  Kept $_dir for $_user: saves, settings, mods, logs and caches are still there."
     done
