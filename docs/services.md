@@ -20,7 +20,7 @@ in a 30 s run, no crash, no unimplemented call.
 | `apm` | `services/am.c` | performance mode: normal |
 | `pctl`, `pctl:s`, `pctl:a`, `pctl:r` | `services/misc.c` | no restrictions; IParentalControlService 1 (initialise) answered "ok" |
 | `acc:u0` | `services/acc.c` | one local user |
-| `aoc:u` | `services/misc.c` | to verify in M8: the four DLC must be listed |
+| `aoc:u` | `services/misc.c` | lists the packs found in `aoc/` (all four), base ID = application ID + 0x1000 |
 | `fsp-srv` | `services/fs.c` | RomFS laid out from `romfs/`, DLC from `aoc/<title>/`, saves in `profile/` with journaled creates and writes |
 | `time:u` | `services/time.c` | host clock |
 | `hid` | `services/hid_set.c` + `hle/input.c` | player 1 connected, fed by `ui/input.c` (SDL3 gamepad + keyboard) |

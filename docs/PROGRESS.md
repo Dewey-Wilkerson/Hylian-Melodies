@@ -14,7 +14,8 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M5 Graphics | done: Vulkan renderer; loading screen, both splash videos and the title screen drawn correctly at 61 fps |
 | M6 Audio | done by measurement: 10 min, 0 gaps, card clock ~25 ppm from system clock, our latency share ~11-32 ms; not yet checked by ear |
 | M7 Input and saves | done: real gamepad verified by the owner, scripted input, saves survive kill -9; keyboard and rumble not yet tried by hand |
-| M8 Playable | next |
+| M8 Playable | done: a 7-minute owner session (title, crypt, castle, a dungeon area) at 61 fps with saves and a clean window close; DLC served |
+| M9 Packaging | next (launcher and hooks already tested) |
 | M5-M8, M10 | not started |
 | M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
 
@@ -142,3 +143,16 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 - 2026-11-13 M8 (cont.): underground colours fixed (3D LUT layout: block of at most 16 GOBs); flickering lines and
   soft text fixed by rendering at native scale (default now) and a sharp-bilinear present. Both confirmed by the
   owner. GPU overlap was ruled out as a cause (stays on).
+- 2026-11-13 M8 **done**: the owner played ~7 minutes from the title through the crypt and castle into a dungeon
+  area: 61 fps, 38 save commits, no crash, closed with the window's close button ("window closed", exit 0).
+  Captures reviewed: colours right everywhere; black around small rooms is the game's own framing. DLC: `aoc:u`
+  now lists the four packs from `aoc/` (LAS Recomp's said "none", with its own game's base ID); the game mounts
+  all four and Select Mode offers more than Story Mode. Hitches seen: one 833 ms frame at an early load, a few
+  50-80 ms; to look at in M10.
+
+## Next (M9: packaging)
+
+1. `packaging/arch/PKGBUILD` per brief section 8 (prepare/build/package, `_firmware()`, events.py heredoc, pkgver).
+2. Installer stages still missing: compile (tools/build_game.py --target game into the stage), shaders (first run
+   compiles them today; decide whether a prepare step is worth it), cleanup.
+3. `makepkg` from a clean directory, resume after interruption, `pacman -Qlp` checks, build-path grep (brief 8.5).

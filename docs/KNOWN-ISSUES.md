@@ -2,8 +2,8 @@
 
 - Input: a real gamepad works (8BitDo Ultimate 2 Wireless: A, B, X, L, R, ZL, ZR, d-pad and combinations reached
   the game in a 2-minute hands-on run). Not yet confirmed by hand: + / -, the sticks, the keyboard, rumble.
-- The image drawn shrunk into the window's top-left at moments was seen with the old "match the window" render
-  scale; not seen since the native default (2026-11-13). Watch for it.
+- Black around small rooms (castle interiors) is the game's own framing, not a fault.
+- Occasional hitches: one 833 ms frame at an early load, a few 50-80 ms frames in a 7-minute session.
 - Loading and the splash videos run at 30 fps (the game's own choice while loading; to confirm on hardware).
 - No overlay menu (M10); the software keyboard returns the initial text unchanged.
 - Restored LAS Recomp renderer code still contains comments and dormant paths about Link's Awakening; the hooks are
