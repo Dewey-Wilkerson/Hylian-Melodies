@@ -38,7 +38,7 @@ __attribute__((section(".hle$z"), used)) static const HleImpl __stop_hle_impls[1
 #endif
 
 HostFn hle_lookup_impl(const char *name) {
-    const char *skip = getenv("LARECOMP_HLE_SKIP");  // debugging: disable HLE for names containing this
+    const char *skip = getenv("HM_HLE_SKIP");  // debugging: disable HLE for names containing this
     if (skip && strstr(name, skip)) return NULL;
     const HleImpl *start = __start_hle_impls, *stop = __stop_hle_impls;
     __asm__("" : "+r"(start), "+r"(stop));  // separate objects: keep the compiler from reasoning about them
@@ -252,6 +252,11 @@ void rt_udf(Cpu *c, uint64_t pc) {
     FATAL("undefined instruction / trap at %llx\n", pc);
 }
 
+void rt_jt_miss(Cpu *c, uint64_t br_pc) {
+    FATAL("jump table at %llx: target %llx is not among the resolved ones (recomp/jumptables.py)\n",
+          (unsigned long long)br_pc, (unsigned long long)c->pc);
+}
+
 void rt_brk(Cpu *c, uint32_t imm, uint64_t pc) {
     (void)c;
     FATAL("brk #%u at %llx\n", imm, pc);
@@ -277,8 +282,8 @@ static void *watch_thread(void *a) {
 volatile int g_watch_stop;  // (set by the watcher's client: the watch ends, the page opens for good)
 const char *rt_host_sym(uint64_t pc, uint64_t *off) { return host_sym(pc, off); }  // (the renderer's fault log)
 void watch_arm(void) {
-    if (!g_watch_lo) {  // (debug) LARECOMP_WATCH_ADDR=<lo>,<hi> (hex): who touches [lo, hi) - one page watched
-        const char *e = getenv("LARECOMP_WATCH_ADDR");
+    if (!g_watch_lo) {  // (debug) HM_WATCH_ADDR=<lo>,<hi> (hex): who touches [lo, hi) - one page watched
+        const char *e = getenv("HM_WATCH_ADDR");
         if (e) { g_watch_lo = strtoull(e, (char **)&e, 16); if (*e == ',') g_watch_hi = strtoull(e + 1, NULL, 16); }
     }
     if (!g_watch_lo || watch_page) return;
@@ -297,11 +302,11 @@ bool rt_fault_watch(uint64_t fa, uint64_t pc) {
     if (!watch_page || fa < watch_page || fa >= watch_page + PLAT_PAGE) return false;
     if (fa >= g_watch_lo && fa < g_watch_hi) {
         uint64_t lr = g_fault_lr;
-        static int hits;  // (LARECOMP_WATCH_ADDR) each (frame, caller) once with its offset, the first 4000
+        static int hits;  // (HM_WATCH_ADDR) each (frame, caller) once with its offset, the first 4000
         extern uint64_t renderer_present_count(void);
         static uint64_t last_frame, last_pc;
         uint64_t fr = renderer_present_count();
-        if (getenv("LARECOMP_WATCH_ADDR") && (fr != last_frame || pc != last_pc) && hits++ < 4000) {
+        if (getenv("HM_WATCH_ADDR") && (fr != last_frame || pc != last_pc) && hits++ < 4000) {
             last_frame = fr, last_pc = pc;
             uint64_t lo = 0;
             const char *ls = host_sym(lr, &lo);

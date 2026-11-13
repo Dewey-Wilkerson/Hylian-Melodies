@@ -1,0 +1,114 @@
+// A fatal error, explained to the player: the crash dialog (plat_fatal_notice) says what went wrong in plain words
+// and what to do about it; the technical lines (FATAL / signal, backtrace, registers) stay in the log for bug reports.
+// Known causes are recognised from what the runtime knows when it stops: the fatal line, where the crash was (the
+// game code, Hylian Melodies itself, the graphics driver), and the game files.
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+
+#include "platform.h"
+#include "rt.h"
+
+static char g_line[512];   // the first fatal line (FATAL message / "signal 11 accessing 0x10")
+static uint64_t g_pc;      // a crash's host pc (0: a FATAL)
+int rt_romfs_files = -1;   // the game's own RomFS files (runtime/services/fs.c; -1: not read yet)
+uint64_t rt_romfs_bytes;   // their sizes summed (issue #391: one damaged file, every file there)
+int rt_romfs_missing;      // the game's files not found by name and size (#391: a renamed file keeps count and bytes)
+enum { ROMFS_FILES = 3836 };  // (every supported version: runtime/ui/launcher.mm counts the same)
+
+void rt_fatal_msg(const char *fmt, ...) {
+    char b[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(b, sizeof b, fmt, ap);
+    va_end(ap);
+    fprintf(stderr, "FATAL: %s", b);
+    if (!g_line[0]) snprintf(g_line, sizeof g_line, "%s", b);
+}
+
+void rt_crash_fault(const char *what, uint64_t fa, uint64_t pc) {
+    if (!g_line[0]) snprintf(g_line, sizeof g_line, "%s accessing %#llx", what, (unsigned long long)fa);
+    if (!g_pc) g_pc = pc;
+}
+
+static bool has(const char *s) { return strstr(g_line, s) != NULL; }
+
+const char *rt_host_fn_name(uint64_t pc, uint64_t *offset);  // runtime/dispatch.c: inside the game code?
+
+static bool contains_nocase(const char *hay, const char *needle) {  // (no strcasestr on Windows)
+    for (; *hay; hay++) {
+        size_t i = 0;
+        while (needle[i] && tolower((unsigned char)hay[i]) == tolower((unsigned char)needle[i])) i++;
+        if (!needle[i]) return true;
+    }
+    return false;
+}
+
+// The graphics driver's own code (the crash was inside it, not in Hylian Melodies): Vulkan drivers on Windows / Linux,
+// Apple's Metal driver
+static bool in_gpu_driver(uint64_t pc) {
+    char m[512];
+    if (!pc || !plat_module_name(pc, m, sizeof m)) return false;
+    static const char *const drivers[] = {"nvoglv", "nvgpucomp", "nvwgf", "libnvidia", "amdvlk", "amdxc", "atiumd",
+                                          "atig6", "igvk", "igc64", "igd", "libvulkan_radeon", "libvulkan_intel",
+                                          "libvulkan_nouveau", "libvulkan_lvp", "libvulkan_virtio", "AGXMetal",
+                                          "MTLCompiler", "libLLVM", "radeonsi"};
+    for (size_t i = 0; i < sizeof drivers / sizeof *drivers; i++)
+        if (contains_nocase(m, drivers[i])) return true;
+    return false;
+}
+
+void rt_crash_explain(char *out, size_t n, const char *log_path) {
+    static const char *const report = "Please report it as a GitHub issue and attach the log file below. "
+                                      "Your progress up to your last save or autosave is safe.";
+    char head[160], what[400];
+    if (rt_romfs_files >= 0 && rt_romfs_files < ROMFS_FILES) {
+        snprintf(head, sizeof head, "Your game files are incomplete");
+        snprintf(what, sizeof what, "Hylian Melodies found %d of the game's %d files, and the game stopped when it needed "
+                 "one that's missing. Rebuild the hylian-melodies-recomp package from your own game files.", rt_romfs_files, (int)ROMFS_FILES);
+    } else if (has("doesn't fit its language")) {
+        snprintf(head, sizeof head, "Your game files' text has been changed");
+        snprintf(what, sizeof what, "The game's text for this language comes from another language (a translation "
+                 "patch), and the game stopped at a question it can't show that way. Rebuild the package from "
+                 "unmodified game files. To play in another language, set language in hylian-melodies.ini.");
+    } else if (has("built for another version")) {
+        snprintf(head, sizeof head, "The game code was built for other game files or another version of Hylian Melodies");
+        snprintf(what, sizeof what, "Rebuild the hylian-melodies-recomp package (makepkg) from your own game files.");
+    } else if (has("unsupported version of the game")) {
+        snprintf(head, sizeof head, "Wrong version of the game");
+        snprintf(what, sizeof what, "Hylian Melodies needs version 1.4.0 of the game. Rebuild the package from a supported dump.");
+    } else if (has("no font for the game's text")) {
+        snprintf(head, sizeof head, "No font for the game's text");
+        snprintf(what, sizeof what, "Reinstall Hylian Melodies; if it keeps happening, report it with the log.");
+    } else if (0) {  // (Hylian Melodies: damaged game files; our installer verifies them)
+        snprintf(head, sizeof head, "Your game files are damaged or changed");
+        snprintf(what, sizeof what, "All of the game's files are there, but some don't match the game, and the game "
+                 "stopped when it needed one of them. Copy your game files again, then rebuild the package.");
+    } else if (has("get_terminate") || has("uncaught C++ exception")) {  // (the game threw: recompiled code can't
+                                                                         // unwind; runtime/hle/warp.c rt_cxa_throw)
+        snprintf(head, sizeof head, "The game ran into an error it couldn't recover from");
+        snprintf(what, sizeof what, "This is a bug in Hylian Melodies, not a problem with your game files or PC. %s", report);
+    } else if (in_gpu_driver(g_pc)) {
+        snprintf(head, sizeof head, "Your graphics driver crashed");
+        snprintf(what, sizeof what, "Update your graphics driver (NVIDIA, AMD or Intel) and try again. If it keeps "
+                 "happening, please report it with the log file below.");
+    } else if (has("VK_") || has("Vulkan")) {
+        snprintf(head, sizeof head, "Graphics driver error");
+        snprintf(what, sizeof what, "Hylian Melodies needs a graphics driver with Vulkan 1.3: install the latest driver for "
+                 "your GPU (NVIDIA, AMD or Intel). If it keeps happening, please report it with the log file below.");
+    } else if (has("out of memory") || has("cannot allocate") || has("alloc failed")) {
+        snprintf(head, sizeof head, "Out of memory");
+        snprintf(what, sizeof what, "Close other programs and try again.");
+    } else if (g_pc && rt_host_fn_name(g_pc, NULL)) {
+        snprintf(head, sizeof head, "The game crashed");
+        snprintf(what, sizeof what, "This is a bug in Hylian Melodies, not a problem with your game files or PC. %s", report);
+    } else {
+        snprintf(head, sizeof head, "Hylian Melodies stopped because of an error");
+        snprintf(what, sizeof what, "%s", report);
+    }
+    fprintf(stderr, "[crash] %s\n", head);
+    if (log_path && *log_path) snprintf(out, n, "%s\n\n%s\n\nLog file:\n%s", head, what, log_path);
+    else snprintf(out, n, "%s\n\n%s", head, what);
+}
