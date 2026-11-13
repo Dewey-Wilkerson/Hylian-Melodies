@@ -139,3 +139,6 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
   data while the GPU still reads this one). Test running: `HM_GPU_OVERLAP=0`; if the owner confirms it fixes the
   colours, make overlap off the default (or fix its uniform snapshot) and re-test. Also open: image drawn shrunk
   into the window's corner at times (dynamic resolution).
+- 2026-11-13 M8 (cont.): underground colours fixed (3D LUT layout: block of at most 16 GOBs); flickering lines and
+  soft text fixed by rendering at native scale (default now) and a sharp-bilinear present. Both confirmed by the
+  owner. GPU overlap was ruled out as a cause (stays on).

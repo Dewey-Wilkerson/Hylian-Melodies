@@ -18,6 +18,7 @@ typedef struct {
     int upscaler;          // UPSCALE_*
     bool upscaler_auto;
     int antialias;         // AA_* (SMAA is not built yet: off)
+    int upscale_filter;    // game image -> window: 0 sharp bilinear (default), 1 linear, 2 nearest
     int screen_filter;     // 0 = off (LAS Recomp's colour filters; unused here)
     bool mirror_mode;      // (unused here)
     bool show_fps;

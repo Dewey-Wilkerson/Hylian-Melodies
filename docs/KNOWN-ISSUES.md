@@ -2,12 +2,8 @@
 
 - Input: a real gamepad works (8BitDo Ultimate 2 Wireless: A, B, X, L, R, ZL, ZR, d-pad and combinations reached
   the game in a 2-minute hands-on run). Not yet confirmed by hand: + / -, the sticks, the keyboard, rumble.
-- At moments (e.g. on the latency-calibration screen) the game image is drawn shrunk into the window's top-left:
-  LAS Recomp's dynamic resolution changes the render scale and the present's crop doesn't follow. Workaround to try:
-  `resolution = 1` in the ini; fix with the M10 scaling work.
-- Pixel-art scaling: LAS Recomp's resolution logic renders at a fraction of the window (dynamic resolution) and
-  scales with bilinear filtering, so the image is slightly soft. Wanted for this game: render at 1280x720 and scale
-  by whole numbers with nearest filtering (M10).
+- The image drawn shrunk into the window's top-left at moments was seen with the old "match the window" render
+  scale; not seen since the native default (2026-11-13). Watch for it.
 - Loading and the splash videos run at 30 fps (the game's own choice while loading; to confirm on hardware).
 - No overlay menu (M10); the software keyboard returns the initial text unchanged.
 - Restored LAS Recomp renderer code still contains comments and dormant paths about Link's Awakening; the hooks are
@@ -15,4 +11,3 @@
 - SMAA anti-aliasing is not built (not useful for pixel art anyway).
 - Audio is measured (docs/audio.md) but not yet checked by ear against the beat; end-to-end latency to the speakers
   is not measured (use the game's calibration).
-- Underground colours were wrong (fixed 2026-11-13: 3D texture layout). Thin flickering lines remain (investigating: render scale 0.9667).

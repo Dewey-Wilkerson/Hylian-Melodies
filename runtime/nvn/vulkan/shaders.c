@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 
 #include "shaders.h"
+#include "../../settings.h"
 #include "../screen_filter.h"
 
 void vk_shaders_init(void) {  // (compilers are per thread: check shaderc works at all)
@@ -245,14 +246,47 @@ static const char *builtin_src(const char *name, int *stage) {
                "}\n";
     }
     if (!strcmp(name, "present.frag")) {
+        // The game image into the window. This game is pixel art at 1280x720: "sharp bilinear" (default) keeps each
+        // game pixel a crisp square at any window size and smooths only the one-pixel edge between neighbours;
+        // upscale_filter = 1 (linear) or 2 (nearest) in the ini choose the plain filters (settings.h).
         *stage = STAGE_FRAGMENT;
+        extern Settings g_settings;
+        if (g_settings.upscale_filter == 1)
+            return "#version 450\n"
+                   "layout(set = 0, binding = 0) uniform sampler2D t;\n"
+                   "layout(push_constant) uniform F { layout(offset = 32) vec4 pf; };\n"  // (the screen filter)
+                   "layout(location = 0) in vec2 uv;\n"
+                   "layout(location = 0) out vec4 o;\n"
+                   "void main() {\n"
+                   "  vec3 c = texture(t, uv).rgb;\n"
+                   SCREEN_FILTER_SRC("vec3")
+                   "  o = vec4(c, 1.0);\n"
+                   "}\n";
+        if (g_settings.upscale_filter == 2)
+            return "#version 450\n"
+                   "layout(set = 0, binding = 0) uniform sampler2D t;\n"
+                   "layout(push_constant) uniform F { layout(offset = 32) vec4 pf; };\n"
+                   "layout(location = 0) in vec2 uv;\n"
+                   "layout(location = 0) out vec4 o;\n"
+                   "void main() {\n"
+                   "  vec2 ts = vec2(textureSize(t, 0));\n"
+                   "  vec3 c = texelFetch(t, ivec2(clamp(floor(uv * ts), vec2(0.0), ts - 1.0)), 0).rgb;\n"
+                   SCREEN_FILTER_SRC("vec3")
+                   "  o = vec4(c, 1.0);\n"
+                   "}\n";
         return "#version 450\n"
                "layout(set = 0, binding = 0) uniform sampler2D t;\n"
-               "layout(push_constant) uniform F { layout(offset = 32) vec4 pf; };\n"  // (the screen filter)
+               "layout(push_constant) uniform F { layout(offset = 32) vec4 pf; };\n"
                "layout(location = 0) in vec2 uv;\n"
                "layout(location = 0) out vec4 o;\n"
                "void main() {\n"
-               "  vec3 c = texture(t, uv).rgb;\n"
+               "  vec2 ts = vec2(textureSize(t, 0));\n"
+               "  vec2 texel = uv * ts;\n"
+               "  vec2 scale = max(1.0 / max(fwidth(texel), vec2(1e-5)), vec2(1.0));\n"  // window pixels per game pixel
+               "  vec2 f = fract(texel) - 0.5;\n"
+               "  vec2 r = 0.5 - 0.5 / scale;\n"
+               "  f = (f - clamp(f, -r, r)) * scale + 0.5;\n"  // flat inside a pixel, a one-pixel ramp at its edge
+               "  vec3 c = texture(t, (floor(texel) + f) / ts).rgb;\n"
                SCREEN_FILTER_SRC("vec3")
                "  o = vec4(c, 1.0);\n"
                "}\n";
