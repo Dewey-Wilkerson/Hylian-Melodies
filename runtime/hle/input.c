@@ -1,10 +1,11 @@
 // Controllers at the nn::hid function level (as LAS Recomp's runtime/hle/input.c does, MIT; rewritten, smaller):
-// player 1 (npad id 0) is a connected full-key controller. M4: no buttons are held; M7 feeds SDL3 gamepad and
-// keyboard state into input_buttons / input_sticks before the game polls at the start of each frame.
+// player 1 (npad id 0) is a connected full-key controller, fed by runtime/ui/input.c (SDL3 gamepad and keyboard):
+// g_input_buttons / g_input_sticks hold the current state whenever the game polls.
 #include <string.h>
 
 #include "../hle.h"
 #include "../kernel.h"
+#include "../rumble.h"
 
 volatile uint64_t g_input_buttons;  // nn::hid NpadButton bits (M7)
 volatile int32_t g_input_sticks[4];  // lx, ly, rx, ry in -32767..32767 (M7)
@@ -45,7 +46,7 @@ HLE_FUNC("_ZN2nn3hid15GetNpadStyleSetERKj", hid_style_set) {
     c->x[0] = id == 0 ? 1 : 0;  // FullKey for player 1, nothing else
 }
 
-// Vibration (rumble arrives in M7 through runtime/rumble.h): devices exist, values are accepted.
+// Vibration: values go to the gamepad through runtime/ui/input.c (SDL rumble).
 HLE_FUNC("_ZN2nn3hid25InitializeVibrationDeviceERKNS0_21VibrationDeviceHandleE", hid_init_vibration) { (void)c; }
 HLE_FUNC("_ZN2nn3hid25GetVibrationDeviceHandlesEPNS0_21VibrationDeviceHandleEiRKjNS_4util10BitFlagSetILi32ENS0_12NpadStyleTagEEE",
          hid_vibration_handles) {
@@ -62,7 +63,8 @@ HLE_FUNC("_ZN2nn3hid22GetVibrationDeviceInfoEPNS0_19VibrationDeviceInfoERKNS0_21
     out[1] = (h >> 16) & 1 ? 2 : 1;  // position: right / left
 }
 HLE_FUNC("_ZN2nn3hid18SendVibrationValueERKNS0_21VibrationDeviceHandleERKNS0_14VibrationValueE", hid_send_vibration) {
-    (void)c;
+    // VibrationValue: low amplitude, low frequency, high amplitude, high frequency (runtime/rumble.h RumbleValue)
+    input_rumble_send(*(const uint32_t *)(uintptr_t)c->x[0], (const RumbleValue *)(uintptr_t)c->x[1]);
 }
 HLE_FUNC("_ZN2nn3hid20IsVibrationPermittedEv", hid_vibration_permitted) { c->x[0] = 1; }
 HLE_FUNC("_ZN2nn3hid16GetKeyboardStateEPNS0_13KeyboardStateE", hid_keyboard_state) {

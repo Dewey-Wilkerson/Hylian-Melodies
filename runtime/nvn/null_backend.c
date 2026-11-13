@@ -37,3 +37,10 @@ bool renderer_upload_nv12(NvnTexture *t, const void *nv12, uint32_t w, uint32_t 
     return true;  // (taken: nothing to draw headless)
 }
 void shader_prep_boot(const char *romfs) { (void)romfs; }  // (the Vulkan build prepares shaders: nvn/shader_prep.c)
+
+// (headless: no window, no gamepad) rumble is accepted and dropped; the windowed build has runtime/ui/input.c
+#include "../rumble.h"
+void input_rumble_send(uint32_t handle, const RumbleValue *value) { (void)handle; (void)value; }
+RumbleValue input_rumble_get(uint32_t handle) { (void)handle; return (RumbleValue){0}; }
+void input_rumble_permit(bool p) { (void)p; }
+bool input_rumble_permitted(void) { return true; }

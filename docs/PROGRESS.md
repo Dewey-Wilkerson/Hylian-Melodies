@@ -13,7 +13,8 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M4 Boot, headless | done: main loop runs headless (menu music, ~30 fps of presents, no crash); every stub documented in docs/services.md |
 | M5 Graphics | done: Vulkan renderer; loading screen, both splash videos and the title screen drawn correctly at 61 fps |
 | M6 Audio | done by measurement: 10 min, 0 gaps, card clock ~25 ppm from system clock, our latency share ~11-32 ms; not yet checked by ear |
-| M7 Input and saves | next |
+| M7 Input and saves | done for scripted input and saves (kill -9 round trip passes); real gamepad/keyboard untested by hand |
+| M8 Playable | next |
 | M5-M8, M10 | not started |
 | M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
 
@@ -112,3 +113,19 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 1. SDL3 gamepad + keyboard into `runtime/hle/input.c` (`g_input_buttons`, `g_input_sticks`), polled at the start of
    each game frame (the game reads `GetNpadState` once per frame); rumble through SDL; rebinding in the ini.
 2. Saves: the journal is in place (`services/fs.c`); test a save/load round trip that survives `kill -9`.
+- 2026-11-13 M7: `runtime/ui/input.c`: SDL3 gamepad (by position, as on the Switch) and keyboard, event-driven
+  state read at the game's poll (no queue), ini rebinding (`key.<button>`, `pad.<button>`), `gamecontrollerdb.txt`,
+  rumble from the game's vibration values, scripted input (`HM_INPUT_SCRIPT`). Scripted presses drive the menus
+  (save slots, mode select, the game's own latency calibration) into play: Cadence in the opening clearing, HUD
+  drawn. Saves: the game wrote and committed its save; killed with SIGKILL mid-play; on restart the title offered
+  Continue with the file's date and it loaded back into play. `tests/test_saves_kill9.py` (game-gated, ~80 s)
+  repeats it and passes. Not verified: a physical gamepad (none connected) and real key presses (the agent can't
+  press keys); rumble.
+
+## Next (M8: playable)
+
+1. The owner plays: keyboard and a gamepad, a full session from the title to the first dungeon and a clean exit
+   (closing the window). The agent can't judge feel; it can run long scripted sessions and watch the logs.
+2. Fix what that finds; log the rest in docs/KNOWN-ISSUES.md.
+3. Known first candidates: the dynamic-resolution glitch (the image drawn shrunk into the window's corner at
+   moments), pixel-perfect scaling, the overlay menu.

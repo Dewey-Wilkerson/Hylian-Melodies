@@ -23,7 +23,7 @@ in a 30 s run, no crash, no unimplemented call.
 | `aoc:u` | `services/misc.c` | to verify in M8: the four DLC must be listed |
 | `fsp-srv` | `services/fs.c` | RomFS laid out from `romfs/`, DLC from `aoc/<title>/`, saves in `profile/` with journaled creates and writes |
 | `time:u` | `services/time.c` | host clock |
-| `hid` | `services/hid_set.c` + `hle/input.c` | player 1 connected, no buttons until M7 |
+| `hid` | `services/hid_set.c` + `hle/input.c` | player 1 connected, fed by `ui/input.c` (SDL3 gamepad + keyboard) |
 | `audout:u` | `services/audio.c` | FMOD's output: opened at 48 kHz stereo; tuning in M6 |
 | `nifm:u` | `services/net.c` | offline: requests never accepted, "no connection" |
 | `bsd:u` | `services/net.c` | sockets fail with "network down" |

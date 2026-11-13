@@ -1,7 +1,10 @@
 # Known issues
 
-- Input is not connected yet (M7): the game runs but can't be controlled; the controller check is answered as
-  "player 1 connected".
+- Gamepad and keyboard input are implemented (docs/controls.md) but were only exercised through scripted input:
+  no physical gamepad was connected during development and real key presses were not tested. Rumble untested.
+- At moments (e.g. on the latency-calibration screen) the game image is drawn shrunk into the window's top-left:
+  LAS Recomp's dynamic resolution changes the render scale and the present's crop doesn't follow. Workaround to try:
+  `resolution = 1` in the ini; fix with the M10 scaling work.
 - Pixel-art scaling: LAS Recomp's resolution logic renders at a fraction of the window (dynamic resolution) and
   scales with bilinear filtering, so the image is slightly soft. Wanted for this game: render at 1280x720 and scale
   by whole numbers with nearest filtering (M10).
