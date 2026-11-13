@@ -234,6 +234,25 @@ def extract(c):
                 shutil.rmtree(dst, ignore_errors=True)
                 os.rename(part, dst)
             _sub_mark(c, 'aoc')
+
+        # e. the game's own menu icon (control archive, a 256x256 JPEG per language) for the desktop entry; the
+        # package converts it (packaging/arch/PKGBUILD). Optional: without it the project's own icon is used.
+        if not _sub_done(c, 'icon'):
+            r = nca_of(patch, 'Control') or nca_of(app, 'Control')
+            ctl = os.path.join(c.work, 'control')
+            shutil.rmtree(ctl, ignore_errors=True)
+            got = False
+            if r:
+                ok, _ = h.run('--romfsdir=' + ctl, os.path.join(nca_dir, r['id'] + '.nca'), what='icon')
+                names = sorted(glob.glob(os.path.join(ctl, 'icon_*.dat')))
+                pick = [n for n in names if n.endswith('icon_AmericanEnglish.dat')] or names
+                if ok and pick:
+                    shutil.copyfile(pick[0], os.path.join(c.dest, 'icon.jpg'))
+                    got = True
+            if not got:
+                c.ev.warning('no_icon')
+            shutil.rmtree(ctl, ignore_errors=True)
+            _sub_mark(c, 'icon')
     c.ev.progress('extract', 100)
     shutil.rmtree(nca_dir, ignore_errors=True)
     shutil.rmtree(meta_dir, ignore_errors=True)

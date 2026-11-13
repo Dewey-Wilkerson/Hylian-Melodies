@@ -27,6 +27,7 @@ MESSAGES = {
     'resume': 'Resuming: {step} already done',
     'compile_failed': 'Compiling the game failed (log: {log})',
     'lift_failed': 'Recompiling {module} failed (log: {log})',
+    'no_icon': 'The game\'s icon was not found; the menu entry uses the project\'s own icon',
     'not_implemented': 'Step {step} is not implemented yet in this version of the installer',
     'done': 'Setup finished: {dest}',
     'failed': 'Setup failed; full log: {log}',

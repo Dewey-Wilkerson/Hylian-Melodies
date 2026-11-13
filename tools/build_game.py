@@ -49,8 +49,11 @@ def main():
     gen, out = os.path.abspath(a.gen), os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
     rt = os.path.join(ROOT, 'runtime')
+    # (-ffile-prefix-map: no build path in the executable: __FILE__ and debug data name repo-relative files)
+    pmap = (f'-ffile-prefix-map={shlex.quote(ROOT + os.sep)}= '
+            f'-ffile-prefix-map={shlex.quote(os.path.abspath(a.gen) + os.sep)}=generated/')
     genflags = (f'-O1 -march={march} -fno-strict-aliasing -fPIC -fvisibility=hidden -Wno-return-type '
-                f'-Wno-unused-label -Wno-unused-variable -I{shlex.quote(rt)}')
+                f'-Wno-unused-label -Wno-unused-variable -I{shlex.quote(rt)} {pmap}')
     srcs = sorted(glob.glob(os.path.join(gen, 'main', '*.c')) + glob.glob(os.path.join(gen, 'sdk', '*.c')))
     if not srcs:
         sys.exit(f'build_game: no generated C under {gen}')
@@ -88,7 +91,7 @@ def main():
         libs = subprocess.run(['pkg-config', '--libs', *pkgs], capture_output=True, text=True).stdout.strip()
         inc = ' '.join(f'-I{shlex.quote(os.path.join(rt, d))}' for d in ('', 'nvn', 'nvn/vulkan', 'nvn/maxwell'))
         version = open(os.path.join(ROOT, 'VERSION')).read().strip()
-        common = (f'-O2 -g -DHM_VERSION=\\"{version}\\" -D_GNU_SOURCE -fno-strict-aliasing -Wall -Wno-unused-function -Wno-format '
+        common = (f'-O2 -g {pmap} -DHM_VERSION=\\"{version}\\" -D_GNU_SOURCE -fno-strict-aliasing -Wall -Wno-unused-function -Wno-format '
                   f'-Wno-unused-variable -Wno-unused-but-set-variable -march={march} {inc} {cflags}')
         lines.insert(2, f'rtflags = -std=gnu11 {common}')
         lines.insert(3, f'rtcxxflags = -std=gnu++17 {common}')

@@ -18,7 +18,7 @@
 # HM_REPO=<path or URL> builds from another checkout of the project than the one this file lives in.
 
 pkgname=hylian-melodies-recomp
-pkgver=0.1.0
+pkgver=0.1.0.r17.g124d768
 pkgrel=1
 pkgdesc='Native Linux build of your own Cadence of Hyrule (static recompilation; personal use only)'
 arch=(x86_64)
@@ -103,7 +103,12 @@ PY
         --dest "$srcdir/stage/hylian-melodies" --temp "$srcdir/install-temp" --root "$srcdir/hylian-melodies" \
         --hactool "$srcdir/toolchain/hactool/hactool" | python "$srcdir/events.py" "$srcdir/hylian-melodies"
 
-    magick -background none packaging/hylian-melodies.svg -resize 256x256 "$srcdir/hylian-melodies.png"
+    # the menu icon: the game's own (from your cartridge's control data, extracted by the setup), else the project's
+    if [ -f "$srcdir/stage/hylian-melodies/icon.jpg" ]; then
+        magick "$srcdir/stage/hylian-melodies/icon.jpg" -resize 256x256 "$srcdir/hylian-melodies.png"
+    else
+        magick -background none packaging/hylian-melodies.svg -resize 256x256 "$srcdir/hylian-melodies.png"
+    fi
 }
 
 package() {
@@ -116,7 +121,7 @@ package() {
     # per-player things never ship: the setup's record, saves, settings, logs, caches
     rm -f "$game/hm-install.json"
     rm -rf "$game/profile" "$game/logs" "$game/cache" "$game/build"
-    rm -f "$game/hylian-melodies.ini"
+    rm -f "$game/hylian-melodies.ini" "$game/icon.jpg"  # (the icon went to the desktop entry, build())
 
     # the executable without debug info (a copy first: the staged file is a hard link). Crash reports name host
     # functions from its dynamic symbols, which stay.
