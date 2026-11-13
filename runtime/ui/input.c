@@ -114,7 +114,16 @@ static SDL_Gamepad *pad;
 static SDL_JoystickID pad_id;
 
 static void publish(void) {
-    g_input_buttons = atomic_load(&key_bits) | atomic_load(&pad_bits) | atomic_load(&script_bits);
+    uint64_t b = atomic_load(&key_bits) | atomic_load(&pad_bits) | atomic_load(&script_bits);
+    static int log = -1;
+    if (log < 0) log = getenv("HM_LOG_INPUT") != NULL;
+    if (log && b != g_input_buttons) {
+        char names[160] = "";
+        for (int i = 0; i < NB; i++)
+            if (b & (1ull << i)) { strcat(names, " "); strcat(names, bnames[i]); }
+        LOG("[input] held:%s%s\n", names[0] ? names : " (none)", atomic_load(&pad_bits) ? " (gamepad)" : "");
+    }
+    g_input_buttons = b;
     for (int i = 0; i < 4; i++) g_input_sticks[i] = atomic_load(&pad_axes[i]);
 }
 

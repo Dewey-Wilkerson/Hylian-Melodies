@@ -13,7 +13,7 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M4 Boot, headless | done: main loop runs headless (menu music, ~30 fps of presents, no crash); every stub documented in docs/services.md |
 | M5 Graphics | done: Vulkan renderer; loading screen, both splash videos and the title screen drawn correctly at 61 fps |
 | M6 Audio | done by measurement: 10 min, 0 gaps, card clock ~25 ppm from system clock, our latency share ~11-32 ms; not yet checked by ear |
-| M7 Input and saves | done for scripted input and saves (kill -9 round trip passes); real gamepad/keyboard untested by hand |
+| M7 Input and saves | done: real gamepad verified by the owner, scripted input, saves survive kill -9; keyboard and rumble not yet tried by hand |
 | M8 Playable | next |
 | M5-M8, M10 | not started |
 | M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
@@ -129,3 +129,5 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 2. Fix what that finds; log the rest in docs/KNOWN-ISSUES.md.
 3. Known first candidates: the dynamic-resolution glitch (the image drawn shrunk into the window's corner at
    moments), pixel-perfect scaling, the overlay menu.
+- 2026-11-13 M7 (cont.): the owner connected an 8BitDo Ultimate 2 Wireless and played two minutes: recognised by
+  SDL, every button tried reached the game (`HM_LOG_INPUT=1` logs held buttons), 12 saves committed in play.

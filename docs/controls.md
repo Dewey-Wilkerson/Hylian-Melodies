@@ -44,5 +44,7 @@ Rumble from the game goes to the gamepad (SDL rumble).
 
 ## Test runs
 
+`HM_LOG_INPUT=1` logs every change of the held buttons (and whether a gamepad is the source).
+
 `HM_INPUT_SCRIPT=<frame>:<button>[+<button>...][/<frames>],...` presses buttons at presented frames (held for 6
 frames unless `/<frames>` says otherwise), e.g. `700:a,900:a+up/30`.

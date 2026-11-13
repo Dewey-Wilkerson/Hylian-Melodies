@@ -1,7 +1,7 @@
 # Known issues
 
-- Gamepad and keyboard input are implemented (docs/controls.md) but were only exercised through scripted input:
-  no physical gamepad was connected during development and real key presses were not tested. Rumble untested.
+- Input: a real gamepad works (8BitDo Ultimate 2 Wireless: A, B, X, L, R, ZL, ZR, d-pad and combinations reached
+  the game in a 2-minute hands-on run). Not yet confirmed by hand: + / -, the sticks, the keyboard, rumble.
 - At moments (e.g. on the latency-calibration screen) the game image is drawn shrunk into the window's top-left:
   LAS Recomp's dynamic resolution changes the render scale and the present's crop doesn't follow. Workaround to try:
   `resolution = 1` in the ini; fix with the M10 scaling work.
