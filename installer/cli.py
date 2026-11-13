@@ -1,0 +1,68 @@
+"""python -m installer --base FILE [--update FILE] --keys FILE --dest DIR [--temp DIR] [--root DIR]
+                      [--hactool EXE] [--firmware DIR] [--until STEP]
+
+Prints one JSON event per line on stdout (installer/events.py); the full log goes to <temp>/run-*/logs/install.log.
+Exit status 0 only when the final result is ok."""
+
+import argparse
+import os
+import time
+import traceback
+
+from . import steps as S
+from .events import Events, SetupError
+from .state import State
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog='python -m installer', description='Hylian Melodies setup')
+    ap.add_argument('--base', required=True, help='base game dump (.xci or .nsp)')
+    ap.add_argument('--update', help='update .nsp (not needed when the cartridge carries the update)')
+    ap.add_argument('--keys', required=True, help='prod.keys of your console')
+    ap.add_argument('--dest', required=True, help='install folder (the game is staged here)')
+    ap.add_argument('--temp', help='work and log folder (default: <dest>/../install-temp)')
+    ap.add_argument('--root', default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    help='repository root')
+    ap.add_argument('--hactool', help='hactool built by tools/build_hactool.py (default: <root>/toolchain/hactool/hactool)')
+    ap.add_argument('--firmware', help='firmware NCA folder (unused by this game so far)')
+    ap.add_argument('--lang', help='unused: the game chooses its language from the system setting')
+    ap.add_argument('--until', choices=S.ORDER, help='stop after this step (development)')
+    a = ap.parse_args(argv)
+    a.dest = os.path.abspath(a.dest)
+    a.temp = os.path.abspath(a.temp or os.path.join(os.path.dirname(a.dest), 'install-temp'))
+    a.hactool = a.hactool or os.path.join(a.root, 'toolchain', 'hactool', 'hactool')
+    run = os.path.join(a.temp, time.strftime('run-%Y%m%d-%H%M%S'))
+    os.makedirs(os.path.join(run, 'logs'), exist_ok=True)
+    a.log_path = os.path.join(run, 'logs', 'install.log')
+    ev = Events(a.log_path)
+    os.makedirs(a.dest, exist_ok=True)
+    st = State(a.dest)
+    c = S.Ctx(a, ev, st, ev.write_log)
+    todo = S.ORDER[:S.ORDER.index(a.until) + 1] if a.until else S.ORDER
+    ev.start(todo)
+    ev.write_log(f'dest={a.dest} temp={a.temp} hactool={a.hactool}')
+    try:
+        if not os.path.isfile(a.hactool):
+            raise SetupError('missing_input', path=a.hactool)
+        for name in todo:
+            ev.step(name)
+            if name != 'check' and st.done(name):
+                ev.info('resume', step=name)
+                ev.progress(name, 100)
+                continue
+            info = S.STEPS[name](c) or {}
+            st.mark(name, **info)
+    except SetupError as e:
+        ev.error(e.msg, **e.args_)
+        ev.end('error', log=a.log_path)
+        return 1
+    except Exception as e:  # noqa: BLE001
+        ev.write_log(traceback.format_exc())
+        ev.error('failed', log=a.log_path, detail=f'{type(e).__name__}: {e}')
+        ev.end('error', log=a.log_path)
+        return 1
+    finally:
+        import shutil
+        shutil.rmtree(os.path.join(c.work, 'hactool-home'), ignore_errors=True)
+    ev.end('ok', dest=a.dest)
+    return 0
