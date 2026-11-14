@@ -18,3 +18,7 @@
 - Packages built before r25 (`0.1.0.r25.g089a5d2`) may hold an older executable than their version says (the setup
   resumed "compile already done"; fixed). Rebuild with `makepkg -f`.
 - The menu's scaling-filter change takes effect at the next start (the filter is built into the present shader).
+- The frame pacer (`runtime/nvn/pace.c`) can hold the game's 30 fps mode with plenty of headroom: after a load hitch,
+  "busy" reads about 16.4 ms at 60 (it seems to include the wait for the display cadence), so 40+ of 60 frames count
+  as over 16.2 ms although the game's work is ~1 ms; it returns to 60 after a while, then holds 30 again ("backing
+  off"). Seen in scripted runs 2026-11-14 on both v2 and v3 builds; not yet checked whether a player sees it.

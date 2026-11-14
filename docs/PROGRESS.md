@@ -262,3 +262,9 @@ Owner's decisions from the 2026-11-14 planning talk (information gathering only;
   history: `~/.local/share/hylian-melodies/history-backup/hylian-melodies-pre-rewrite-0b2ec32.bundle`. Tag
   `pin-m9-package-ok` was then re-pointed to the rewritten twin `2d68a8a` and renamed `base-functionality` (owner's
   OK; same message). Old objects stay in `.git` until reflog expire + gc (owner's call).
+- 2026-11-14 v2 vs v3 measured (owner's OK): both built from the same generated C (34-35 s each), four 90 s scripted
+  runs alternating v2/v3 (title menus into play, then steps left/right), fresh profile in a separate game folder,
+  `HM_LOG_PACE=1`. The game's work per frame (pacer's cost): median 1.06 / 1.09 ms (v2), 1.10 / 1.12 ms (v3); the
+  pacer's own "a frame at 60" averages 1.0-1.4 ms either way. No measurable difference; run-to-run noise is larger.
+  Found on the way (both levels alike): the pacer held the game's 30 fps mode in all four runs, in two of them for
+  most of the run, although frames take ~1 ms: docs/KNOWN-ISSUES.md.
