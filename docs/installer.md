@@ -13,7 +13,7 @@ Two layers:
 Hard rules for both: never upload anything; no telemetry; never run `sudo`/`pkexec` from a script (the UI prints the
 package manager command for the player to run); the keys and the dump are read in place and never copied, printed
 or logged; the only network access is fetching this project's source and its pinned build inputs (Dear ImGui,
-hactool source), each checked against a SHA-256 or a commit ID.
+the VMA header, hactool source), each checked against a SHA-256 or a commit ID.
 
 ## Part 1: player-facing installer (design, 2026-11-14)
 
@@ -71,10 +71,10 @@ curl -fsSL <url>/install.sh | sh               bootstrap (POSIX sh, ~200 lines)
      uploaded. Source and tag shown (and "unverified" for `--source`).
   2. *Existing install* (only when the manifest lists one, section 6).
   3. *Dependencies*: build tools and libraries found or missing, distro detected from `/etc/os-release` (`ID`,
-     `ID_LIKE`); for missing ones the exact command for that distro (table in `installer/deps.py`: Arch, Debian/
-     Ubuntu, Fedora, openSUSE; else the generic names). The player runs it in another terminal and presses "check
-     again". Python modules must be stdlib only: `recomp/nso.py` imports `lz4.block` today, to be replaced by our own
-     LZ4 block decoder (small, written for this project) so `python-lz4` is no longer needed.
+     `ID_LIKE`); for missing ones the exact command for that distro (`installer/deps.py`, from the table in
+     section 9; a release without SDL3 is told so; unknown distros get the generic names). The player runs it in another terminal and presses "check
+     again". Python is stdlib only: NSO segments are unpacked by our own LZ4 block decoder
+     (`recomp/lz4block.py`), so `python-lz4` is not needed.
   4. *Inputs*: base XCI (later NSP update/DLC), `prod.keys` through the file picker (section 3). Then at once
      `python3 -m installer --until check` against a scratch destination, so a wrong file, a missing key revision or
      too little disk is reported before anything long runs.
@@ -114,12 +114,24 @@ share it**.
 | **AppImage** (portable) | `mksquashfs`; zig (fetched, pinned) | inside the image | XDG data folder, like the package | replace the file; uninstall removes it and its menu entry |
 | **Flatpak** (last) | `flatpak-builder` | inside the app, built locally, never exported to a remote | the app's data folder | `flatpak uninstall` |
 
-- **System package.** Arch: the existing PKGBUILD and `makepkg` (the UI symlinks the inputs next to it, as
-  docs/packaging.md describes). Debian family: a `.deb` from the same staged tree with `dpkg-deb --build` (control
-  file and maintainer scripts generated from the Arch `.install` hooks' logic). Fedora/openSUSE: a `.rpm` with
-  `rpmbuild -bb` from a generated spec with the staged tree as its source. Same package name
-  (`hylian-melodies-recomp`), same paths, same launcher. The UI prints e.g. `sudo pacman -U <file>` /
-  `sudo apt install ./<file>` / `sudo dnf install <file>`.
+- **System package** (the first output built; section 9 has the packages each distro needs). One path for all
+  three formats: the UI runs the setup engine itself into a staging folder (dump and keys read in place), then a
+  packer wraps that tree. The bootstrap's source is a tarball without `.git`, so the developer PKGBUILD
+  (`git+file://` source, `git describe` version, its own setup run in `$srcdir`) is not what the UI calls; it stays
+  for building from a checkout.
+  - Arch: a generated minimal PKGBUILD whose `package()` hard-links the staged tree (`makepkg` gives the pacman
+    metadata and fakeroot); same `.install` hooks, `PKGEXT=.pkg.tar`.
+  - Debian family: `dpkg-deb --root-owner-group -Znone --build` (no fakeroot, no `dpkg-dev`; the data is already
+    compressed); maintainer scripts generated from the `.install` hooks' logic.
+  - Fedora/openSUSE: `rpmbuild -bb` from a generated spec, staged tree as its source, uncompressed payload
+    (`%define _binary_payload w0.ufdio`), `%defattr(-,root,root)`.
+  - Run-time dependencies are never a hand-written list of library packages (their names carry soname versions
+    that change per release, e.g. the FFmpeg ones): they are derived from the built executable. pacman: the fixed
+    names of section 9; deb: each `DT_NEEDED` library resolved with `ldd`, then `dpkg-query -S` names its package;
+    rpm: rpmbuild's own ELF dependency generator. A Vulkan driver is a recommendation, not a dependency, outside
+    Arch (no common virtual name).
+  - Same package name (`hylian-melodies-recomp`), paths, launcher and version (`VERSION`, plus the tag) everywhere.
+    The UI prints e.g. `sudo pacman -U <file>` / `sudo apt install ./<file>` / `sudo dnf install <file>`.
 - **Loose folder.** The install folder itself, with the executable at its top, plus (optional) a menu entry and icon
   in `~/.local/share/applications` and `~/.local/share/icons`. The launcher logic (player folder = install folder)
   becomes a mode of `hylian-melodies.sh` instead of a second script.
@@ -192,16 +204,97 @@ Files the manifest does not list are never deleted.
 
 ### 8. Order of work
 
-1. Options registry + env-var audit (publication step 6); `launch.env` in the launcher.
-2. Own LZ4 block decoder (drop `python-lz4`); `installer/deps.py` table.
-3. UI model, `--answers`, plain-prompt fallback; then the curses screens and the file picker.
-4. Loose-folder output; manifest; update/uninstall.
+Owner, 2026-11-14: the first version gets the system packages right; the other outputs follow.
+
+1. Dependencies: done 2026-11-14 (`installer/deps.py`, `python3 -m installer.deps`; own LZ4 decoder, VMA pinned,
+   container check). Left: movies on Fedora/openSUSE on a real system.
+2. Packers on the staged tree: pacman, `.deb`, `.rpm` (section 4), each built into a temporary `HOME` and its file
+   list compared with the others.
+3. UI model, `--answers`, plain prompts (enough to drive 1 and 2); manifest; update/uninstall for packages.
+4. Options registry + env-var audit (publication step 6); `launch.env` in the launcher.
 5. Bootstrap and `tools/release.py`; test against the private repository (push only with the owner's OK then).
-6. `.deb` and `.rpm` outputs; then AppImage; Flatpak last.
+6. Curses screens and the file picker; loose folder; then AppImage; Flatpak last.
+
+### 9. System packages (checked 2026-11-14)
+
+What the build and the game need, found by reading `tools/build_game.py`, `tools/build_hactool.py`, the fetch
+tools, the PKGBUILD, the runtime's includes and the executable's `DT_NEEDED`. Names were checked against the
+distros' package databases, then **tried in containers** (podman, 2026-11-14): the install command below on a bare
+image, then hactool and the game built from the same generated C, the unit tests, and each `DT_NEEDED` library
+traced back to its package. All five build, link with nothing missing and pass the tests.
+
+**Supported for the system package** (the release must ship SDL3 and Python >= 3.11):
+
+| Distro | From | Built with (container) |
+|---|---|---|
+| Arch and derivatives | rolling | SDL3 3.4.20, FFmpeg 9.0, clang 23 (the dev machine) |
+| Debian | 13 "trixie" | SDL3 3.2.10, FFmpeg 7.1, clang 19, shaderc 2025.2, Python 3.13 |
+| Ubuntu | 26.04 | SDL3 3.4.2, FFmpeg 8.0, clang 21, Python 3.14 |
+| Fedora | 43 (tried: 43, 45) | SDL3 3.4.20, FFmpeg 7.1 / 9.0, clang 21 / 23, Python 3.14 / 3.15 |
+| openSUSE | Tumbleweed | SDL3 3.4.20, FFmpeg 9.0, clang 23, Python 3.13 |
+
+Debian 12 and Ubuntu 24.04 have no SDL3 package (also not in backports): the dependency screen says so and offers
+no command; they wait for the outputs that bundle SDL3 (AppImage).
+
+**The check asks for capabilities, never for package names**, so a wrong or renamed package cannot produce a false
+"missing": commands with `shutil.which`; libraries with `pkg-config --exists` per module; Python modules by import.
+The names below are used only to print the one command for the player.
+
+| Need (how it is checked) | Arch | Debian / Ubuntu | Fedora | openSUSE |
+|---|---|---|---|---|
+| `git` (pinned fetch of hactool, Dear ImGui, VMA) | `git` | `git ca-certificates` | `git` | `git` |
+| `python3` >= 3.11, `import curses` | `python` | `python3` | `python3` | `python3 python3-curses` |
+| `clang`, `clang++` | `clang` | `clang` | `clang` | `clang` |
+| `ld.lld` | `lld` | `lld` | `lld` | `lld` |
+| `ninja` | `ninja` | `ninja-build` | `ninja-build` | `ninja` |
+| `make`, `cc` (hactool) | `make gcc` | `make gcc` | `make gcc` | `make gcc` |
+| C++ standard headers (a one-line compile) | `gcc` | `g++` | `gcc-c++` | `gcc-c++` |
+| `pkg-config` | `pkgconf` | `pkgconf` | `pkgconf-pkg-config` | `pkgconf-pkg-config` |
+| `strip` | `binutils` | `binutils` | `binutils` | `binutils` |
+| pc: `sdl3` | `sdl3` | `libsdl3-dev` | `SDL3-devel` | `SDL3-devel` |
+| pc: `libavformat libavcodec libavutil libswscale` | `ffmpeg` | `libavformat-dev libavcodec-dev libavutil-dev libswscale-dev` | `libavformat-free-devel libavcodec-free-devel libavutil-free-devel libswscale-free-devel` | `'pkgconfig(libavformat)' 'pkgconfig(libavcodec)' 'pkgconfig(libavutil)' 'pkgconfig(libswscale)'` |
+| pc: `vulkan` (headers 1.3+, loader) | `vulkan-headers vulkan-icd-loader` | `libvulkan-dev` | `vulkan-headers vulkan-loader-devel` | `vulkan-devel` |
+| pc: `shaderc` | `shaderc` | `libshaderc-dev` | `libshaderc-devel` | `shaderc-devel` |
+| icon: `magick` | `imagemagick` | `imagemagick` | `ImageMagick` | `ImageMagick` |
+| packer | `base-devel` (`makepkg`, fakeroot) | `dpkg-deb` (always there) | `rpm-build` | `rpm-build` |
+
+Notes from the container runs:
+
+- Debian/Ubuntu were installed with `--no-install-recommends`, so the list is complete without recommendations;
+  `ca-certificates` is needed for the HTTPS fetches on a bare system.
+- openSUSE's FFmpeg development packages carry the major version in their name (`ffmpeg-9-libavcodec-devel`), so
+  the command uses the `pkgconfig(...)` capabilities, which zypper resolves; `python3-curses` resolves to
+  `python313-curses` the same way. `rpm-build` installs on a bare image; it hit a solver conflict once when
+  installed last, after everything else (not looked into: recheck when the `.rpm` packer is written).
+- The run-time packages `ldd` + `dpkg-query -S` / `rpm -qf` find from the built executable: Debian 13 `libsdl3-0
+  libavformat61 libavcodec61 libavutil59 libswscale8 libvulkan1 libshaderc1`; Ubuntu 26.04 the same with
+  `libavformat62 libavcodec62 libavutil60 libswscale9`; Fedora `SDL3 libav{format,codec,util}-free libswscale-free
+  vulkan-loader libshaderc`; openSUSE `libSDL3-0 libavformat63 libavcodec63 libavutil61 libswscale10 libvulkan1
+  libshaderc_shared1`. The versioned names are why the list is derived, not written down (section 4).
+- Debian 13's SDL 3.2 has no `SDL_SavePNG`: the screenshot helper (debug captures only) writes a `.bmp` there.
+- `curl` is not on a bare Debian/Ubuntu; whoever ran `curl | sh` has it.
+
+At run time: the libraries above (derived, section 4), a Vulkan 1.3 driver, and optionally `fontconfig` (`fc-match`:
+the menu's system font) and `xdg-user-dirs`. For the UI: `curl` or `wget`, `tar`, `sha256sum`; `gdbus` for the
+portal file picker (`glib2` / `libglib2.0-bin` / `glib2`), optional because of the fallbacks.
+
+**Open points found by this pass** (docs/OPEN-QUESTIONS.md 7-9):
+
+1. *VMA header: settled.* The `vulkan-memory-allocator` package is AUR only on Arch (it was installed on the dev
+   machine, which hid this) and missing on Debian 12, and the packaged versions run from 3.2 to 3.5. The header is
+   now fetched at a pinned commit (v3.5.0, MIT) by `tools/fetch_vma.py`, like Dear ImGui: no package on any distro.
+2. *Movies on Fedora and openSUSE.* The game's movies are H.264 + AAC (docs/RECON.md). Debian, Ubuntu and Arch
+   have FFmpeg's own `h264` decoder. Fedora's and openSUSE's FFmpeg decode H.264 through `libopenh264` (AAC, VP9 and
+   Vorbis are built in); on Fedora 45 the real `openh264` library comes along by default from the Cisco repository.
+   So a decoder is there, but whether it plays these files is untested: it needs a run on such a system.
+3. *Compiled, not run.* The containers have no GPU or display: the builds link and the unit tests pass, the game was
+   not started in them.
+4. `tools/build_game.py` ignored a failing `pkg-config` (missing library -> a confusing compile error much later):
+   fixed, it stops and names the modules.
 
 ## Part 2: the setup engine `python3 -m installer`
 
-Turns the user's own dump and keys into an install folder. Stdlib-only Python (except `python-lz4`, to be replaced);
+Turns the user's own dump and keys into an install folder. Stdlib-only Python;
 one JSON event per line on stdout; full log in `<temp>/run-<time>/logs/install.log`; exit status 0 only when the
 result is `ok`.
 

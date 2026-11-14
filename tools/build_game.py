@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Write a Ninja file that compiles the generated C (and the runtime) and run Ninja.
 
-  python3 tools/build_game.py --gen DIR --out DIR [--target linkcheck|game] [--march v2|v3|native] [--imgui DIR] [-j N]
+  python3 tools/build_game.py --gen DIR --out DIR [--target linkcheck|game] [--march v2|v3|native] [--imgui DIR]
+                              [--vma DIR] [-j N]
 
 linkcheck: every generated object + tests/c/linkcheck_stub.c linked as a shared object with --no-undefined
 (M3 acceptance: zero unresolved symbols). game: the runtime with the Vulkan backend and the SDL3 window + generated
 code -> hylian-melodies. headless: the null backend, no window -> hylian-melodies-headless (M4 boot tests).
 The game target also compiles Dear ImGui (the overlay menu) from --imgui DIR, default toolchain/src/imgui, fetched
-there by tools/fetch_imgui.py when missing (offline once its stamp matches).
+there by tools/fetch_imgui.py when missing (offline once its stamp matches), and takes the Vulkan Memory Allocator
+header from --vma DIR, default toolchain/src/vma, fetched the same way by tools/fetch_vma.py.
 The -march level defaults to x86-64-v2 (generic: any x86-64 CPU from about 2009 on), so the result runs on other
 machines too. --march v3 (AVX2/FMA/BMI2, 2013+) or native is the opt-in "optimize for this computer's CPU"; v3 is
 refused when this CPU lacks it, since the game could not start here.
@@ -50,6 +52,7 @@ def main():
                     help='v2 (default, runs on any x86-64 CPU since ~2009), v3 or native (this computer only)')
     ap.add_argument('--cc', default=os.environ.get('HM_CC', 'clang'))
     ap.add_argument('--imgui', default=os.path.join(ROOT, 'toolchain', 'src', 'imgui'))
+    ap.add_argument('--vma', default=os.path.join(ROOT, 'toolchain', 'src', 'vma'))
     ap.add_argument('-j', type=int, default=os.cpu_count() or 4)
     a = ap.parse_args()
     for t in (a.cc, 'ninja', 'ld.lld'):
@@ -99,6 +102,11 @@ def main():
         # no window (hylian-melodies-headless, the M4 boot tests). Both share the generated objects.
         headless = a.target == 'headless'
         pkgs = ['sdl3', 'libavformat', 'libavcodec', 'libavutil', 'libswscale'] + ([] if headless else ['vulkan', 'shaderc'])
+        if not shutil.which('pkg-config'):
+            sys.exit('build_game: pkg-config not found')
+        missing = [p for p in pkgs if subprocess.run(['pkg-config', '--exists', p]).returncode]
+        if missing:
+            sys.exit('build_game: development files not found (pkg-config): ' + ' '.join(missing))
         cflags = subprocess.run(['pkg-config', '--cflags', *pkgs], capture_output=True, text=True).stdout.strip()
         libs = subprocess.run(['pkg-config', '--libs', *pkgs], capture_output=True, text=True).stdout.strip()
         inc = ' '.join(f'-I{shlex.quote(os.path.join(rt, d))}' for d in ('', 'nvn', 'nvn/vulkan', 'nvn/maxwell'))
@@ -135,6 +143,13 @@ def main():
             if r.returncode:
                 sys.exit('build_game: fetching Dear ImGui failed')
             iinc = f'-I{shlex.quote(imgui)} -I{shlex.quote(os.path.join(imgui, "backends"))}'
+            # the Vulkan Memory Allocator header (runtime/nvn/vulkan/vk.h, vma.cpp), pinned the same way
+            vma = os.path.abspath(a.vma)
+            if subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'fetch_vma.py'), '--src', vma]).returncode:
+                sys.exit('build_game: fetching the Vulkan Memory Allocator header failed')
+            vinc = f' -I{shlex.quote(os.path.join(vma, "include"))} -ffile-prefix-map={shlex.quote(vma + os.sep)}=vma/'
+            lines[2] += vinc
+            lines[3] += vinc
             # (rtcxxflags: menu.cpp and the glue include imgui.h; no build path from ImGui's assertions either)
             lines[3] += f' {iinc} -ffile-prefix-map={shlex.quote(imgui + os.sep)}=imgui/'
             lines += ['rule imgui', f'  command = {a.cc}++ $rtcxxflags -w -MD -MF $out.d -c $in -o $out',

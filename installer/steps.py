@@ -30,7 +30,7 @@ class Ctx:
 # their hash changed since, e.g. makepkg -f after a code change resumes the extraction but compiles again.
 SOURCES = {
     'lift': ('recomp',),
-    'compile': ('recomp', 'runtime', 'tools/build_game.py', 'tools/fetch_imgui.py', 'tools/imgui', 'VERSION'),
+    'compile': ('recomp', 'runtime', 'tools/build_game.py', 'tools/fetch_imgui.py', 'tools/imgui', 'tools/fetch_vma.py', 'VERSION'),
 }
 
 
@@ -327,6 +327,7 @@ def compile_game(c):
         lift(c)
     cmd = [sys.executable, os.path.join(c.a.root, 'tools', 'build_game.py'), '--gen', gen_dir, '--out', build_dir,
            '--target', 'game', '--imgui', getattr(c.a, 'imgui', None) or os.path.join(c.a.root, 'toolchain', 'src', 'imgui'),
+           '--vma', getattr(c.a, 'vma', None) or os.path.join(c.a.root, 'toolchain', 'src', 'vma'),
            '--march', getattr(c.a, 'march', None) or 'v2']
     c.log('compile: ' + ' '.join(cmd))
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,

@@ -154,8 +154,8 @@ static void create_instance(void) {
     bool validate = strict || getenv("HM_VK_VALIDATION") != NULL;
     if (validate) ext[n_ext++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     const char *layers[] = {"VK_LAYER_KHRONOS_validation"};
-    VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "LARecomp",
-                             .pEngineName = "LARecomp", .apiVersion = VK_API_VERSION_1_3};
+    VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "Hylian Melodies",
+                             .pEngineName = "Hylian Melodies", .apiVersion = VK_API_VERSION_1_3};
     VkInstanceCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app,
                                .enabledExtensionCount = n_ext, .ppEnabledExtensionNames = ext,
                                .enabledLayerCount = validate ? 1 : 0, .ppEnabledLayerNames = layers};
@@ -908,8 +908,15 @@ void vk_frame_end(const char *shot_path) {
 
 void vk_save_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h) {
     SDL_Surface *s = SDL_CreateSurfaceFrom((int)w, (int)h, SDL_PIXELFORMAT_ABGR8888, (void *)rgba, (int)w * 4);
+#if SDL_VERSION_ATLEAST(3, 4, 0)
     if (!s || !SDL_SavePNG(s, path)) LOG("[vk] saving %s failed: %s\n", path, SDL_GetError());
     else LOG("[vk] saved %s (%ux%u)\n", path, w, h);
+#else  // SDL 3.2 (Debian 13) has no PNG writer: the same picture as <path>.bmp
+    char bmp[4096];
+    snprintf(bmp, sizeof bmp, "%s.bmp", path);
+    if (!s || !SDL_SaveBMP(s, bmp)) LOG("[vk] saving %s failed: %s\n", bmp, SDL_GetError());
+    else LOG("[vk] saved %s (%ux%u; PNG needs SDL 3.4)\n", bmp, w, h);
+#endif
     SDL_DestroySurface(s);
 }
 

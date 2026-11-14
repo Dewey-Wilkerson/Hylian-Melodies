@@ -1,5 +1,5 @@
 """python -m installer --base FILE [--update FILE] --keys FILE --dest DIR [--temp DIR] [--root DIR]
-                      [--hactool EXE] [--imgui DIR] [--march v2|v3|native] [--until STEP]
+                      [--hactool EXE] [--imgui DIR] [--vma DIR] [--march v2|v3|native] [--until STEP]
 
 Prints one JSON event per line on stdout (installer/events.py); the full log goes to <temp>/run-*/logs/install.log.
 Exit status 0 only when the final result is ok."""
@@ -25,6 +25,7 @@ def main(argv=None):
                     help='repository root')
     ap.add_argument('--hactool', help='hactool built by tools/build_hactool.py (default: <root>/toolchain/hactool/hactool)')
     ap.add_argument('--imgui', help='Dear ImGui source fetched by tools/fetch_imgui.py (default: <root>/toolchain/src/imgui)')
+    ap.add_argument('--vma', help='Vulkan Memory Allocator source fetched by tools/fetch_vma.py (default: <root>/toolchain/src/vma)')
     ap.add_argument('--march', choices=('v2', 'v3', 'native'), default='v2',
                     help='CPU level of the compiled game: v2 runs on any x86-64 CPU since ~2009 (default); '
                          'v3 or native optimize for this computer and may not start on others')
@@ -33,6 +34,7 @@ def main(argv=None):
     a.dest = os.path.abspath(a.dest)
     a.temp = os.path.abspath(a.temp or os.path.join(os.path.dirname(a.dest), 'install-temp'))
     a.imgui = os.path.abspath(a.imgui) if a.imgui else os.path.join(a.root, 'toolchain', 'src', 'imgui')
+    a.vma = os.path.abspath(a.vma) if a.vma else os.path.join(a.root, 'toolchain', 'src', 'vma')
     a.hactool = a.hactool or os.path.join(a.root, 'toolchain', 'hactool', 'hactool')
     run = os.path.join(a.temp, time.strftime('run-%Y%m%d-%H%M%S'))
     os.makedirs(os.path.join(run, 'logs'), exist_ok=True)

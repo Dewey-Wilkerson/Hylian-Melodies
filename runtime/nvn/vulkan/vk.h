@@ -12,11 +12,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <vulkan/vulkan.h>
-#if __has_include(<vma/vk_mem_alloc.h>)
-#include <vma/vk_mem_alloc.h>
-#else
-#include <vk_mem_alloc.h>  // (Debian / Ubuntu libvulkan-memory-allocator-dev)
-#endif
+#include "vk_mem_alloc.h"  // (the pinned header: tools/fetch_vma.py, on the include path from tools/build_game.py)
 
 #include "../nvn.h"
 #include "../maxwell/shader.h"

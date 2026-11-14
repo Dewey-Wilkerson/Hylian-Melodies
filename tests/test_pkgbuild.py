@@ -20,7 +20,7 @@ class Pkgbuild(unittest.TestCase):
         for want in ('pkgname=hylian-melodies-recomp', 'install=hylian-melodies-recomp.install', "PKGEXT='.pkg.tar'",
                      'options=(!strip !debug !lto !buildflags)', 'cp -al', 'grep -rlIF', 'chmod -R u+w,go+rX,go-w',
                      '/usr/bin/hylian-melodies', 'desktop-copy', 'unset CFLAGS CXXFLAGS CPPFLAGS LDFLAGS',
-                     'PERSONAL USE ONLY', '/opt/hylian-melodies', 'tools/fetch_imgui.py --src', '--imgui "$srcdir/toolchain/src/imgui"', '--march "$_march"', '_march=${HM_MARCH:-v2}'):
+                     'PERSONAL USE ONLY', '/opt/hylian-melodies', 'tools/fetch_imgui.py --src', 'tools/fetch_vma.py --src', '--vma "$srcdir/toolchain/src/vma"', '--imgui "$srcdir/toolchain/src/imgui"', '--march "$_march"', '_march=${HM_MARCH:-v2}'):
             self.assertIn(want, s)
 
 

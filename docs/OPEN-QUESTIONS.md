@@ -18,3 +18,8 @@ Things that need the owner's answer, or that were parked instead of guessed. New
    hactool and ImGui are), or require them installed? Also: the runtime's license (MIT) and zig's (MIT) are fine.
 6. **History rewrite author** (publication step 1). Which name and e-mail the rewritten history and future commits
    carry: a GitHub noreply address (`<id>+<user>@users.noreply.github.com`) or a pseudonym.
+7. **VMA header**: answered 2026-11-14 (owner: pin it). `tools/fetch_vma.py`, docs/installer.md section 9.
+8. **Movies on Fedora/openSUSE.** Their FFmpeg decodes H.264 through `libopenh264` instead of its own decoder
+   (docs/installer.md, section 9). The decoder is there; whether the game's movies play needs a run on such a system.
+9. **Container check**: done 2026-11-14 (owner's OK): Debian 13, Ubuntu 26.04, Fedora 43/45, openSUSE Tumbleweed all
+   build. Images and outputs removed afterwards.

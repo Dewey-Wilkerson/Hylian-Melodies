@@ -297,3 +297,29 @@ Open questions 5 (AppImage tools) and minor leak items (mangled SDK names, code-
   Same scripted run, fresh profile (logs `~/.cache/hylian-melodies/bench-pacefix3-run{1,2}.log`): no hold in either
   run (before: 2-8 holds a run, "backing off"), busy median 0.75 / 1.54 ms, no wrapped values. The game's own 30 fps
   mode after loads remains (docs/KNOWN-ISSUES.md).
+- 2026-11-14 installer design pass on system packages (owner: the first version gets those right). Every build and
+  run-time need read from the code and checked against the Debian, Ubuntu, Fedora and Arch package databases:
+  docs/installer.md section 9 (supported from Debian 13, Ubuntu 26.04, Fedora 43; openSUSE unchecked). Resolved in
+  the design: one staged tree and three packers instead of calling the developer PKGBUILD (a tarball has no `.git`);
+  run-time dependencies derived from the executable; order of work with packages first (section 8). Found: the VMA
+  package is AUR only (KNOWN-ISSUES), Fedora's FFmpeg may not decode the movies, nothing compiled outside Arch yet
+  (OPEN-QUESTIONS 7-9). Small fixes: build_game.py stops on a failing pkg-config; Vulkan application name
+  "LARecomp" -> "Hylian Melodies"; README status. Publication audit: content guard and tests pass, one author
+  identity, no personal strings in files or history; still open: gc of the old history's objects (826 unreachable),
+  the PKGBUILD's placeholder `url`, `license=(MIT)` on a package that holds the game, whether the brief
+  (`hylian-melodies-prompt.md`) is published. Not committed yet.
+- 2026-11-14 VMA pinned (owner's OK): `tools/fetch_vma.py` (v3.5.0), `--vma` through build_game.py, the setup and
+  the PKGBUILD; `vulkan-memory-allocator` dropped from makedepends. The game target builds and links here with the
+  fetched header (and with the pkg-config check and the renamed Vulkan application name); not run, no makepkg run.
+- 2026-11-14 package lists tried in containers (owner's OK; podman, bare images of Debian 13, Ubuntu 26.04, Fedora
+  43 and 45, openSUSE Tumbleweed): the install command of docs/installer.md section 9, then hactool and the game
+  built from the dev machine's generated C (mounted read-only), unit tests, `DT_NEEDED` traced to packages. All five
+  build and link. Fixed on the way: Debian 13's SDL 3.2 lacks `SDL_SavePNG` (screenshots fall back to `.bmp`).
+  openSUSE's names added to the table. Images, build outputs and logs removed afterwards (owner). The game was not
+  run in the containers (no display); movies through `libopenh264` on Fedora/openSUSE are untested.
+  Next: `installer/deps.py` from that table + test, then the three packers (section 8).
+- 2026-11-14 installer step 1 (docs/installer.md section 8): `installer/deps.py` (`python3 -m installer.deps`:
+  capability checks, distro family from os-release, the one install command, a note for releases without SDL3) with
+  `tests/test_deps.py`; own LZ4 block decoder `recomp/lz4block.py` (byte-identical to python-lz4 on all 15 segments
+  of the five modules; `tests/test_lz4block.py`), `python-lz4` dropped from the PKGBUILD and the docs. The lift was
+  not rerun end to end; makepkg not rerun. Next: the three packers on the staged tree (section 8, step 2).

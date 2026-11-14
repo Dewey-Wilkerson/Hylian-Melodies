@@ -25,9 +25,8 @@ needs the owner's approval first.
 | Dear ImGui (ocornut/imgui) | fetched at `97428e8` (v1.91.9) by `tools/fetch_imgui.py`, never vendored; its Vulkan backend gets `tools/imgui/0001-dynamic-vertex-input.patch` (from LAS Recomp, MIT) | MIT |
 | SDL 3 | system library, dynamically linked | zlib |
 | Vulkan loader / headers | system | Apache-2.0 |
-| python-lz4 | installer/lifter dependency | BSD-3-Clause |
 | Capstone | lifter dependency (disassembly) | BSD-3-Clause |
-| Vulkan Memory Allocator | system header (`/usr/include/vk_mem_alloc.h`), compiled by `runtime/nvn/vulkan/vma.cpp` | MIT |
+| Vulkan Memory Allocator | fetched at `0f1a757` (v3.5.0) by `tools/fetch_vma.py`, never vendored; compiled by `runtime/nvn/vulkan/vma.cpp` | MIT |
 | shaderc | system library (GLSL to SPIR-V for translated shaders) | Apache-2.0 |
 | FFmpeg (libavformat, libavcodec, libavutil, libswscale) | system libraries, dynamically linked, for the game's videos (`runtime/hle/movie.c`) | LGPL-2.1+ (Arch builds it with GPL parts enabled; see docs/OPEN-QUESTIONS.md) |
 

@@ -38,5 +38,6 @@ game data, and their own `profile/` (saves), `hylian-melodies.ini`, `logs/`, `ca
 - `/opt/hylian-melodies` instead of `/usr/share/hylian-melodies` (owner's choice: the FHS place for a self-contained,
   architecture-specific program); XDG data folder.
 - XCI only (no update or DLC NSPs yet); no firmware input; no build-time shader step and so no graphical-session check.
-- The pinned VMA header comes from the `vulkan-memory-allocator` package instead of a download.
+- The VMA header is fetched at a pinned commit (`tools/fetch_vma.py`), as the brief planned: the
+  `vulkan-memory-allocator` package is AUR only.
 - The game's icon comes from the dump (owner's request), converted at build time; never stored in the repository.

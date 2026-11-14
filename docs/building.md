@@ -1,6 +1,6 @@
 # Building (development)
 
-Requirements (Arch names): `base-devel git python python-lz4 clang lld llvm ninja sdl3 vulkan-headers
+Requirements (Arch names): `base-devel git python clang lld llvm ninja sdl3 vulkan-headers
 vulkan-icd-loader opus libvpx zstd ffmpeg`. Exact versions on the dev machine: `DEV-ENVIRONMENT.md`.
 
 ```bash
