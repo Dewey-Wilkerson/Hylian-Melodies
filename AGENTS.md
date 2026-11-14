@@ -76,4 +76,6 @@ python3 -m installer --base cadence-base.xci --keys prod.keys --dest ~/.cache/hy
 
 ## Status
 
+Last known good: tag `pin-m9-package-ok` (owner's revert point before M10).
+
 See `docs/PROGRESS.md`.

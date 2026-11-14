@@ -164,3 +164,9 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
   finished; `pacman -Qlp`: game under /opt/hylian-melodies, no settings/profile/logs/cache/setup record inside it,
   launcher, icon, desktop entry, licence, support files; no file names the build directory; launcher and
   pre_remove tests pass. Building is done; installing is the owner's.
+
+## Pin (2026-11-13)
+
+Last known good before M10: git tag `pin-m9-package-ok` (M0-M9 done, package passes its checks, game playable), and
+its package in `~/.cache/hylian-melodies/pin-m9/`. Revert: `git checkout pin-m9-package-ok` (or
+`git reset --hard pin-m9-package-ok` on a branch, after confirming with the owner), then rebuild with makepkg.
