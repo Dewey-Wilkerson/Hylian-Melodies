@@ -822,7 +822,9 @@ NVN(nvnQueueAcquireTexture) {
 // 61.07 fps), so the present keeps that cadence on the monotonic clock (ours, not LAS Recomp's: its game paced on the
 // vsync event). A present more than a period late restarts the cadence instead of bursting to catch up.
 // frame_pacing = 0 in the ini or the menu (or HM_FRAME_PACING=0, which wins) leaves the game to its own limiter.
+int g_present_interval = 1;  // the interval the last present was paced at (pace.c: a frame shown late is late for it)
 static void display_cadence(int interval) {
+    g_present_interval = interval > 0 ? interval : 1;
     static int env = -2, was = -1;
     if (env == -2) env = getenv("HM_FRAME_PACING") ? atoi(getenv("HM_FRAME_PACING")) != 0 : -1;
     extern Settings g_settings;
@@ -836,7 +838,13 @@ static void display_cadence(int interval) {
     uint64_t period = 16666667ull * (uint64_t)interval, now = plat_now_ns();
     if (!next || now > next + period) { next = now; return; }
     next += period;
-    if (next > now) plat_sleep_until_ns(next);
+    if (next > now) {
+        // The wait is idle for the frame pacer (pace.c: busy = period - blocked). Uncounted, every frame at 60 read as
+        // ~16.4 ms busy whatever its work, and the pacer held the 30 fps mode with 1 ms frames.
+        extern __thread uint64_t g_blocked_ns;  // kernel.c
+        plat_sleep_until_ns(next);
+        g_blocked_ns += plat_now_ns() - now;
+    }
 }
 
 NVN(nvnQueuePresentTexture) {

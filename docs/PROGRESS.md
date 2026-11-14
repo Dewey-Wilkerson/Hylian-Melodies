@@ -286,3 +286,14 @@ Open, in order (each needs the owner where marked):
 4. TUI model + `--answers` + plain prompts, then curses screens and file picker; loose-folder output; manifest.
 5. Bootstrap `install.sh` + `tools/release.py`; private repo (owner creates it; push only with their OK then).
 Open questions 5 (AppImage tools) and minor leak items (mangled SDK names, code-address comments) are the owner's.
+- 2026-11-14 frame pacer fixed (owner's OK for the runs): it held the game's 30 fps mode with ~1 ms frames for three
+  reasons. (1) The display cadence's wait (objects.c `display_cadence`) wasn't counted as idle, so every frame at 60
+  read ~16.4 ms busy; now it adds to `g_blocked_ns`. (2) A frame shown late counted as not fitting 60 even when the
+  game itself had waited out the second vsync (its own 30 fps mode: 32 ms blocked, 1 ms work, 0.3 ms GPU); now a late
+  frame counts only when its work plus its GPU and present waits take more than its vsyncs (and late is measured
+  against the present interval asked for). (3) Movie frames are presented from another thread, so the per-thread
+  counters wrapped (cpu / blocked ~1.8e16 ms); a frame from another thread now starts the counts over. Unit tests:
+  `tests/test_pace.py` (pace.c on a simulated clock, 7 cases; the old pace.c fails the three regression cases).
+  Same scripted run, fresh profile (logs `~/.cache/hylian-melodies/bench-pacefix3-run{1,2}.log`): no hold in either
+  run (before: 2-8 holds a run, "backing off"), busy median 0.75 / 1.54 ms, no wrapped values. The game's own 30 fps
+  mode after loads remains (docs/KNOWN-ISSUES.md).

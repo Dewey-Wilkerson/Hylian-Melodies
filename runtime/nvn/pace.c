@@ -191,8 +191,22 @@ void pace_frame(void) {
     extern uint64_t rq_render_cpu_ns(void);  // rqueue.c: the render thread's CPU time so far (0: no render thread)
     uint64_t now = plat_now_ns(), w = g_blocked_ns, tcpu = plat_thread_cpu_ns(), rcpu = rq_render_cpu_ns();
     slow_frame_present(now, tcpu);  // (slowframe.c: the "[slow]" line of a frame over HM_SLOW_FRAME_MS)
+    // The counters above (blocked time, CPU time, the log's waits) are the presenting thread's own. Another thread
+    // presents now and then (a movie's frames): its counters are unrelated to the last frame's, and the differences
+    // wrapped (blocked / cpu ~1.8e16 ms in the log). A frame from another thread than the last starts the counts over.
+    extern __thread uint64_t g_rq_wait_ns;  // rqueue.c: waits for the render thread (translation), counted as busy
+    extern __thread uint64_t g_rq_lock_ns, g_submit_ns, g_gpu_wait_ns, g_present_ns, g_hooks_ns;
+    static __thread char me;
+    static const char *owner;
+    static uint64_t last_rq, last_cpu, l_lock, l_sub, l_gpu, l_pres, l_hooks;
+    bool moved = owner != &me;
+    owner = &me;
+    if (moved) {
+        last_wait = w, last_tcpu = tcpu, last_rq = g_rq_wait_ns, last_cpu = tcpu;
+        l_lock = g_rq_lock_ns, l_sub = g_submit_ns, l_gpu = g_gpu_wait_ns, l_pres = g_present_ns, l_hooks = g_hooks_ns;
+    }
     uint64_t p = now - last, wt = w - last_wait, tc = tcpu - last_tcpu, rc = rcpu - last_rcpu;
-    bool first = !last;
+    bool first = !last || moved;
     last = now, last_wait = w, last_tcpu = tcpu, last_rcpu = rcpu;
     // GPU time per frame (pace_gpu_ns: the backend's GPU timer, cumulative; -1 without one), moving average (~20 frames).
     // (A frame's GPU time is read a few frames late and in bursts: the average smooths that.)
@@ -214,7 +228,7 @@ void pace_frame(void) {
         memset(over, 0, sizeof over);
         memset(recent, 0, sizeof recent);
     }
-    if (first || p > 100000000ull) {  // (loading, a hitch: not a pace, and maybe a new scene)
+    if (first || p > 100000000ull) {  // (loading, a hitch, another thread: not a pace, and maybe a new scene)
         clear = calm = cpu_clear = 0, scene = 0;
         if (!first) {
             static char why[32];
@@ -240,23 +254,23 @@ void pace_frame(void) {
     if (gpu_ms >= 0) gpu_avg = gpu_avg >= 0 ? gpu_avg + ((gpu_ms < 100 ? gpu_ms : 100) - gpu_avg) * 0.05 : gpu_ms;
     static int log = -1;  // HM_LOG_PACE=1: each frame's period, vsync wait and busy time
     if (log < 0) log = getenv("HM_LOG_PACE") != NULL;
-    extern __thread uint64_t g_rq_wait_ns;  // rqueue.c: waits for the render thread (translation), counted as busy
-    static uint64_t last_rq;
     uint64_t rqw = g_rq_wait_ns - last_rq;
     last_rq = g_rq_wait_ns;
+    // This frame's waits for the renderer: the GPU's work (objects.c's syncs) and the present (the window's image, the
+    // presentation engine, a full render queue: device.c / rqueue.c) - idle, but what a GPU-bound frame waits on.
+    uint64_t gw = g_gpu_wait_ns - l_gpu, pw = g_present_ns - l_pres;
     if (log) {  // (plus this thread's CPU time per frame and the render thread's: work, independent of waits; and where
                 // this thread's frame went in the renderer's frontend - rqueue.h)
-        extern __thread uint64_t g_rq_lock_ns, g_submit_ns, g_gpu_wait_ns, g_present_ns, g_hooks_ns;
-        static uint64_t last_cpu, l_lock, l_sub, l_gpu, l_pres, l_hooks;
         uint64_t cpu = plat_thread_cpu_ns();
         LOG("[pace] period %.2f blocked %.2f busy %.2f cost %.2f ms (queue wait %.2f, cpu %.2f, render cpu %.2f, gpu %.2f, gpu wait %.2f, "
             "submit %.2f, present %.2f, hooks %.2f, lock %.2f)%s\n", p / 1e6, wt / 1e6, busy, cost, rqw / 1e6,
-            last_cpu ? (cpu - last_cpu) / 1e6 : 0.0, rc / 1e6, gpu_ms, (g_gpu_wait_ns - l_gpu) / 1e6, (g_submit_ns - l_sub) / 1e6,
-            (g_present_ns - l_pres) / 1e6, (g_hooks_ns - l_hooks) / 1e6, (g_rq_lock_ns - l_lock) / 1e6,
+            last_cpu ? (cpu - last_cpu) / 1e6 : 0.0, rc / 1e6, gpu_ms, gw / 1e6, (g_submit_ns - l_sub) / 1e6,
+            pw / 1e6, (g_hooks_ns - l_hooks) / 1e6, (g_rq_lock_ns - l_lock) / 1e6,
             pace_scene() ? "" : " (no gameplay)");
         last_cpu = cpu;
-        l_lock = g_rq_lock_ns, l_sub = g_submit_ns, l_gpu = g_gpu_wait_ns, l_pres = g_present_ns, l_hooks = g_hooks_ns;
+        l_lock = g_rq_lock_ns, l_sub = g_submit_ns, l_hooks = g_hooks_ns;
     }
+    l_gpu = g_gpu_wait_ns, l_pres = g_present_ns;
     // Not held, a frame shown a vsync late (25 ms or more after the one before: not a 50 Hz display's 20 ms) didn't fit
     // 60 either, whatever its busy time: what made it late can be idle here (waiting for the GPU's frame through the
     // window's image or the present: a machine GPU-bound at a high resolution), and the game still runs its world one
@@ -264,7 +278,15 @@ void pace_frame(void) {
     // limits as a hiccup, and goes back to 60) - slow motion at a steady 30 fps (an M3 Max at 5120x1440: 30.0 fps,
     // the pacer at 60, 4 of 60 frames over by busy time). It counts as over, at its period (gameplay frames only: a
     // load or a menu shown late isn't slow motion).
-    bool late = !pace_slow && p >= 25000000ull && pace_scene();
+    // (Late for the present interval the game asked for: its own 30 fps mode, interval 2, shows a frame every 33 ms on
+    // time - counted as late, a game that picked 30 by itself after a load was held there, backing off, all run.)
+    extern int g_present_interval;  // objects.c
+    uint64_t due = 16666667ull * (uint64_t)(g_present_interval > 1 ? g_present_interval : 1);
+    // And late for the renderer: the frame's work and its waits for the GPU and the present take more than its vsyncs
+    // (less some jitter). A frame late because the game itself waited (this game's 30 fps mode: ~32 ms blocked in its
+    // own waits, ~1 ms of work, ~0.3 ms for the GPU) didn't miss anything: held for those, the pacer reported 20 ms GPU
+    // counters (pace_end_counter) to a game that had time to spare.
+    bool late = !pace_slow && p >= due + 8333333ull && busy * 1e6 + (double)(gw + pw) > due * 0.97 && pace_scene();
     int b = cost > 16.2, o = b || late;
     stat_pace_over += o;
     // Within PACE_GRACE_NS of a hitch: left out (the window keeps the frames before it). Logged when the grace ends.
