@@ -317,13 +317,22 @@ void input_binding_text(int b, bool padside, char *out, size_t cap) {
     if (!out[0]) snprintf(out, cap, "-");
 }
 
-// key.<button> / pad.<button> lines for every button, for the ini (settings_save puts them in place of the old ones)
+// key.<button> / pad.<button> lines for the buttons whose bindings differ from the defaults, for the ini
+// (settings_save puts them in place of the old ones; none left: the old lines go)
 static void bindings_to_settings(void) {
     static char text[NB * 2 * 96];
     size_t n = 0;
+    text[0] = 0;
     pthread_mutex_lock(&map_lock);
+    SDL_Scancode cur_k[NB][MAXB], def_k[NB][MAXB];
+    int cur_p[NB][MAXB], def_p[NB][MAXB];
+    memcpy(cur_k, keymap, sizeof keymap), memcpy(cur_p, padmap, sizeof padmap);
+    defaults();
+    memcpy(def_k, keymap, sizeof keymap), memcpy(def_p, padmap, sizeof padmap);
+    memcpy(keymap, cur_k, sizeof keymap), memcpy(padmap, cur_p, sizeof padmap);
     for (int side = 0; side < 2; side++)
         for (int b = 0; b < NB; b++) {
+            if (side ? !memcmp(padmap[b], def_p[b], sizeof def_p[b]) : !memcmp(keymap[b], def_k[b], sizeof def_k[b])) continue;
             n += (size_t)snprintf(text + n, sizeof text - n, "%s.%s =", side ? "pad" : "key", bnames[b]);
             int k = 0;
             for (int j = 0; j < MAXB; j++) {

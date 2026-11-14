@@ -74,6 +74,17 @@ class SettingsSave(unittest.TestCase):
         self.assertTrue(new.startswith('a = 1\n\n# --- controls'))
         self.assertTrue(new.endswith('key.a = X\n'))
 
+    def test_second_save_joins_the_menu_block(self):
+        first = self.save('foo = 1\n', 'fullscreen=1')
+        self.assertEqual(first, 'foo = 1\n\n# --- set in the menu\nfullscreen = 1\n')
+        second = self.save(first + '\n# --- controls (set in the menu; docs/controls.md)\npad.a = north\n', 'show_fps=1')
+        self.assertEqual(second.count('# --- set in the menu'), 1)
+        self.assertIn('fullscreen = 1\nshow_fps = 1\n\n# --- controls', second)
+
+    def test_bindings_reset_drops_their_heading(self):
+        old = 'a = 1\n\n# --- controls (set in the menu; docs/controls.md)\npad.a = north\n'
+        self.assertEqual(self.save(old, 'bindings='), 'a = 1\n\n')
+
 
 if __name__ == '__main__':
     unittest.main()

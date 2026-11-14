@@ -110,6 +110,17 @@ static bool is_binding_line(const char *l) {
     return !strncmp(l, "key.", 4) || !strncmp(l, "pad.", 4);
 }
 
+// Changed keys that have no line in the file (at[k] < 0); header: start the "set in the menu" block first.
+static void write_new_keys(FILE *o, const long *at, bool header) {
+    for (size_t k = 0; k < NMANAGED; k++) {
+        if (!(g_changed & managed[k].bit) || at[k] >= 0) continue;
+        char v[32];
+        value_text(managed[k].bit, v, sizeof v);
+        if (header) fprintf(o, "\n# --- set in the menu\n"), header = false;
+        fprintf(o, "%s = %s\n", managed[k].key, v);
+    }
+}
+
 bool settings_save_to(const char *path) {
     // the old file's lines
     char **lines = NULL;
@@ -141,11 +152,25 @@ bool settings_save_to(const char *path) {
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
     FILE *o = fopen(tmp, "w");
     if (!o) goto fail;
+    // keys with no line of their own go at the end of an earlier "set in the menu" block, else in a new one at the end
+    static const char menu_header[] = "# --- set in the menu", controls_header[] = "# --- controls (set in the menu";
+    size_t ins = n;
+    bool have_header = false;
+    for (size_t i = 0; i < n && !have_header; i++)
+        if (!strncmp(lines[i], menu_header, sizeof menu_header - 1)) {
+            have_header = true;
+            for (ins = i + 1; ins < n && lines[ins][0] && strncmp(lines[ins], "# ---", 5); ins++) {}
+        }
     bool bindings_done = !g_binding_lines;
-    for (size_t i = 0; i < n; i++) {
+    for (size_t i = 0; i <= n; i++) {
+        if (i == ins && have_header) write_new_keys(o, at, false);
+        if (i == n) break;
         if (g_binding_lines && is_binding_line(lines[i])) {
             if (!bindings_done) fputs(g_binding_lines, o), bindings_done = true;  // (in place of the first old one)
             continue;
+        }
+        if (g_binding_lines && !g_binding_lines[0] && !strncmp(lines[i], controls_header, sizeof controls_header - 1)) {
+            continue;  // (all bindings back to the defaults: their heading goes with them)
         }
         size_t k = 0;
         while (k < NMANAGED && at[k] != (long)i) k++;
@@ -160,14 +185,7 @@ bool settings_save_to(const char *path) {
         value_text(managed[k].bit, v, sizeof v);
         fprintf(o, "%s = %s%s\n", managed[k].key, v, p);
     }
-    bool header = false;
-    for (size_t k = 0; k < NMANAGED; k++) {
-        if (!(g_changed & managed[k].bit) || at[k] >= 0) continue;
-        char v[32];
-        value_text(managed[k].bit, v, sizeof v);
-        if (!header) fprintf(o, "\n# --- set in the menu\n"), header = true;
-        fprintf(o, "%s = %s\n", managed[k].key, v);
-    }
+    if (!have_header) write_new_keys(o, at, true);
     if (!bindings_done && g_binding_lines[0]) fprintf(o, "\n# --- controls (set in the menu; docs/controls.md)\n%s", g_binding_lines);
     bool ok = !ferror(o);
     ok = (fclose(o) == 0) && ok;
