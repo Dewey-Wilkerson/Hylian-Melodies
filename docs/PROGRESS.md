@@ -220,3 +220,32 @@ Done so far in M10: 60 Hz pacing, FPS in the title, F11 / Alt+Enter fullscreen t
 1. Owner: open the menu (F1), change a setting and a binding, close it, check `hylian-melodies.ini` and the effect.
 2. Optional: a dialog-box texture from the game for the menu panel (needs finding which texture; facts only in docs).
 3. Remaining M10 items from the brief; keep `docs/KNOWN-ISSUES.md` current.
+
+## Next (publication and installer) - handoff, 2026-11-14
+
+Owner's decisions from the 2026-11-14 planning talk (information gathering only; nothing below is done):
+
+1. **Leak scan result.** The tracked tree passes `tools/check_content.py --tracked`; no personal data in files. Blockers
+   are in git history only: commit `9c20fa2` (the LAS Recomp import) holds Link's Awakening data
+   (`runtime/game_addresses/`, `runtime/nvn/shader_variants.txt`, `third_party/LAS-Randomizer`, `tools/rando`) plus
+   vendored fonts/ImGui; every commit's author is the owner's personal email. Minor, owner's call: 82 mangled SDK
+   symbol names in 8 runtime files (e.g. `nn::init::Start` in `runtime/main.c`), ~10 comments naming game code
+   addresses (e.g. `runtime/hle/movie.c`).
+2. **History cleanup (first; needs the owner's go-ahead for the rewrite).** New history without `9c20fa2` and with a
+   noreply/pseudonymous author (squash into one first commit, or `git filter-repo`). Commit IDs change; the tag
+   `pin-m9-package-ok` must be re-pointed (owner's say-so) and the old history kept locally as a backup branch/bundle.
+3. **Private git repo** for testing (push only with the owner's explicit OK at that time); public later by flipping one
+   default URL.
+4. **Generic builds by default.** `tools/build_game.py` default -march becomes x86-64-v2 (today: v3 when the CPU has
+   it); `--march v3|native` is the opt-in "optimize for this computer's CPU". First measure v2 vs v3 frame times
+   (test runs need the owner's OK). The machine-id binding idea was dropped.
+5. **Installer design doc** (`docs/installer.md`, before code): `curl | sh` POSIX bootstrap (prompts via /dev/tty,
+   pinned tag + checksum, `--source` override for a local checkout or the private repo) -> Python stdlib-curses TUI:
+   desktop file picker through the portal (zenity/kdialog fallback, in-terminal browser over SSH), XCI and keys read
+   in place (already so: `installer/hactool.py` passes `-k <path>`), early `check`; outputs: system package
+   (pacman/.deb/.rpm), loose directory (user data stays in it), AppImage (portable variant: v2 + `zig cc` old-glibc
+   target + bundled SDL3/ffmpeg/shaderc), Flatpak last; build options (CPU level, keep build cache); launch options
+   for the .desktop (fullscreen, env vars) with explanations; a manifest so rerunning offers update / change options
+   / uninstall. Never upload, never sudo from the script.
+6. **Env var audit** for the TUI: 192 `getenv("HM_...")` in `runtime/`; sort into player / troubleshooting / dev,
+   remove dead LAS leftovers, one documented list checked against the code by a test.
