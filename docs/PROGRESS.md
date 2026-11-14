@@ -167,9 +167,9 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 
 ## Pin (2026-11-13)
 
-Last known good before M10: git tag `pin-m9-package-ok` (M0-M9 done, package passes its checks, game playable), and
-its package in `~/.cache/hylian-melodies/pin-m9/`. Revert: `git checkout pin-m9-package-ok` (or
-`git reset --hard pin-m9-package-ok` on a branch, after confirming with the owner), then rebuild with makepkg.
+Last known good before M10: git tag `base-functionality` (named `pin-m9-package-ok` until 2026-11-14) (M0-M9 done, package passes its checks, game playable), and
+its package in `~/.cache/hylian-melodies/pin-m9/`. Revert: `git checkout base-functionality` (or
+`git reset --hard base-functionality` on a branch, after confirming with the owner), then rebuild with makepkg.
 - 2026-11-13 M10 (started, after the pin): the game ran at 61.07 fps because nothing paced it (it never waits on
   the vsync event; presents returned at once); presents now keep the Switch display's 60 Hz cadence: 60.0 fps,
   frame times at most 17-18 ms. FPS in the window title (`show_fps`). Load hitches traced to the game's own loading.
@@ -260,5 +260,5 @@ Owner's decisions from the 2026-11-14 planning talk (information gathering only;
   local git identity): the LAS Recomp import commit is gone, every commit ID changed, so commit IDs quoted above
   (and `git show 9c20fa2:...` in old plans) refer to the old history: read LAS code from `~/refs` instead. Old
   history: `~/.local/share/hylian-melodies/history-backup/hylian-melodies-pre-rewrite-0b2ec32.bundle`. Tag
-  `pin-m9-package-ok` still points at the OLD commit `ff19bbd` (rewritten twin `2d68a8a`): re-point it only with the
-  owner's OK, and never push tags before that. Old objects stay in `.git` until reflog expire + gc (owner's call).
+  `pin-m9-package-ok` was then re-pointed to the rewritten twin `2d68a8a` and renamed `base-functionality` (owner's
+  OK; same message). Old objects stay in `.git` until reflog expire + gc (owner's call).
