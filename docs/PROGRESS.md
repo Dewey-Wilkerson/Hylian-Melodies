@@ -173,3 +173,35 @@ its package in `~/.cache/hylian-melodies/pin-m9/`. Revert: `git checkout pin-m9-
 - 2026-11-13 M10 (started, after the pin): the game ran at 61.07 fps because nothing paced it (it never waits on
   the vsync event; presents returned at once); presents now keep the Switch display's 60 Hz cadence: 60.0 fps,
   frame times at most 17-18 ms. FPS in the window title (`show_fps`). Load hitches traced to the game's own loading.
+
+## Next (M10: overlay menu) - handoff, 2026-11-13
+
+Done so far in M10: 60 Hz pacing, FPS in the title, F11 / Alt+Enter fullscreen toggle (88e946b), and
+`tools/fetch_imgui.py` (ImGui v1.91.9 at `97428e8` into git-ignored `toolchain/src/imgui`, plus
+`tools/imgui/0001-dynamic-vertex-input.patch`, LAS Recomp's AMD fix renamed to `hm_imgui_dyn_vertex`). Plan:
+
+1. **Glue**: restore LAS's `runtime/nvn/vulkan/imgui_glue.cpp` (`git show 9c20fa2:runtime/nvn/vulkan/imgui_glue.cpp`,
+   86 lines, MIT) as `runtime/ui/imgui_glue.cpp`: `vk_imgui_backend_init()` (dynamic rendering, `g_vk.*`,
+   `rec_drain()`, fonts texture), `_shutdown()`; set `hm_imgui_dyn_vertex = g_vk.vids`. Rename LAS strings at once.
+2. **Build**: `tools/build_game.py` (game target only, not headless) calls `tools/fetch_imgui.py`, compiles
+   `imgui.cpp imgui_draw.cpp imgui_tables.cpp imgui_widgets.cpp backends/imgui_impl_{vulkan,sdl3}.cpp` with the
+   existing `rtcxx` rule (`-I<imgui> -I<imgui>/backends`, `-DIMGUI_IMPL_VULKAN_NO_PROTOTYPES` only if the glue loads
+   functions itself; check how the device is created); `--imgui DIR` override; the stamp keeps rebuilds offline.
+3. **Menu** `runtime/ui/menu.cpp` replacing `menu_stub.c` (keep `menu.h`'s six functions; device.c already calls
+   `menu_render` inside `vk_overlay_begin/end`, `menu_handle_event` per SDL event, `menu_apply_window_requests`
+   per frame; `HM_MENU_AT=<frame>` opens it for screenshot tests via `menu_test_open`). References, MIT, all in
+   `9c20fa2`: `runtime/ui/menu.mm` (1079 lines, plain C++), `option_rows.mm/.h`, `controls_ui.mm`, `pad_nav.mm/.h`.
+   Take only the shape; nothing Link's Awakening. Open/close: Esc or F1, pad Minus+Plus held together (`input.c`
+   must not pass those to the game while the menu is open: `menu_input_captured()`). Tabs: Video (fullscreen,
+   upscale filter 0/1/2, show FPS, frame pacing), Audio (volume), Controls (rebind keyboard and pad per Switch
+   button, reset to defaults), About (version `hm_version()`, folder paths). Changes apply live where the runtime
+   allows (filter, FPS, pacing, volume, fullscreen); say "next start" for the rest.
+4. **settings_save()** in `runtime/settings.c`: rewrite `hylian-melodies.ini` in place, keep comments, unknown keys
+   and `key.`/`pad.` lines not touched by the menu; write to `.tmp` then rename. The file lives in the player's
+   folder (launcher seeds it); a test in `tests/` with a C harness like LAS's `tools/test_settings.c` or via a
+   small python reimplementation check.
+5. **Package**: PKGBUILD `prepare()` runs `python tools/fetch_imgui.py --src "$srcdir/toolchain/src/imgui"` (build
+   stays offline) and passes `--imgui` through the installer's compile step (installer/steps.py -> build_game.py);
+   `makepkg -f` in packaging/arch, then `git checkout -- PKGBUILD` (pkgver rewrite). Tests: `test_pkgbuild` grep.
+6. **Check and document**: run with `HM_MENU_AT=600 HM_WINDOW_SHOT=650`, look at the capture; docs/controls.md
+   (menu keys), docs/packaging.md, DECISIONS line, this file; commit. Owner checks still open: rumble, `show_fps`.
