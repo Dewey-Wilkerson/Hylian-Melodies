@@ -16,7 +16,7 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M7 Input and saves | done: real gamepad verified by the owner, scripted input, saves survive kill -9; keyboard and rumble not yet tried by hand |
 | M8 Playable | done: a 7-minute owner session (title, crypt, castle, a dungeon area) at 61 fps with saves and a clean window close; DLC served |
 | M9 Packaging | done: `makepkg` builds the package from a clean directory and resumes after interruption; contents and build-path checks pass (docs/packaging.md) |
-| M10 Polish | next |
+| M10 Polish | in progress: 60 Hz frame pacing, native-scale sharp scaling, FPS display; settings documented |
 | M5-M8, M10 | not started |
 | M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
 
@@ -170,3 +170,6 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 Last known good before M10: git tag `pin-m9-package-ok` (M0-M9 done, package passes its checks, game playable), and
 its package in `~/.cache/hylian-melodies/pin-m9/`. Revert: `git checkout pin-m9-package-ok` (or
 `git reset --hard pin-m9-package-ok` on a branch, after confirming with the owner), then rebuild with makepkg.
+- 2026-11-13 M10 (started, after the pin): the game ran at 61.07 fps because nothing paced it (it never waits on
+  the vsync event; presents returned at once); presents now keep the Switch display's 60 Hz cadence: 60.0 fps,
+  frame times at most 17-18 ms. FPS in the window title (`show_fps`). Load hitches traced to the game's own loading.

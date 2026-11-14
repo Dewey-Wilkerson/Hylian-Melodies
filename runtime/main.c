@@ -93,7 +93,10 @@ static void *run_timer(void *arg) {
     sleep((unsigned)(uintptr_t)arg);
     extern void kernel_dump_threads(const char *prefix);
     kernel_dump_threads("[exit]");
-    LOG("[boot] run ended after %u s (HM_RUN_SECONDS)\n", (unsigned)(uintptr_t)arg);
+    extern volatile uint64_t g_vsync_count;
+    extern uint64_t renderer_present_count(void);
+    LOG("[boot] run ended after %u s (HM_RUN_SECONDS): %llu frames presented, %llu vsyncs signalled\n",
+        (unsigned)(uintptr_t)arg, (unsigned long long)renderer_present_count(), (unsigned long long)g_vsync_count);
     fflush(stderr);
     _exit(0);
     return NULL;

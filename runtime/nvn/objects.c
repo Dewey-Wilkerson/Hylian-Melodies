@@ -7,6 +7,7 @@
 
 #include "../kernel.h"
 #include "nvn.h"
+#include "../settings.h"
 #include "rqueue.h"
 
 void renderer_sync(void);
@@ -816,10 +817,31 @@ NVN(nvnQueueAcquireTexture) {
     w->next = (w->next + 1) % (w->active ? w->active : 1);
     RET(0);
 }
+// The Switch's display paces the game: a present waits for the next refresh (60 Hz, times the window's present
+// interval). This game has no other pacing (it never waits on the vsync event; its own limiter alone ran it at
+// 61.07 fps), so the present keeps that cadence on the monotonic clock (ours, not LAS Recomp's: its game paced on the
+// vsync event). A present more than a period late restarts the cadence instead of bursting to catch up.
+// frame_pacing = 0 in the ini (or HM_FRAME_PACING=0) leaves the game to its own limiter.
+static void display_cadence(int interval) {
+    static int on = -1;
+    if (on < 0) {
+        extern Settings g_settings;
+        on = getenv("HM_FRAME_PACING") ? atoi(getenv("HM_FRAME_PACING")) != 0 : g_settings.frame_pacing;
+        LOG("[pace] display cadence %s (60 Hz x the present interval)\n", on ? "on" : "off");
+    }
+    if (!on || interval <= 0) return;
+    static uint64_t next;
+    uint64_t period = 16666667ull * (uint64_t)interval, now = plat_now_ns();
+    if (!next || now > next + period) { next = now; return; }
+    next += period;
+    if (next > now) plat_sleep_until_ns(next);
+}
+
 NVN(nvnQueuePresentTexture) {
     NvnWindow *w = HOST(NvnWindow, A(1));
     int i = (int)A(2);
     if (i >= 0 && i < w->num) backend_present(HOST(NvnTexture, w->textures[i]));
+    display_cadence(w->interval);
 }
 
 // ================================================================== small state objects

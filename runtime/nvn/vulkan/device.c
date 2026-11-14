@@ -1344,5 +1344,16 @@ int ui_run(void) {
         menu_apply_window_requests(window);
         input_rumble_poll();
         input_led_poll();
+        if (g_settings.show_fps) {  // (show_fps = 1: frames per second in the window title, once a second)
+            static uint64_t at, frames_at;
+            uint64_t now = SDL_GetTicksNS(), f = total_frames;
+            if (!at) at = now, frames_at = f;
+            if (now - at >= 1000000000ull) {
+                char title[64];
+                snprintf(title, sizeof title, "Hylian Melodies - %.1f fps", (double)(f - frames_at) * 1e9 / (double)(now - at));
+                SDL_SetWindowTitle(window, title);
+                at = now, frames_at = f;
+            }
+        }
     }
 }

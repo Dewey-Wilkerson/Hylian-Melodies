@@ -22,6 +22,7 @@ typedef struct {
     int screen_filter;     // 0 = off (LAS Recomp's colour filters; unused here)
     bool mirror_mode;      // (unused here)
     bool show_fps;
+    bool frame_pacing;     // the Switch display's 60 Hz cadence at each present (default on; nvn/objects.c)
     // audio
     double volume;         // master volume 0..1
     bool reverb;           // (audio renderer only; unused by this game)
