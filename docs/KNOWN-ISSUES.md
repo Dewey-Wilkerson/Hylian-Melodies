@@ -14,3 +14,6 @@
 - Audio is measured (docs/audio.md) but not yet checked by ear against the beat; end-to-end latency to the speakers
   is not measured (use the game's calibration).
 - The package is built for this machine's CPU level (x86-64-v3 here); build it on the machine that plays it.
+- Packages built before r25 (`0.1.0.r25.g089a5d2`) may hold an older executable than their version says (the setup
+  resumed "compile already done"; fixed). Rebuild with `makepkg -f`.
+- The menu's scaling-filter change takes effect at the next start (the filter is built into the present shader).

@@ -16,7 +16,7 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M7 Input and saves | done: real gamepad verified by the owner, scripted input, saves survive kill -9; keyboard and rumble not yet tried by hand |
 | M8 Playable | done: a 7-minute owner session (title, crypt, castle, a dungeon area) at 61 fps with saves and a clean window close; DLC served |
 | M9 Packaging | done: `makepkg` builds the package from a clean directory and resumes after interruption; contents and build-path checks pass (docs/packaging.md) |
-| M10 Polish | in progress: 60 Hz frame pacing, native-scale sharp scaling, FPS display; settings documented |
+| M10 Polish | in progress: 60 Hz frame pacing, native-scale sharp scaling, FPS display, overlay settings menu in the game's own fonts |
 | M5-M8, M10 | not started |
 | M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
 
@@ -205,3 +205,18 @@ Done so far in M10: 60 Hz pacing, FPS in the title, F11 / Alt+Enter fullscreen t
    `makepkg -f` in packaging/arch, then `git checkout -- PKGBUILD` (pkgver rewrite). Tests: `test_pkgbuild` grep.
 6. **Check and document**: run with `HM_MENU_AT=600 HM_WINDOW_SHOT=650`, look at the capture; docs/controls.md
    (menu keys), docs/packaging.md, DECISIONS line, this file; commit. Owner checks still open: rumble, `show_fps`.
+- 2026-11-14 M10: overlay settings menu (`runtime/ui/menu.cpp`, Dear ImGui on the Vulkan backend): F1 or Minus+Plus;
+  Video, Audio, Controls (keyboard and gamepad rebinding), About; the game gets no input while it is open.
+  `settings_save()` writes changed keys back into the player's ini in place (tests/test_settings_save.py). The menu
+  draws with the game's own BFFNT fonts read from the RomFS at start (`runtime/ui/game_font.c`, our reader:
+  BC4 block-linear sheets; 16 px text, 31 px heading, whole-number scale, unfiltered). Captures (kept outside the repo)
+  checked at 1856x1044: crisp text, all bindings listed. Also: the setup now redoes lift/compile when their sources
+  changed (makepkg -f had packaged a stale executable: packages before r25 lack the M10 commits); the ini takes
+  south/east/west/north for face buttons (SDL3 doesn't); frame pacing follows the setting live.
+  Not verified by hand: closing, saving and rebinding with real presses (the agent can't press keys); rumble.
+
+## Next (M10, after the menu)
+
+1. Owner: open the menu (F1), change a setting and a binding, close it, check `hylian-melodies.ini` and the effect.
+2. Optional: a dialog-box texture from the game for the menu panel (needs finding which texture; facts only in docs).
+3. Remaining M10 items from the brief; keep `docs/KNOWN-ISSUES.md` current.

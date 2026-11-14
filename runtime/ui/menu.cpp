@@ -40,6 +40,8 @@ void input_binding_text(int b, bool pad, char *out, size_t cap);
 void input_bind_set(int b, bool pad, int code);
 void input_bindings_reset(void);
 int input_bind_code(const SDL_Event *e, bool pad);
+#include "game_font.h"
+extern int hm_imgui_nearest;  // tools/imgui/0002-nearest-font-sampler.patch: the font atlas sampled unfiltered
 }
 
 // ------------------------------------------------------------------ state shared with the window thread
@@ -242,6 +244,7 @@ void menu_apply_window_requests(SDL_Window *w) {
 static bool g_inited, g_init_failed;
 static ImGuiContext *g_ctx;
 static ImFont *g_font, *g_font_big;
+static bool g_game_font;  // the game's own pixel fonts (drawn at whole-number scales), not a system font
 
 static void style_init(void) {
     ImGuiStyle &s = ImGui::GetStyle();
@@ -294,6 +297,69 @@ static bool font_file(char *out, size_t cap) {
     return false;
 }
 
+// The game's bitmap fonts from the player's RomFS (runtime/ui/game_font.c): the 16-pixel one for text, the ~31-pixel
+// display face for the heading. Each glyph goes into ImGui's atlas as a custom rectangle on a font of that line height
+// (ImGui's built-in font underneath, reduced to the space character). HM_MENU_FONT=system keeps the system font.
+extern "C" int hm_imgui_nearest = 0;
+struct GlyphRect { int rect; GameFont *f; int index, width; };
+static std::vector<GlyphRect> g_rects;
+
+static ImFont *add_game_font(ImGuiIO &io, GameFont *f) {
+    static const ImWchar only_space[] = {0x20, 0x20, 0};
+    ImFontConfig cfg;
+    cfg.SizePixels = (float)game_font_line(f);
+    cfg.GlyphRanges = only_space;
+    cfg.PixelSnapH = true;
+    snprintf(cfg.Name, sizeof cfg.Name, "game %dpx", game_font_line(f));
+    ImFont *font = io.Fonts->AddFontDefault(&cfg);
+    const GameGlyph *g;
+    int n = game_font_glyphs(f, &g), h = game_font_cell_height(f);
+    for (int i = 0; i < n; i++) {
+        int w = g[i].width ? g[i].width : 1;
+        int r = io.Fonts->AddCustomRectFontGlyph(font, (ImWchar)g[i].code, w, h, (float)g[i].advance, ImVec2((float)g[i].left, 0));
+        g_rects.push_back({r, f, g[i].index, g[i].width});
+    }
+    return font;
+}
+
+static bool game_fonts(ImGuiIO &io) {
+    const char *want = getenv("HM_MENU_FONT");
+    if (want && !strcmp(want, "system")) return false;
+    GameFont *body = game_font_pick(g_romfs_dir ? g_romfs_dir : "romfs", 16, NULL);
+    if (!body) return false;
+    GameFont *head = game_font_pick(g_romfs_dir ? g_romfs_dir : "romfs", 31, body);
+    io.Fonts->Flags |= ImFontAtlasFlags_NoBakedLines;  // (no thick-line texture: the atlas is sampled unfiltered)
+    g_font = add_game_font(io, body);
+    g_font_big = head ? add_game_font(io, head) : g_font;
+    if (!io.Fonts->Build()) {
+        LOG("[menu] the game's fonts didn't fit ImGui's atlas\n");
+        g_rects.clear();
+        game_font_free(body);
+        game_font_free(head);
+        return false;
+    }
+    unsigned char *px;
+    int tw, th;
+    io.Fonts->GetTexDataAsAlpha8(&px, &tw, &th);
+    for (const GlyphRect &gr : g_rects) {
+        const ImFontAtlasCustomRect *r = io.Fonts->GetCustomRectByIndex(gr.rect);
+        int pitch;
+        const uint8_t *cell = game_font_cell(gr.f, gr.index, &pitch);
+        if (!cell || !r->IsPacked()) continue;
+        for (int y = 0; y < r->Height; y++)
+            for (int x = 0; x < gr.width && x < r->Width; x++) px[(size_t)(r->Y + y) * tw + r->X + x] = cell[(size_t)y * pitch + x];
+    }
+    LOG("[menu] the game's fonts: text %dpx, heading %dpx; atlas %dx%d\n", game_font_line(body),
+        head ? game_font_line(head) : game_font_line(body), tw, th);
+    g_rects.clear();
+    game_font_free(body);
+    game_font_free(head);
+    ImGui::GetStyle().AntiAliasedLinesUseTex = false;
+    hm_imgui_nearest = 1;
+    g_game_font = true;
+    return true;
+}
+
 static bool init(void) {
     IMGUI_CHECKVERSION();
     g_ctx = ImGui::CreateContext();
@@ -303,10 +369,12 @@ static bool init(void) {
     io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
     io.IniFilename = NULL;
     io.LogFilename = NULL;
+    style_init();
     char path[PATH_MAX];
     ImFontConfig cfg;
     cfg.OversampleH = 2;
-    if (font_file(path, sizeof path)) {
+    if (game_fonts(io)) {
+    } else if (io.Fonts->Clear(), g_font = g_font_big = NULL, font_file(path, sizeof path)) {
         g_font = io.Fonts->AddFontFromFileTTF(path, 34, &cfg);
         g_font_big = io.Fonts->AddFontFromFileTTF(path, 56, &cfg);
         LOG("[menu] font %s\n", path);
@@ -317,7 +385,6 @@ static bool init(void) {
         g_font = g_font_big = io.Fonts->AddFontDefault(&d);
         LOG("[menu] no system font found: ImGui's own\n");
     }
-    style_init();
     return vk_imgui_backend_init();
 }
 
@@ -359,7 +426,7 @@ static void page_video(void) {
     if (shown_filter < 0) shown_filter = g_settings.upscale_filter;
     int f = g_settings.upscale_filter;
     if (f < 0 || f > 2) f = 0;
-    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14);
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize(filters[0]).x + ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2);
     if (ImGui::Combo("Scaling filter", &f, filters, 3)) {
         g_settings.upscale_filter = f;
         settings_changed(SET_UPSCALE_FILTER);
@@ -520,7 +587,8 @@ void menu_render(void *cmd, unsigned target_w, unsigned target_h) {
     drain_events(io);
     // fonts are built for a ~1080 px tall output; sizes and spacing follow the window
     float scale = fmaxf((float)target_h / 1080.0f, 0.45f);
-    io.FontGlobalScale = scale;
+    // (the game's pixel fonts: a whole number of screen pixels per font pixel, 2 at 1080p)
+    io.FontGlobalScale = g_game_font ? fmaxf(1.0f, floorf((float)target_h / 480.0f)) : scale;
     static ImGuiStyle base;
     static float style_scale = -1;
     if (style_scale < 0) base = ImGui::GetStyle();
