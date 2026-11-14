@@ -13,3 +13,8 @@ Things that need the owner's answer, or that were parked instead of guessed. New
    only run when `HM_GAME_DIR` points at an extracted install; their outputs stay outside the repo.
 4. **Reference repos trust.** Running scripts from the `~/refs` checkouts against game files was blocked by the
    agent's safety check; the user offered to state trust. Until then the agent writes its own small tools.
+5. **AppImage build tools** (docs/installer.md, section 4). The portable AppImage needs zig (old-glibc target) and
+   the AppImage type-2 runtime, neither packaged everywhere: fetch them at pinned versions with SHA-256 checks (as
+   hactool and ImGui are), or require them installed? Also: the runtime's license (MIT) and zig's (MIT) are fine.
+6. **History rewrite author** (publication step 1). Which name and e-mail the rewritten history and future commits
+   carry: a GitHub noreply address (`<id>+<user>@users.noreply.github.com`) or a pseudonym.

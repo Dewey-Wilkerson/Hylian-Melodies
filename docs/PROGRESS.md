@@ -249,3 +249,10 @@ Owner's decisions from the 2026-11-14 planning talk (information gathering only;
    / uninstall. Never upload, never sudo from the script.
 6. **Env var audit** for the TUI: 192 `getenv("HM_...")` in `runtime/`; sort into player / troubleshooting / dev,
    remove dead LAS leftovers, one documented list checked against the code by a test.
+- 2026-11-14 publication, started: step 1 (history) prepared, not applied: backup bundle of the full old history in
+  `~/.local/share/hylian-melodies/history-backup/hylian-melodies-pre-rewrite-74231d6.bundle` (verified); a
+  plumbing rewrite (same trees, messages, dates; new parents and identity; drops the root import commit) dry-runs
+  clean: 28 commits, same final tree, the import unreachable, no personal e-mail left. Waiting on the owner for the
+  author identity, the go-ahead and the tag. Step 4 (generic builds) done in code: x86-64-v2 default, `--march
+  v3|native` opt-in through build_game.py, the setup and the PKGBUILD (`HM_MARCH`); v2 vs v3 frame times not yet
+  measured (owner's OK for the run). Step 5: `docs/installer.md` part 1 holds the bootstrap + TUI design.

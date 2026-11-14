@@ -1,44 +1,249 @@
 # Installer
 
-`python3 -m installer` turns the user's own dump and keys into an install folder. Stdlib-only Python; one JSON event
-per line on stdout; full log in `<temp>/run-<time>/logs/install.log`; exit status 0 only when the result is `ok`.
+Two layers:
+
+1. **The player-facing installer** (design below, not built yet): a `curl | sh` bootstrap that fetches a pinned,
+   checksummed copy of this repository and starts a terminal UI (Python, stdlib `curses`). The UI asks for the
+   player's own dump and keys, checks them early, lets them choose how to install (system package, loose folder,
+   AppImage, later Flatpak) and with which options, runs the setup and records what it did, so running it again
+   offers update / change options / uninstall.
+2. **The setup engine** `python3 -m installer` (exists): check, extract, lift, compile, cleanup into an install
+   folder, with JSON events on stdout. The UI drives it; the PKGBUILD drives it today. See the second half.
+
+Hard rules for both: never upload anything; no telemetry; never run `sudo`/`pkexec` from a script (the UI prints the
+package manager command for the player to run); the keys and the dump are read in place and never copied, printed
+or logged; the only network access is fetching this project's source and its pinned build inputs (Dear ImGui,
+hactool source), each checked against a SHA-256 or a commit ID.
+
+## Part 1: player-facing installer (design, 2026-11-14)
+
+Owner's decisions this follows (docs/PROGRESS.md, "Next (publication and installer)"): test against a private git
+repository before going public (public later by changing one default URL); every build generic (x86-64-v2) by
+default with CPU-specific builds opt-in; expose every player-relevant flag and environment variable with an
+explanation; no machine-ID binding.
+
+```
+curl -fsSL <url>/install.sh | sh               bootstrap (POSIX sh, ~200 lines)
+  └─ checks: Linux x86-64, python3 >= 3.11, curl or wget, tar, sha256sum
+  └─ fetch tag vX.Y.Z tarball -> verify SHA-256 -> ~/.cache/hylian-melodies/src/vX.Y.Z/
+  └─ exec python3 -m installer.tui </dev/tty    terminal UI (stdlib curses)
+       ├─ existing install found (manifest)? -> update / change options / repair / uninstall
+       ├─ dependencies (per distro: what is missing and the command to get it; never installs)
+       ├─ inputs: XCI + prod.keys (file picker) -> early `check`
+       ├─ output: system package | loose folder | AppImage | Flatpak (later)
+       ├─ build options, launch options (each with an explanation)
+       ├─ summary -> confirm
+       ├─ progress (setup engine's JSON events) -> output-specific packaging
+       └─ done: how to start it; the package manager command to run, if any; manifest written
+```
+
+### 1. Bootstrap `install.sh`
+
+- **Shape.** POSIX `sh` (dash, busybox ash, bash in sh mode); the whole script is a `main "$@"` function called on
+  the last line, so a truncated download runs nothing. `set -eu`. Arguments through `curl ... | sh -s -- --flag`.
+- **Prompts via `/dev/tty`.** stdin is the script itself, so every question reads from `/dev/tty` and the UI is
+  started with `</dev/tty`. No usable `/dev/tty` (CI, cron): stop with a message pointing to the non-interactive mode
+  (`--answers FILE`, section 2).
+- **Pinned and checked.** The release tool (`tools/release.py`, to write) fills two constants into the published
+  script: `HM_TAG=vX.Y.Z` and `HM_SHA256=<tarball sha256>`. The bootstrap downloads
+  `${HM_REPO_URL}/archive/refs/tags/$HM_TAG.tar.gz` (one default URL: the private repository during testing, the
+  public one later), checks the SHA-256 with `sha256sum` (or `shasum -a 256`), and refuses on mismatch. A matching
+  tarball already in the cache is reused (offline rerun).
+- **Where.** `~/.cache/hylian-melodies/src/$HM_TAG/` (`$XDG_CACHE_HOME` honoured). Nothing else is written by the
+  bootstrap.
+- **Overrides.**
+  - `--source PATH`: a local checkout (development); no checksum, the UI shows "unverified source".
+  - `--source URL --ref REF`: `git clone --depth 1 --branch REF` with the player's own git credentials (how the
+    private repository is reached: SSH key or credential helper; the script never asks for or stores a token).
+  - `--tag vX.Y.Z --sha256 HEX`: another release.
+  - `--help`, `--version`, `--print-only` (show what would be fetched and run, then stop).
+- **Not done here:** installing packages, root, PATH changes, shell rc edits.
+
+### 2. Terminal UI `python3 -m installer.tui`
+
+- **Stdlib only.** `curses` for the screens, `subprocess` for the setup engine and helpers. A model/view split: an
+  `Install` plan object (inputs, output, options) and pure functions that validate it, separate from the curses
+  screens, so tests drive the model without a terminal.
+- **Fallbacks.** `TERM=dumb`, no curses or a terminal under 80x24: the same questions as plain numbered prompts.
+  `--answers FILE.json`: no questions at all (tests, scripted installs); every field of the plan, validated the same.
+- **Screens.**
+  1. *Welcome*: what this is, personal use only, needs the player's own cartridge dump and console keys; nothing is
+     uploaded. Source and tag shown (and "unverified" for `--source`).
+  2. *Existing install* (only when the manifest lists one, section 6).
+  3. *Dependencies*: build tools and libraries found or missing, distro detected from `/etc/os-release` (`ID`,
+     `ID_LIKE`); for missing ones the exact command for that distro (table in `installer/deps.py`: Arch, Debian/
+     Ubuntu, Fedora, openSUSE; else the generic names). The player runs it in another terminal and presses "check
+     again". Python modules must be stdlib only: `recomp/nso.py` imports `lz4.block` today, to be replaced by our own
+     LZ4 block decoder (small, written for this project) so `python-lz4` is no longer needed.
+  4. *Inputs*: base XCI (later NSP update/DLC), `prod.keys` through the file picker (section 3). Then at once
+     `python3 -m installer --until check` against a scratch destination, so a wrong file, a missing key revision or
+     too little disk is reported before anything long runs.
+  5. *Output* (section 4), with what each one means for updates, removal and where saves live.
+  6. *Build options* and 7. *Launch options* (section 5).
+  8. *Summary*: every choice, disk space needed vs free, then "Install".
+  9. *Progress*: one line per setup step with a bar from the `progress` events, the message text from
+     `installer/messages.py`, the log path; on `error`, the message and "retry" (the setup resumes) / "quit".
+  10. *Done*: how to start the game, the package manager command to run (system package), manifest written.
+
+### 3. Picking the dump and keys
+
+Order, first that works:
+
+1. **Desktop portal** (`org.freedesktop.portal.FileChooser.OpenFile`) through the `gdbus` command (glib, present on
+   practically every desktop): call, then wait for the `Response` signal with `gdbus monitor`. Native dialog on GNOME,
+   KDE and others, also inside sandboxes. Stdlib Python has no D-Bus; a hand-written D-Bus client is not worth it.
+2. `zenity --file-selection` or `kdialog --getopenfilename` when present.
+3. **In-terminal browser** (curses list: folders, `.xci`/`.nsp`/`.keys` highlighted, `~` and recent folders as
+   shortcuts). Used directly when there is no graphical session (`$DISPLAY` and `$WAYLAND_DISPLAY` unset, or
+   `$SSH_CONNECTION` set).
+
+A typed path (with Tab completion) is always accepted. The files are used where they are: the setup reads the XCI
+in place and hactool gets the keys with `-k <path>` (already so in `installer/hactool.py`); the manifest records the
+paths and the dump's SHA-256 (facts only), never the keys' contents.
+
+### 4. Outputs
+
+All four start from the same setup-engine run into a staging folder; they differ in the final layout and in who
+owns removal. Each built output contains the game, so the UI repeats: **for this computer's owner only, never
+share it**.
+
+| Output | Needs | Game files | Player data | Update / remove |
+|---|---|---|---|---|
+| **System package** (default on Arch, Debian/Ubuntu, Fedora/openSUSE) | the distro's packaging tool | `/opt/hylian-melodies` | `${XDG_DATA_HOME:-~/.local/share}/hylian-melodies` (launcher, as today) | rerun the UI to build the new package; remove with the package manager (saves kept) |
+| **Loose folder** (any distro, no root) | nothing extra | the chosen folder (default `~/Games/Hylian Melodies`) | inside the same folder | rerun the UI; uninstall asks whether to keep `profile/` (saves) and the ini |
+| **AppImage** (portable) | `mksquashfs`; zig (fetched, pinned) | inside the image | XDG data folder, like the package | replace the file; uninstall removes it and its menu entry |
+| **Flatpak** (last) | `flatpak-builder` | inside the app, built locally, never exported to a remote | the app's data folder | `flatpak uninstall` |
+
+- **System package.** Arch: the existing PKGBUILD and `makepkg` (the UI symlinks the inputs next to it, as
+  docs/packaging.md describes). Debian family: a `.deb` from the same staged tree with `dpkg-deb --build` (control
+  file and maintainer scripts generated from the Arch `.install` hooks' logic). Fedora/openSUSE: a `.rpm` with
+  `rpmbuild -bb` from a generated spec with the staged tree as its source. Same package name
+  (`hylian-melodies-recomp`), same paths, same launcher. The UI prints e.g. `sudo pacman -U <file>` /
+  `sudo apt install ./<file>` / `sudo dnf install <file>`.
+- **Loose folder.** The install folder itself, with the executable at its top, plus (optional) a menu entry and icon
+  in `~/.local/share/applications` and `~/.local/share/icons`. The launcher logic (player folder = install folder)
+  becomes a mode of `hylian-melodies.sh` instead of a second script.
+- **AppImage.** The portable variant: always x86-64-v2; built with `zig cc -target x86_64-linux-gnu.2.28` so it runs
+  on old glibc; SDL3, ffmpeg and shaderc built or copied in and found through `$ORIGIN` rpaths; Vulkan loader and
+  driver from the host. Squashfs plus the AppImage type-2 runtime, both pinned by version and SHA-256. Open: where
+  zig and the runtime come from and whether that download is acceptable (docs/OPEN-QUESTIONS.md).
+- **Flatpak.** A manifest on `org.freedesktop.Platform`, built with `flatpak-builder --user --install`. After the
+  others work.
+
+### 5. Options
+
+Every option has a one-paragraph explanation shown beside it, from one registry (`installer/options.py`) that
+also generates the env-var list in the docs; a test checks the registry against the code (section 7).
+
+**Build options** (changing one recompiles; extraction is kept):
+
+| Option | Values | Explanation shown |
+|---|---|---|
+| CPU level | **v2** (default), v3, native | "Generic" runs on any x86-64 CPU since about 2009, also on other computers. "Optimize for this computer's CPU" (v3/native) may be a little faster and will not start on an older CPU. v3 is offered only when this CPU has it; AppImage is always v2. Passed as `--march`. |
+| Keep build cache | **off**, on | Keeps the generated C and compiled objects (several GB) in the temp folder: an update or option change then recompiles only what changed. |
+| Work folder | default `~/.cache/hylian-melodies/temp` | Where extraction and compilation happen; free space shown. |
+| Parallel jobs | default: all cores | Fewer keeps the computer usable during the compile. |
+
+**Launch options** (no rebuild; written to the menu entry and to `<player dir>/launch.env`):
+
+- *Start in fullscreen* (`--fullscreen` / `--windowed`) and a "Play fullscreen" menu action (exists today).
+- The player group of `HM_*` environment variables, from the env-var audit (docs/PROGRESS.md, publication step 6:
+  192 `getenv("HM_...")` in `runtime/` sorted into player / troubleshooting / developer, dead LAS Recomp leftovers
+  removed). Player and troubleshooting ones are listed, troubleshooting under "Advanced"; developer ones are not.
+- `launch.env` holds `KEY=value` lines; the launcher reads it (parsed, never `source`d; only `HM_*` keys accepted),
+  so starting from a terminal and from the menu behaves the same. Settings the in-game menu already covers
+  (`hylian-melodies.ini`: video, audio, controls) are not duplicated; the UI points to the menu (F1).
+
+### 6. Manifest, update, uninstall
+
+`${XDG_DATA_HOME:-~/.local/share}/hylian-melodies/installs.json`, written atomically after each successful run:
+
+```json
+{"format": 1, "installs": [{
+  "id": "…", "output": "package|folder|appimage|flatpak", "location": "…",
+  "version": "0.2.0", "tag": "v0.2.0", "source": {"url": "…", "sha256": "…"},
+  "inputs": {"base": {"path": "…", "sha256": "…"}, "keys": {"path": "…"}},
+  "build": {"march": "v2", "keep_cache": false}, "launch": {"fullscreen": false, "env": {}},
+  "files": ["~/.local/share/applications/hylian-melodies.desktop", "…"],
+  "package": {"name": "hylian-melodies-recomp", "file": "…"}}]}
+```
+
+On a rerun the UI lists these installs and offers:
+
+- **Update**: a newer tag (the bootstrap fetched it) -> rebuild; the setup's per-step source hashes already redo
+  only lift/compile when the project changed and keep the extraction when the dump did not.
+- **Change options**: launch options are rewritten at once; build options recompile.
+- **Repair**: rerun the setup's checks (hashes of the extracted files) and fix what is missing.
+- **Uninstall**: folder and AppImage: remove what `files` and `location` list, asking about saves; package: print the
+  remove command; Flatpak: `flatpak uninstall`. The entry leaves the manifest.
+
+Files the manifest does not list are never deleted.
+
+### 7. Tests and checks
+
+- Bootstrap: `sh -n` and a run under `dash` against a local tarball server (`--source`, checksum mismatch refused,
+  truncated script runs nothing); `shellcheck` when installed.
+- UI model: unit tests with `--answers` plans (valid/invalid, CPU level vs CPU flags, AppImage forces v2).
+- Options registry vs code: every `getenv("HM_...")` in `runtime/` is in the registry with a group, and every
+  registry entry exists in the code.
+- Outputs: each built into a temporary `HOME`; `.deb`/`.rpm` contents listed and compared with the Arch package's
+  file list; installing them is the owner's check on such a system.
+- Developer runs of the UI use a scratch `HOME`/`XDG_*` so nothing lands in the owner's real menu.
+
+### 8. Order of work
+
+1. Options registry + env-var audit (publication step 6); `launch.env` in the launcher.
+2. Own LZ4 block decoder (drop `python-lz4`); `installer/deps.py` table.
+3. UI model, `--answers`, plain-prompt fallback; then the curses screens and the file picker.
+4. Loose-folder output; manifest; update/uninstall.
+5. Bootstrap and `tools/release.py`; test against the private repository (push only with the owner's OK then).
+6. `.deb` and `.rpm` outputs; then AppImage; Flatpak last.
+
+## Part 2: the setup engine `python3 -m installer`
+
+Turns the user's own dump and keys into an install folder. Stdlib-only Python (except `python-lz4`, to be replaced);
+one JSON event per line on stdout; full log in `<temp>/run-<time>/logs/install.log`; exit status 0 only when the
+result is `ok`.
 
 ```
 python3 -m installer --base cadence-base.xci [--update cadence-update.nsp] --keys prod.keys --dest DIR
-                     [--temp DIR] [--root DIR] [--hactool EXE] [--firmware DIR] [--until STEP]
+                     [--temp DIR] [--root DIR] [--hactool EXE] [--imgui DIR] [--march v2|v3|native] [--until STEP]
 ```
 
-## Steps
+### Steps
 
-| Step | State | What it does |
-|---|---|---|
-| check | done | inputs exist; keys file sane (count only, never values; needs master key revision 0x0A); Python >= 3.11; free space; containers open with the keys |
-| extract | done | unpack the XCI secure partition (or NSP) into `<temp>/work/nca`; parse every CNMT; verify each needed NCA against its CNMT SHA-256 and the known-good table (`installer/known.py`); title keys from the cart's tickets into a private temp HOME; merge base + 1.4.0 update into `exefs/` + `romfs/`; verify ExeFS hashes and the RomFS manifest; extract the four DLC RomFS into `aoc/<title id>/` |
-| lift | M3 | ARM64 -> C into `<temp>/generated` |
-| compile | M3/M4 | clang + lld + ninja into the game executable |
-| shaders | M5 | needs a graphical session |
-| cleanup | | remove work files |
+| Step | What it does |
+|---|---|
+| check | inputs exist; keys file sane (count only, never values; needs master key revision 0x0A); Python >= 3.11; free space; containers open with the keys |
+| extract | unpack the XCI secure partition (or NSP) into `<temp>/work/nca`; parse every CNMT; verify each needed NCA against its CNMT SHA-256 and the known-good table (`installer/known.py`); title keys from the cart's tickets into a private temp HOME; merge base + 1.4.0 update into `exefs/` + `romfs/`; verify ExeFS hashes and the RomFS manifest; extract the four DLC RomFS into `aoc/<title id>/` |
+| lift | ARM64 -> C into `<temp>/generated` (`recomp/gen.py`) |
+| compile | `tools/build_game.py` (clang, lld, Ninja; `--march`, default x86-64-v2) into the game executable |
+| cleanup | remove work files |
 
-## Install folder
+No shader step: shaders are compiled on first use (docs/DECISIONS.md).
+
+### Install folder
 
 ```
 <dest>/
   exefs/  romfs/  aoc/<title id>/     extracted, verified game files
-  hm-install.json                     finished steps, version, extract sub-steps (resume)
+  hylian-melodies                     the game executable
+  hm-install.json                     finished steps, version, extract sub-steps, source hashes (resume)
 ```
 
-## Resume
+### Resume
 
 Each step records completion in `hm-install.json`; a rerun skips finished steps (event `resume`). Inside extract,
 sub-steps (`unpack`, `hashes`, `game`, `aoc`) are recorded too, and partial output lives in `.partial*` folders that
-are renamed into place only after verification, so a run killed at any point resumes cleanly.
+are renamed into place only after verification, so a run killed at any point resumes cleanly. Lift and compile also
+record a hash of their project sources (compile: and the CPU level) and run again when it changed.
 
-## Events
+### Events
 
 `start {steps}`, `step {step,msg}`, `progress {step,pct}` (integer, only on change), `info|warning|error
 {msg,args,text}` with `msg` an ID from `installer/messages.py`, `end {result: ok|error, ...}`.
 
-## Keys
+### Keys
 
 The keys file is read by hactool only (via `-k`); the installer reads it just to count entries and check which key
 names exist. hactool runs through `installer/hactool.py` with a private HOME under `<temp>/work/hactool-home` (0700,
