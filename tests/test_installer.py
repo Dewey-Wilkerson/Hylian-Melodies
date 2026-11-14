@@ -90,6 +90,28 @@ class Units(unittest.TestCase):
         self.assertTrue(any(v['event'] == 'error' and v['msg'] == 'missing_input' for v in evs))
 
 
+class SourceHash(unittest.TestCase):
+    """A step done before is redone when the project's sources it depends on changed (makepkg -f after a commit)."""
+
+    def test_changes_with_sources(self):
+        from installer import steps
+        root = tempfile.mkdtemp(prefix='hm-src-')
+        self.addCleanup(shutil.rmtree, root)
+        for f in ('recomp/gen.py', 'runtime/ui/menu.cpp', 'tools/build_game.py', 'VERSION'):
+            os.makedirs(os.path.dirname(os.path.join(root, f)) or root, exist_ok=True)
+            with open(os.path.join(root, f), 'w') as fh:
+                fh.write('1')
+        c = type('C', (), {})()
+        c.a = type('A', (), {'root': root})()
+        self.assertIsNone(steps.source_hash(c, 'extract'))
+        lift, comp = steps.source_hash(c, 'lift'), steps.source_hash(c, 'compile')
+        self.assertEqual(comp, steps.source_hash(c, 'compile'))
+        with open(os.path.join(root, 'runtime', 'ui', 'menu.cpp'), 'w') as fh:
+            fh.write('2')
+        self.assertNotEqual(comp, steps.source_hash(c, 'compile'))
+        self.assertEqual(lift, steps.source_hash(c, 'lift'))
+
+
 @unittest.skipUnless(os.environ.get('HM_TEST_XCI') and os.environ.get('HM_TEST_KEYS'), 'needs the game files')
 class Extraction(unittest.TestCase):
     def test_extract_twice_resumes_and_repo_stays_clean(self):

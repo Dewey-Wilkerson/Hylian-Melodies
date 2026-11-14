@@ -44,13 +44,21 @@ def main(argv=None):
     try:
         if not os.path.isfile(a.hactool):
             raise SetupError('missing_input', path=a.hactool)
+        redo = False  # (once a step runs again, every later one does too)
         for name in todo:
             ev.step(name)
-            if name != 'check' and st.done(name):
+            src = S.source_hash(c, name)
+            rec = st.data['steps'].get(name, {})
+            if name != 'check' and st.done(name) and not redo and rec.get('source') == src:
                 ev.info('resume', step=name)
                 ev.progress(name, 100)
                 continue
+            if name != 'check' and st.done(name):
+                ev.write_log(f'{name}: done before, but its sources changed since: again')
+                redo = True
             info = S.STEPS[name](c) or {}
+            if src:
+                info['source'] = src
             st.mark(name, **info)
     except SetupError as e:
         ev.error(e.msg, **e.args_)

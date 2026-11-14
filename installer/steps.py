@@ -26,6 +26,32 @@ class Ctx:
         return Hactool(self.hactool_exe, self.a.keys, log=self.log, home=os.path.join(self.work, 'hactool-home'))
 
 
+# The project's own sources each step's output depends on (besides the game): a step recorded as done is redone when
+# their hash changed since, e.g. makepkg -f after a code change resumes the extraction but compiles again.
+SOURCES = {
+    'lift': ('recomp',),
+    'compile': ('recomp', 'runtime', 'tools/build_game.py', 'tools/fetch_imgui.py', 'tools/imgui', 'VERSION'),
+}
+
+
+def source_hash(c, name):
+    """sha256 over the paths and contents of the step's source files (None: the step has none)."""
+    import hashlib
+    if name not in SOURCES:
+        return None
+    h = hashlib.sha256()
+    for top in SOURCES[name]:
+        p = os.path.join(c.a.root, top)
+        files = [p] if os.path.isfile(p) else sorted(
+            os.path.join(d, f) for d, ds, fs in os.walk(p) for f in fs
+            if '__pycache__' not in d and not f.endswith('.pyc'))
+        for f in files:
+            h.update(os.path.relpath(f, c.a.root).encode() + b'\0')
+            with open(f, 'rb') as fh:
+                h.update(hashlib.sha256(fh.read()).digest())
+    return h.hexdigest()
+
+
 def _inputs(c):
     files = [('base', c.a.base), ('keys', c.a.keys)] + ([('update', c.a.update)] if c.a.update else [])
     return files
@@ -294,6 +320,9 @@ def compile_game(c):
     import subprocess
     temp = os.path.dirname(c.work)
     gen_dir, build_dir = os.path.join(temp, 'generated'), os.path.join(temp, 'build')
+    if not all(os.path.isdir(os.path.join(gen_dir, m)) for m, _ in LIFT_MODULES):
+        c.log('compile: the generated C is gone (cleaned up after an earlier setup): lifting again first')
+        lift(c)
     cmd = [sys.executable, os.path.join(c.a.root, 'tools', 'build_game.py'), '--gen', gen_dir, '--out', build_dir,
            '--target', 'game', '--imgui', getattr(c.a, 'imgui', None) or os.path.join(c.a.root, 'toolchain', 'src', 'imgui')]
     c.log('compile: ' + ' '.join(cmd))
