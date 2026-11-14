@@ -22,7 +22,7 @@ needs the owner's approval first.
 | Component | How it is used | License |
 |---|---|---|
 | hactool (SciresM) | fetched at a pinned commit and built by `tools/build_hactool.py` on the user's machine; never vendored | ISC |
-| Dear ImGui (ocornut/imgui) | fetched at `97428e8` (v1.91.9) by `tools/fetch_imgui.py`, never vendored; its Vulkan backend gets `tools/imgui/0001-dynamic-vertex-input.patch` (from LAS Recomp, MIT) and `0002-nearest-font-sampler.patch` (ours) | MIT |
+| Dear ImGui (ocornut/imgui) | fetched at `97428e8` (v1.91.9) by `tools/fetch_imgui.py`, never vendored; its Vulkan backend gets `tools/imgui/0001-dynamic-vertex-input.patch` (from LAS Recomp, MIT) | MIT |
 | SDL 3 | system library, dynamically linked | zlib |
 | Vulkan loader / headers | system | Apache-2.0 |
 | python-lz4 | installer/lifter dependency | BSD-3-Clause |

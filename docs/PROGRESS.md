@@ -208,8 +208,8 @@ Done so far in M10: 60 Hz pacing, FPS in the title, F11 / Alt+Enter fullscreen t
 - 2026-11-14 M10: overlay settings menu (`runtime/ui/menu.cpp`, Dear ImGui on the Vulkan backend): F1 or Minus+Plus;
   Video, Audio, Controls (keyboard and gamepad rebinding), About; the game gets no input while it is open.
   `settings_save()` writes changed keys back into the player's ini in place (tests/test_settings_save.py). The menu
-  draws with the game's own BFFNT fonts read from the RomFS at start (`runtime/ui/game_font.c`, our reader:
-  BC4 block-linear sheets; 16 px text, 31 px heading, whole-number scale, unfiltered). Captures (kept outside the repo)
+  draws with the game's own large serif display face read from the RomFS at start (`runtime/ui/game_font.c`, our
+  reader: BC4 block-linear sheets; 42 px line, scaled to the window, heading 1.5x; owner's choice). Captures (kept outside the repo)
   checked at 1856x1044: crisp text, all bindings listed. Also: the setup now redoes lift/compile when their sources
   changed (makepkg -f had packaged a stale executable: packages before r25 lack the M10 commits); the ini takes
   south/east/west/north for face buttons (SDL3 doesn't); frame pacing follows the setting live.
