@@ -28,6 +28,11 @@ the ini if you prefer the labels: `pad.a = south` and `pad.b = east`.
 | + / - | Esc / Tab |
 | stick clicks | F / G |
 
+## Window
+
+F11 or Alt+Enter switches between a window and fullscreen (borderless, the desktop's resolution).
+`hylian-melodies --fullscreen` starts in fullscreen.
+
 ## Rebinding (`hylian-melodies.ini`)
 
 ```

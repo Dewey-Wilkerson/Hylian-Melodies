@@ -203,6 +203,19 @@ void input_handle_event(const SDL_Event *e) {
         LOG("[input] F9: debug frame requested\n");
         return;
     }
+    if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
+        (e->key.scancode == SDL_SCANCODE_F11 ||
+         (e->key.scancode == SDL_SCANCODE_RETURN && (e->key.mod & SDL_KMOD_ALT)))) {
+        // F11 / Alt+Enter: fullscreen (borderless, the desktop's resolution) <-> window
+        extern SDL_Window *ui_window(void);
+        SDL_Window *w = ui_window();
+        if (w) {
+            bool fs = (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0;
+            SDL_SetWindowFullscreen(w, !fs);
+            LOG("[input] %s\n", fs ? "windowed" : "fullscreen");
+        }
+        return;
+    }
     switch (e->type) {
     case SDL_EVENT_KEY_DOWN: case SDL_EVENT_KEY_UP: recompute_keys(); break;
     case SDL_EVENT_WINDOW_FOCUS_LOST: atomic_store(&key_bits, 0); break;  // (keys released while away)
