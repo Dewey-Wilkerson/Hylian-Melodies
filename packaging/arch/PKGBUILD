@@ -33,6 +33,9 @@ install=hylian-melodies-recomp.install
 PKGEXT='.pkg.tar'  # (gigabytes of already-compressed game data: compressing again only costs time)
 
 _repo=${HM_REPO:-$(realpath "$startdir/../..")}
+# CPU level of the game: v2 runs on any x86-64 CPU since ~2009 (default); v3 or native optimize for this computer
+# only (HM_MARCH=v3 makepkg)
+_march=${HM_MARCH:-v2}
 source=("hylian-melodies::git+file://$_repo"
         'cadence-base.xci'
         'prod.keys')
@@ -66,7 +69,7 @@ prepare() {
 }
 
 build() {
-    # makepkg's flags are for packaging: the game build chooses its own (-march from this CPU: x86-64-v3 or v2)
+    # makepkg's flags are for packaging: the game build sets its own -march (_march above)
     unset CFLAGS CXXFLAGS CPPFLAGS LDFLAGS
     export PYTHONDONTWRITEBYTECODE=1
 
@@ -104,7 +107,7 @@ PY
     cd "$srcdir/hylian-melodies"
     python -m installer --base "$srcdir/cadence-base.xci" --keys "$srcdir/prod.keys" \
         --dest "$srcdir/stage/hylian-melodies" --temp "$srcdir/install-temp" --root "$srcdir/hylian-melodies" \
-        --hactool "$srcdir/toolchain/hactool/hactool" --imgui "$srcdir/toolchain/src/imgui" | python "$srcdir/events.py" "$srcdir/hylian-melodies"
+        --hactool "$srcdir/toolchain/hactool/hactool" --imgui "$srcdir/toolchain/src/imgui" --march "$_march" | python "$srcdir/events.py" "$srcdir/hylian-melodies"
 
     # the menu icon: the game's own (from your cartridge's control data, extracted by the setup), else the project's
     if [ -f "$srcdir/stage/hylian-melodies/icon.jpg" ]; then

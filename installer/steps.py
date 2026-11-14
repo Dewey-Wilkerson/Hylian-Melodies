@@ -49,6 +49,8 @@ def source_hash(c, name):
             h.update(os.path.relpath(f, c.a.root).encode() + b'\0')
             with open(f, 'rb') as fh:
                 h.update(hashlib.sha256(fh.read()).digest())
+    if name == 'compile':  # (a different CPU level compiles again too)
+        h.update(b'march=' + (getattr(c.a, 'march', None) or 'v2').encode())
     return h.hexdigest()
 
 
@@ -324,7 +326,8 @@ def compile_game(c):
         c.log('compile: the generated C is gone (cleaned up after an earlier setup): lifting again first')
         lift(c)
     cmd = [sys.executable, os.path.join(c.a.root, 'tools', 'build_game.py'), '--gen', gen_dir, '--out', build_dir,
-           '--target', 'game', '--imgui', getattr(c.a, 'imgui', None) or os.path.join(c.a.root, 'toolchain', 'src', 'imgui')]
+           '--target', 'game', '--imgui', getattr(c.a, 'imgui', None) or os.path.join(c.a.root, 'toolchain', 'src', 'imgui'),
+           '--march', getattr(c.a, 'march', None) or 'v2']
     c.log('compile: ' + ' '.join(cmd))
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                          env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))

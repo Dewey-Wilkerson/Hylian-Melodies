@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Write a Ninja file that compiles the generated C (and the runtime) and run Ninja.
 
-  python3 tools/build_game.py --gen DIR --out DIR [--target linkcheck|game] [--march v3|v2|native] [--imgui DIR] [-j N]
+  python3 tools/build_game.py --gen DIR --out DIR [--target linkcheck|game] [--march v2|v3|native] [--imgui DIR] [-j N]
 
 linkcheck: every generated object + tests/c/linkcheck_stub.c linked as a shared object with --no-undefined
 (M3 acceptance: zero unresolved symbols). game: the runtime with the Vulkan backend and the SDL3 window + generated
 code -> hylian-melodies. headless: the null backend, no window -> hylian-melodies-headless (M4 boot tests).
 The game target also compiles Dear ImGui (the overlay menu) from --imgui DIR, default toolchain/src/imgui, fetched
 there by tools/fetch_imgui.py when missing (offline once its stamp matches).
-The -march level defaults to x86-64-v3 when the CPU has AVX2/FMA/BMI2, else x86-64-v2.
+The -march level defaults to x86-64-v2 (generic: any x86-64 CPU from about 2009 on), so the result runs on other
+machines too. --march v3 (AVX2/FMA/BMI2, 2013+) or native is the opt-in "optimize for this computer's CPU"; v3 is
+refused when this CPU lacks it, since the game could not start here.
 """
 
 import argparse
@@ -27,12 +29,16 @@ def nj(p):
     return p.replace('$', '$$').replace(' ', '$ ').replace(':', '$:')
 
 
-def cpu_level():
+MARCH = {'v2': 'x86-64-v2', 'v3': 'x86-64-v3', 'native': 'native'}
+DEFAULT_MARCH = 'v2'
+
+
+def cpu_has_v3():
     try:
         flags = open('/proc/cpuinfo').read().split('flags', 1)[1].split('\n', 1)[0].split()
     except (OSError, IndexError):
-        return 'x86-64-v2'
-    return 'x86-64-v3' if {'avx2', 'fma', 'bmi2', 'movbe'} <= set(flags) else 'x86-64-v2'
+        return False
+    return {'avx2', 'fma', 'bmi2', 'movbe'} <= set(flags)
 
 
 def main():
@@ -40,7 +46,8 @@ def main():
     ap.add_argument('--gen', required=True)
     ap.add_argument('--out', required=True)
     ap.add_argument('--target', choices=('linkcheck', 'game', 'headless'), default='game')
-    ap.add_argument('--march', default=None)
+    ap.add_argument('--march', choices=sorted(MARCH), default=DEFAULT_MARCH,
+                    help='v2 (default, runs on any x86-64 CPU since ~2009), v3 or native (this computer only)')
     ap.add_argument('--cc', default=os.environ.get('HM_CC', 'clang'))
     ap.add_argument('--imgui', default=os.path.join(ROOT, 'toolchain', 'src', 'imgui'))
     ap.add_argument('-j', type=int, default=os.cpu_count() or 4)
@@ -48,7 +55,9 @@ def main():
     for t in (a.cc, 'ninja', 'ld.lld'):
         if not shutil.which(t):
             sys.exit(f'build_game: {t} not found')
-    march = {'v3': 'x86-64-v3', 'v2': 'x86-64-v2', None: cpu_level()}.get(a.march, a.march)
+    if a.march == 'v3' and not cpu_has_v3():
+        sys.exit('build_game: --march v3 needs AVX2/FMA/BMI2/MOVBE, which this CPU lacks; use v2')
+    march = MARCH[a.march]
     gen, out = os.path.abspath(a.gen), os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
     rt = os.path.join(ROOT, 'runtime')

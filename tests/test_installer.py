@@ -110,6 +110,12 @@ class SourceHash(unittest.TestCase):
             fh.write('2')
         self.assertNotEqual(comp, steps.source_hash(c, 'compile'))
         self.assertEqual(lift, steps.source_hash(c, 'lift'))
+        v2 = steps.source_hash(c, 'compile')
+        c.a.march = 'v2'
+        self.assertEqual(v2, steps.source_hash(c, 'compile'))  # (v2 is the default)
+        c.a.march = 'v3'
+        self.assertNotEqual(v2, steps.source_hash(c, 'compile'))
+        self.assertEqual(lift, steps.source_hash(c, 'lift'))
 
 
 @unittest.skipUnless(os.environ.get('HM_TEST_XCI') and os.environ.get('HM_TEST_KEYS'), 'needs the game files')

@@ -13,7 +13,8 @@
 - SMAA anti-aliasing is not built (not useful for pixel art anyway).
 - Audio is measured (docs/audio.md) but not yet checked by ear against the beat; end-to-end latency to the speakers
   is not measured (use the game's calibration).
-- The package is built for this machine's CPU level (x86-64-v3 here); build it on the machine that plays it.
+- The game is built for x86-64-v2 by default, so a build runs on other x86-64 machines; `HM_MARCH=v3 makepkg` (or
+  `--march v3|native`) optimizes for the building computer, and that copy refuses to start on an older CPU.
 - Packages built before r25 (`0.1.0.r25.g089a5d2`) may hold an older executable than their version says (the setup
   resumed "compile already done"; fixed). Rebuild with `makepkg -f`.
 - The menu's scaling-filter change takes effect at the next start (the filter is built into the present shader).

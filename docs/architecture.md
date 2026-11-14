@@ -9,7 +9,7 @@ How *Cadence of Hyrule* 1.4.0 for Switch becomes a native Linux x86-64 program. 
    `romfs/` (base + 1.4.0 merged) and `aoc/<title>/` (DLC). See [installer.md](installer.md).
 2. **lift** (`recomp/gen.py`): `main` and `sdk` NSOs -> C, one C function per guest function, into
    `<temp>/generated/{main,sdk}/`. Every file starts with the content marker (never committed).
-3. **compile** (`tools/build_game.py`): clang -O1, `-march=x86-64-v3` (or v2 without AVX2/FMA), Ninja, lld.
+3. **compile** (`tools/build_game.py`): clang -O1, `-march=x86-64-v2` by default (generic); `--march v3|native` optimizes for the building computer only. Ninja, lld.
 4. **shaders**: translate and pre-build the game's shader variants (needs the GPU: graphical session).
 5. **cleanup**.
 

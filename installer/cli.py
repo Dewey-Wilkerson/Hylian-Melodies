@@ -1,5 +1,5 @@
 """python -m installer --base FILE [--update FILE] --keys FILE --dest DIR [--temp DIR] [--root DIR]
-                      [--hactool EXE] [--imgui DIR] [--until STEP]
+                      [--hactool EXE] [--imgui DIR] [--march v2|v3|native] [--until STEP]
 
 Prints one JSON event per line on stdout (installer/events.py); the full log goes to <temp>/run-*/logs/install.log.
 Exit status 0 only when the final result is ok."""
@@ -25,6 +25,9 @@ def main(argv=None):
                     help='repository root')
     ap.add_argument('--hactool', help='hactool built by tools/build_hactool.py (default: <root>/toolchain/hactool/hactool)')
     ap.add_argument('--imgui', help='Dear ImGui source fetched by tools/fetch_imgui.py (default: <root>/toolchain/src/imgui)')
+    ap.add_argument('--march', choices=('v2', 'v3', 'native'), default='v2',
+                    help='CPU level of the compiled game: v2 runs on any x86-64 CPU since ~2009 (default); '
+                         'v3 or native optimize for this computer and may not start on others')
     ap.add_argument('--until', choices=S.ORDER, help='stop after this step (development)')
     a = ap.parse_args(argv)
     a.dest = os.path.abspath(a.dest)

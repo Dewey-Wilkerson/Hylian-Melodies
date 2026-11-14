@@ -305,16 +305,23 @@ static void log_to_file_without_terminal(void) {
 }
 
 #if defined(__x86_64__)
-// The recompiled game code is built for x86-64-v3 (Makefile GENARCH: AVX2, FMA, BMI2): say so instead of crashing
-// with an illegal instruction on an older CPU.
+// The game is built for x86-64-v2 by default (tools/build_game.py), or v3/native when the player opted in: check the
+// level it was compiled for and say so instead of crashing with an illegal instruction on an older CPU.
 static void require_cpu(void) {
     __builtin_cpu_init();
-#ifndef __AVX2__
-    return;  // (built for x86-64-v2)
+    bool ok = __builtin_cpu_supports("sse4.2") && __builtin_cpu_supports("popcnt") && __builtin_cpu_supports("ssse3");
+    const char *need = "SSE4.2 and POPCNT (Intel Nehalem / 2008 or newer, AMD Bulldozer / 2011 or newer)";
+#ifdef __AVX2__
+    ok = ok && __builtin_cpu_supports("avx2") && __builtin_cpu_supports("fma") && __builtin_cpu_supports("bmi2");
+    need = "AVX2 (Intel Haswell / 2013 or newer, AMD Excavator / Zen or newer)";
 #endif
-    if (__builtin_cpu_supports("avx2") && __builtin_cpu_supports("fma") && __builtin_cpu_supports("bmi2")) return;
-    fprintf(stderr, "FATAL: Hylian Melodies needs a CPU with AVX2 (Intel Haswell / 2013 or newer, AMD Excavator / Zen or "
-                    "newer).\n");
+#ifdef __AVX512F__
+    ok = ok && __builtin_cpu_supports("avx512f");
+    need = "AVX-512 (this copy was built for the CPU of the computer that built it)";
+#endif
+    if (ok) return;
+    fprintf(stderr, "FATAL: this build of Hylian Melodies needs a CPU with %s. Rebuild it with the default CPU level "
+                    "(v2).\n", need);
     exit(1);
 }
 #else
