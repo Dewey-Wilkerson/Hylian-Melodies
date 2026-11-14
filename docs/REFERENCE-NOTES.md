@@ -12,8 +12,9 @@ Studied 2026-11-12.
 | [totk-pc-recomp](https://github.com/valentderah/totk-pc-recomp) | `7a37fc3` (2026-11-10) | MIT |
 | [super-odyssey-pc-recomp](https://github.com/Simon3Sarkis/super-odyssey-pc-recomp) | `c82448c` (2026-11-12) | MIT |
 
-The git history of this repository starts with an import of LASRecomp at `579fdad` (commit `9c20fa2`), the same
-commit as the reference checkout.
+This project began from an import of LASRecomp at `579fdad`, the same commit as the reference checkout
+(`~/refs`). That import commit was dropped from the history on 2026-11-14 (it held Link's Awakening data); the
+owner keeps the old history as a local backup bundle. Read LAS Recomp code from the reference checkout.
 
 ## SwitchRECOMP (read only: AGPL, see CONTRIBUTING.md)
 

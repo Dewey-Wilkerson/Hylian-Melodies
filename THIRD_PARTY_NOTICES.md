@@ -6,7 +6,7 @@ needs the owner's approval first.
 
 | Component | Source | Commit / version | License | Where | Notes |
 |---|---|---|---|---|---|
-| (history) LAS Recomp import | https://github.com/peiikai/LASRecomp | `579fdad6d736c8fbf1d21943593731eb926b6659` | MIT, Copyright (c) 2026 Peiikai | git history only (commit `9c20fa2`) | removed from the tree in M1; parts are re-added below as they are adapted |
+| (history) LAS Recomp import | https://github.com/peiikai/LASRecomp | `579fdad6d736c8fbf1d21943593731eb926b6659` | MIT, Copyright (c) 2026 Peiikai | not in this history (dropped 2026-11-14: it held Link's Awakening data); the owner keeps a local backup | parts are re-added below as they are adapted |
 | LAS Recomp lifter | https://github.com/peiikai/LASRecomp | `579fdad` | MIT, Copyright (c) 2026 Peiikai | `recomp/lifter.py`, `recomp/simd_c.py`, `recomp/nso.py` | copied (header added) |
 | LAS Recomp generator | same | `579fdad` | MIT | `recomp/gen.py`, `recomp/jumptables.py` | adapted from `tools/gen.py`: partitioning, scan, emitter, jump-table pattern search; Unicorn replaced by our own interpreter; game-specific hooks removed |
 | LAS Recomp CPU/runtime headers | same | `579fdad` | MIT | `runtime/cpu.h`, `runtime/simd.h`, `runtime/simd_fp.h`, `runtime/dispatch.c`, `runtime/rt.h` | copied (header added); adapted further from M4 |

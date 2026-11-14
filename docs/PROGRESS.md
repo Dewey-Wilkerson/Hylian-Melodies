@@ -256,3 +256,9 @@ Owner's decisions from the 2026-11-14 planning talk (information gathering only;
   author identity, the go-ahead and the tag. Step 4 (generic builds) done in code: x86-64-v2 default, `--march
   v3|native` opt-in through build_game.py, the setup and the PKGBUILD (`HM_MARCH`); v2 vs v3 frame times not yet
   measured (owner's OK for the run). Step 5: `docs/installer.md` part 1 holds the bootstrap + TUI design.
+- 2026-11-14 history rewritten (owner's OK; author pseudonym "Bagu" <bagu@hylian-melodies.invalid>, also the repo's
+  local git identity): the LAS Recomp import commit is gone, every commit ID changed, so commit IDs quoted above
+  (and `git show 9c20fa2:...` in old plans) refer to the old history: read LAS code from `~/refs` instead. Old
+  history: `~/.local/share/hylian-melodies/history-backup/hylian-melodies-pre-rewrite-0b2ec32.bundle`. Tag
+  `pin-m9-package-ok` still points at the OLD commit `ff19bbd` (rewritten twin `2d68a8a`): re-point it only with the
+  owner's OK, and never push tags before that. Old objects stay in `.git` until reflog expire + gc (owner's call).
