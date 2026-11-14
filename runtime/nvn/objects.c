@@ -821,12 +821,14 @@ NVN(nvnQueueAcquireTexture) {
 // interval). This game has no other pacing (it never waits on the vsync event; its own limiter alone ran it at
 // 61.07 fps), so the present keeps that cadence on the monotonic clock (ours, not LAS Recomp's: its game paced on the
 // vsync event). A present more than a period late restarts the cadence instead of bursting to catch up.
-// frame_pacing = 0 in the ini (or HM_FRAME_PACING=0) leaves the game to its own limiter.
+// frame_pacing = 0 in the ini or the menu (or HM_FRAME_PACING=0, which wins) leaves the game to its own limiter.
 static void display_cadence(int interval) {
-    static int on = -1;
-    if (on < 0) {
-        extern Settings g_settings;
-        on = getenv("HM_FRAME_PACING") ? atoi(getenv("HM_FRAME_PACING")) != 0 : g_settings.frame_pacing;
+    static int env = -2, was = -1;
+    if (env == -2) env = getenv("HM_FRAME_PACING") ? atoi(getenv("HM_FRAME_PACING")) != 0 : -1;
+    extern Settings g_settings;
+    int on = env >= 0 ? env : g_settings.frame_pacing;  // (the menu changes it live)
+    if (on != was) {
+        was = on;
         LOG("[pace] display cadence %s (60 Hz x the present interval)\n", on ? "on" : "off");
     }
     if (!on || interval <= 0) return;

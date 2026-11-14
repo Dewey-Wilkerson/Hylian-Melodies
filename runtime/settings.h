@@ -40,3 +40,11 @@ extern bool g_gpu_integrated;
 void settings_load(void);
 void settings_resolve_defaults(bool integrated);
 const char *settings_language(void);
+
+// Saving (the overlay menu): only what was changed is written; every other line of the file stays as it was.
+enum { SET_FULLSCREEN = 1 << 0, SET_UPSCALE_FILTER = 1 << 1, SET_SHOW_FPS = 1 << 2, SET_FRAME_PACING = 1 << 3,
+       SET_VOLUME = 1 << 4 };
+void settings_changed(unsigned which);                // SET_* bits: written at the next save
+void settings_set_binding_lines(const char *lines);   // key./pad. lines to replace all of the file's ("" = none: defaults)
+bool settings_save(void);                             // hylian-melodies.ini in the working directory (the player's folder)
+bool settings_save_to(const char *path);              // (tests) the same into path; true when written

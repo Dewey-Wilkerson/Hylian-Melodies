@@ -1,5 +1,5 @@
 """python -m installer --base FILE [--update FILE] --keys FILE --dest DIR [--temp DIR] [--root DIR]
-                      [--hactool EXE] [--until STEP]
+                      [--hactool EXE] [--imgui DIR] [--until STEP]
 
 Prints one JSON event per line on stdout (installer/events.py); the full log goes to <temp>/run-*/logs/install.log.
 Exit status 0 only when the final result is ok."""
@@ -24,10 +24,12 @@ def main(argv=None):
     ap.add_argument('--root', default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     help='repository root')
     ap.add_argument('--hactool', help='hactool built by tools/build_hactool.py (default: <root>/toolchain/hactool/hactool)')
+    ap.add_argument('--imgui', help='Dear ImGui source fetched by tools/fetch_imgui.py (default: <root>/toolchain/src/imgui)')
     ap.add_argument('--until', choices=S.ORDER, help='stop after this step (development)')
     a = ap.parse_args(argv)
     a.dest = os.path.abspath(a.dest)
     a.temp = os.path.abspath(a.temp or os.path.join(os.path.dirname(a.dest), 'install-temp'))
+    a.imgui = os.path.abspath(a.imgui) if a.imgui else os.path.join(a.root, 'toolchain', 'src', 'imgui')
     a.hactool = a.hactool or os.path.join(a.root, 'toolchain', 'hactool', 'hactool')
     run = os.path.join(a.temp, time.strftime('run-%Y%m%d-%H%M%S'))
     os.makedirs(os.path.join(run, 'logs'), exist_ok=True)

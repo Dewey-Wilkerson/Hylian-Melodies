@@ -9,6 +9,7 @@
 // HM_INPUT_SCRIPT=<frame>:<button>[+<button>...][/<frames>],... presses buttons at presented frames (test runs).
 #include <SDL3/SDL.h>
 #include <ctype.h>
+#include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +17,8 @@
 
 #include "../rt.h"
 #include "../rumble.h"
+#include "../settings.h"
+#include "menu.h"
 
 extern volatile uint64_t g_input_buttons;  // runtime/hle/input.c
 extern volatile int32_t g_input_sticks[4];
@@ -27,6 +30,8 @@ static const char *const bnames[NB] = {"a", "b", "x", "y", "lstick", "rstick", "
 #define MAXB 4
 static SDL_Scancode keymap[NB][MAXB];
 static int padmap[NB][MAXB];  // SDL_GamepadButton, or 100 + axis for the triggers
+// (the maps are read on the window thread and changed by the menu's Controls tab on the render thread)
+static pthread_mutex_t map_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void defaults(void) {
     for (int b = 0; b < NB; b++)
@@ -56,6 +61,24 @@ static void defaults(void) {
         {B_LEFT, SDL_GAMEPAD_BUTTON_DPAD_LEFT},   {B_RIGHT, SDL_GAMEPAD_BUTTON_DPAD_RIGHT},
     };
     for (unsigned i = 0; i < sizeof pd / sizeof pd[0]; i++) padmap[pd[i].b][0] = pd[i].p;
+}
+
+// Gamepad button names in the ini: SDL's ("a" = the bottom face button, "start", "dpup", "lefttrigger"...) and the
+// face buttons by position (south east west north), which this SDL doesn't take. Returns a padmap code or -1.
+static const char *const face_names[4] = {"south", "east", "west", "north"};  // (SDL_GAMEPAD_BUTTON_SOUTH..NORTH)
+static int pad_code_of(const char *t) {
+    for (int i = 0; i < 4; i++) if (!SDL_strcasecmp(t, face_names[i])) return SDL_GAMEPAD_BUTTON_SOUTH + i;
+    int p = SDL_GetGamepadButtonFromString(t);
+    if (p != SDL_GAMEPAD_BUTTON_INVALID) return p;
+    SDL_GamepadAxis ax = SDL_GetGamepadAxisFromString(t);
+    if (ax == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || ax == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) return 100 + ax;
+    return -1;
+}
+static const char *pad_code_name(int p) {  // (the ini's name; pad_code_of reads it back)
+    if (p >= SDL_GAMEPAD_BUTTON_SOUTH && p <= SDL_GAMEPAD_BUTTON_NORTH) return face_names[p - SDL_GAMEPAD_BUTTON_SOUTH];
+    if (p >= 100) return SDL_GetGamepadStringForAxis((SDL_GamepadAxis)(p - 100));
+    const char *n = SDL_GetGamepadStringForButton((SDL_GamepadButton)p);
+    return n ? n : "?";
 }
 
 static int button_of(const char *n) {
@@ -93,12 +116,8 @@ static void load_bindings(void) {
                 if (!n) for (int i = 0; i < MAXB; i++) keymap[b][i] = SDL_SCANCODE_UNKNOWN;
                 keymap[b][n++] = sc;
             } else {
-                int p = SDL_GetGamepadButtonFromString(t);
-                if (p == SDL_GAMEPAD_BUTTON_INVALID) {
-                    SDL_GamepadAxis ax = SDL_GetGamepadAxisFromString(t);
-                    if (ax == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || ax == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) p = 100 + ax;
-                    else { LOG("[input] unknown gamepad button \"%s\"\n", t); continue; }
-                }
+                int p = pad_code_of(t);
+                if (p < 0) { LOG("[input] unknown gamepad button \"%s\"\n", t); continue; }
                 if (!n) for (int i = 0; i < MAXB; i++) padmap[b][i] = -1;
                 padmap[b][n++] = p;
             }
@@ -115,6 +134,8 @@ static SDL_JoystickID pad_id;
 
 static void publish(void) {
     uint64_t b = atomic_load(&key_bits) | atomic_load(&pad_bits) | atomic_load(&script_bits);
+    bool captured = menu_input_captured();  // (the overlay menu is open: the game sees nothing held)
+    if (captured) b = 0;
     static int log = -1;
     if (log < 0) log = getenv("HM_LOG_INPUT") != NULL;
     if (log && b != g_input_buttons) {
@@ -124,15 +145,17 @@ static void publish(void) {
         LOG("[input] held:%s%s\n", names[0] ? names : " (none)", atomic_load(&pad_bits) ? " (gamepad)" : "");
     }
     g_input_buttons = b;
-    for (int i = 0; i < 4; i++) g_input_sticks[i] = atomic_load(&pad_axes[i]);
+    for (int i = 0; i < 4; i++) g_input_sticks[i] = captured ? 0 : atomic_load(&pad_axes[i]);
 }
 
 static void recompute_keys(void) {
     const bool *ks = SDL_GetKeyboardState(NULL);
     uint64_t b = 0;
+    pthread_mutex_lock(&map_lock);
     for (int i = 0; i < NB; i++)
         for (int j = 0; j < MAXB; j++)
             if (keymap[i][j] && ks[keymap[i][j]]) b |= 1ull << i;
+    pthread_mutex_unlock(&map_lock);
     atomic_store(&key_bits, b);
 }
 
@@ -144,6 +167,7 @@ static int32_t stick(int16_t v, bool invert) {
 static void recompute_pad(void) {
     uint64_t b = 0;
     if (pad) {
+        pthread_mutex_lock(&map_lock);
         for (int i = 0; i < NB; i++)
             for (int j = 0; j < MAXB; j++) {
                 int p = padmap[i][j];
@@ -152,6 +176,7 @@ static void recompute_pad(void) {
                                    : SDL_GetGamepadButton(pad, (SDL_GamepadButton)p);
                 if (on) b |= 1ull << i;
             }
+        pthread_mutex_unlock(&map_lock);
         atomic_store(&pad_axes[0], stick(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX), false));
         atomic_store(&pad_axes[1], stick(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY), true));  // (Switch: up is +)
         atomic_store(&pad_axes[2], stick(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHTX), false));
@@ -206,12 +231,14 @@ void input_handle_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat &&
         (e->key.scancode == SDL_SCANCODE_F11 ||
          (e->key.scancode == SDL_SCANCODE_RETURN && (e->key.mod & SDL_KMOD_ALT)))) {
-        // F11 / Alt+Enter: fullscreen (borderless, the desktop's resolution) <-> window
+        // F11 / Alt+Enter: fullscreen (borderless, the desktop's resolution) <-> window (for this run; the menu's
+        // Video tab keeps it for the next start)
         extern SDL_Window *ui_window(void);
         SDL_Window *w = ui_window();
         if (w) {
             bool fs = (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0;
             SDL_SetWindowFullscreen(w, !fs);
+            g_settings.fullscreen = !fs;
             LOG("[input] %s\n", fs ? "windowed" : "fullscreen");
         }
         return;
@@ -235,6 +262,127 @@ void input_handle_event(const SDL_Event *e) {
     default: return;
     }
     publish();
+}
+
+// ------------------------------------------------------------------ the menu's Controls tab (runtime/ui/menu.cpp)
+int input_button_count(void) { return NB; }
+const char *input_button_id(int b) { return b >= 0 && b < NB ? bnames[b] : "?"; }
+
+// Nothing held any more (the menu opened or closed: a press it took doesn't reach the game, nor stays held there).
+// Keys and buttons still down count again from their next event.
+void input_reset(void) {
+    atomic_store(&key_bits, 0);
+    atomic_store(&pad_bits, 0);
+    for (int i = 0; i < 4; i++) atomic_store(&pad_axes[i], 0);
+    publish();
+}
+
+static void key_label(SDL_Scancode sc, char *out, size_t cap) {
+    const char *n = SDL_GetScancodeName(sc);
+    snprintf(out, cap, "%s", n && *n ? n : "?");
+}
+static void pad_label(int p, char *out, size_t cap) {  // (what the player sees: positions, not maker's letters)
+    static const char *const face[4] = {"Bottom face", "Right face", "Left face", "Top face"};
+    static const struct { int p; const char *n; } other[] = {
+        {SDL_GAMEPAD_BUTTON_BACK, "Back / View"}, {SDL_GAMEPAD_BUTTON_START, "Start / Menu"},
+        {SDL_GAMEPAD_BUTTON_GUIDE, "Home"}, {SDL_GAMEPAD_BUTTON_LEFT_STICK, "Left stick click"},
+        {SDL_GAMEPAD_BUTTON_RIGHT_STICK, "Right stick click"}, {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, "Left shoulder"},
+        {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, "Right shoulder"}, {SDL_GAMEPAD_BUTTON_DPAD_UP, "D-pad up"},
+        {SDL_GAMEPAD_BUTTON_DPAD_DOWN, "D-pad down"}, {SDL_GAMEPAD_BUTTON_DPAD_LEFT, "D-pad left"},
+        {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, "D-pad right"}, {100 + SDL_GAMEPAD_AXIS_LEFT_TRIGGER, "Left trigger"},
+        {100 + SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, "Right trigger"},
+    };
+    if (p >= SDL_GAMEPAD_BUTTON_SOUTH && p <= SDL_GAMEPAD_BUTTON_NORTH) { snprintf(out, cap, "%s", face[p]); return; }
+    for (unsigned i = 0; i < sizeof other / sizeof other[0]; i++)
+        if (other[i].p == p) { snprintf(out, cap, "%s", other[i].n); return; }
+    snprintf(out, cap, "%s", pad_code_name(p));
+}
+
+// The bindings of button b, for display: "X, Return" / "Right face" ("-" when none).
+void input_binding_text(int b, bool padside, char *out, size_t cap) {
+    ensure_init();
+    out[0] = 0;
+    if (b < 0 || b >= NB || !cap) return;
+    size_t n = 0;
+    pthread_mutex_lock(&map_lock);
+    for (int j = 0; j < MAXB; j++) {
+        char one[48];
+        if (padside ? padmap[b][j] < 0 : !keymap[b][j]) continue;
+        if (padside) pad_label(padmap[b][j], one, sizeof one);
+        else key_label(keymap[b][j], one, sizeof one);
+        n += (size_t)snprintf(out + n, n < cap ? cap - n : 0, "%s%s", n ? ", " : "", one);
+        if (n >= cap) break;
+    }
+    pthread_mutex_unlock(&map_lock);
+    if (!out[0]) snprintf(out, cap, "-");
+}
+
+// key.<button> / pad.<button> lines for every button, for the ini (settings_save puts them in place of the old ones)
+static void bindings_to_settings(void) {
+    static char text[NB * 2 * 96];
+    size_t n = 0;
+    pthread_mutex_lock(&map_lock);
+    for (int side = 0; side < 2; side++)
+        for (int b = 0; b < NB; b++) {
+            n += (size_t)snprintf(text + n, sizeof text - n, "%s.%s =", side ? "pad" : "key", bnames[b]);
+            int k = 0;
+            for (int j = 0; j < MAXB; j++) {
+                if (side ? padmap[b][j] < 0 : !keymap[b][j]) continue;
+                n += (size_t)snprintf(text + n, sizeof text - n, "%s %s", k++ ? "," : "",
+                                      side ? pad_code_name(padmap[b][j]) : SDL_GetScancodeName(keymap[b][j]));
+            }
+            n += (size_t)snprintf(text + n, sizeof text - n, "\n");
+        }
+    pthread_mutex_unlock(&map_lock);
+    settings_set_binding_lines(text);
+}
+
+static void bindings_changed(void) {
+    recompute_keys();
+    recompute_pad();
+    publish();
+}
+
+// One binding for button b, replacing its others; a key or pad button bound to another button leaves that one.
+void input_bind_set(int b, bool padside, int code) {
+    ensure_init();
+    if (b < 0 || b >= NB) return;
+    pthread_mutex_lock(&map_lock);
+    for (int o = 0; o < NB; o++)
+        for (int j = 0; j < MAXB; j++) {
+            if (padside && padmap[o][j] == code) padmap[o][j] = -1;
+            if (!padside && keymap[o][j] == (SDL_Scancode)code) keymap[o][j] = SDL_SCANCODE_UNKNOWN;
+        }
+    for (int j = 0; j < MAXB; j++) {
+        if (padside) padmap[b][j] = j ? -1 : code;
+        else keymap[b][j] = j ? SDL_SCANCODE_UNKNOWN : (SDL_Scancode)code;
+    }
+    pthread_mutex_unlock(&map_lock);
+    LOG("[input] %s.%s bound to %s\n", padside ? "pad" : "key", bnames[b],
+        padside ? pad_code_name(code) : SDL_GetScancodeName((SDL_Scancode)code));
+    bindings_to_settings();
+    bindings_changed();
+}
+
+// Every binding back to the defaults above (the ini's key./pad. lines go at the next save).
+void input_bindings_reset(void) {
+    ensure_init();
+    pthread_mutex_lock(&map_lock);
+    defaults();
+    pthread_mutex_unlock(&map_lock);
+    LOG("[input] bindings reset to the defaults\n");
+    settings_set_binding_lines("");
+    bindings_changed();
+}
+
+// A press to bind (the Controls tab waiting for one): a key, or a gamepad button / trigger. Returns the code or -1.
+int input_bind_code(const SDL_Event *e, bool padside) {
+    if (!padside && e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) return (int)e->key.scancode;
+    if (padside && e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) return e->gbutton.button;
+    if (padside && e->type == SDL_EVENT_GAMEPAD_AXIS_MOTION && e->gaxis.value > 24000 &&
+        (e->gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || e->gaxis.axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER))
+        return 100 + e->gaxis.axis;
+    return -1;
 }
 
 // ------------------------------------------------------------------ scripted input (test runs)

@@ -295,7 +295,7 @@ def compile_game(c):
     temp = os.path.dirname(c.work)
     gen_dir, build_dir = os.path.join(temp, 'generated'), os.path.join(temp, 'build')
     cmd = [sys.executable, os.path.join(c.a.root, 'tools', 'build_game.py'), '--gen', gen_dir, '--out', build_dir,
-           '--target', 'game']
+           '--target', 'game', '--imgui', getattr(c.a, 'imgui', None) or os.path.join(c.a.root, 'toolchain', 'src', 'imgui')]
     c.log('compile: ' + ' '.join(cmd))
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                          env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
