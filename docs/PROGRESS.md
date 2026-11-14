@@ -268,3 +268,21 @@ Owner's decisions from the 2026-11-14 planning talk (information gathering only;
   pacer's own "a frame at 60" averages 1.0-1.4 ms either way. No measurable difference; run-to-run noise is larger.
   Found on the way (both levels alike): the pacer held the game's 30 fps mode in all four runs, in two of them for
   most of the run, although frames take ~1 ms: docs/KNOWN-ISSUES.md.
+
+## Next - handoff for a fresh session, 2026-11-14
+
+State: publication steps 1, 2, 4 and 5 of the section above are done (history rewritten as "Bagu"; revert tag
+`base-functionality`; x86-64-v2 default, v3/native opt-in, measured equal; installer design in `docs/installer.md`
+part 1). Nothing has been pushed yet: there's no remote. A side session is fixing the pacer's false 30 fps hold
+(docs/KNOWN-ISSUES.md); check `git log` and this file for its result before starting.
+
+Open, in order (each needs the owner where marked):
+1. Owner's call: `git reflog expire --expire=now --all && git gc --prune=now` to drop the old history's objects
+   (backup bundles in `~/.local/share/hylian-melodies/history-backup/`).
+2. Env-var audit (publication step 6): sort the `getenv("HM_...")` in `runtime/` into player / troubleshooting /
+   developer, remove dead LAS leftovers, and turn the result into `installer/options.py` plus a test that checks it
+   against the code (docs/installer.md sections 5 and 7).
+3. Own LZ4 block decoder replacing `python-lz4` in `recomp/nso.py`; `installer/deps.py` (docs/installer.md, section 8).
+4. TUI model + `--answers` + plain prompts, then curses screens and file picker; loose-folder output; manifest.
+5. Bootstrap `install.sh` + `tools/release.py`; private repo (owner creates it; push only with their OK then).
+Open questions 5 (AppImage tools) and minor leak items (mangled SDK names, code-address comments) are the owner's.
