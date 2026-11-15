@@ -361,3 +361,47 @@ Open questions 5 (AppImage tools) and minor leak items (mangled SDK names, code-
   (SteamOS) will get the AppImage as their channel; constraints written down in section 10. Next: options registry
   + env-var audit and `launch.env` (step 4), bootstrap `install.sh` + `tools/release.py` (step 5), curses screens
   and file picker (step 6), then AppImage.
+
+## Next - handoff for a fresh session, 2026-11-14 (evening)
+
+State: the first release is the **system package** (pacman / `.deb` / `.rpm`), and its whole path exists and is
+committed (`14a0138`; clean tree; nothing pushed, no remote yet). `python3 -m installer.tui` (plain prompts or
+`--answers FILE`) runs: `deps.py` (what the system lacks, the one command) -> hactool, plus our own static SDL3 /
+shaderc where a release needs them -> early input check -> setup -> `pack.py` -> manifest. Supported and tried in
+containers: Arch, Debian 12 and 13, Ubuntu 24.04 and 26.04, Fedora 43/45, openSUSE Tumbleweed
+(docs/installer.md sections 4, 9, 10; the design's order of work is section 8). 99 unit tests.
+
+Open, in order (docs/installer.md section 8, steps 4 to 6):
+1. **Options registry + env-var audit** (`installer/options.py`): sort the `getenv("HM_...")` in `runtime/` into
+   player / troubleshooting / developer, remove dead LAS leftovers, a test that checks the registry against the
+   code; `launch.env` read by the launcher (`packaging/arch/hylian-melodies.sh`: parsed, never sourced, `HM_*`
+   only); launch options in the prompts and the manifest (section 5).
+2. **Bootstrap** `install.sh` (POSIX sh, section 1) + `tools/release.py` (fills tag and tarball SHA-256). Test with
+   `--source PATH` first; the private repository is the owner's to create, and any push needs their OK then.
+   The bootstrap needs python3 on a bare system (Debian/Ubuntu images have none): its check must say so.
+3. **Curses screens + file picker** (sections 2, 3) on top of `plan.py` / `flow.py`; disk space on the summary.
+4. **AppImage channel** for immutable systems (SteamOS), owner's direction: section 10. `plan.OUTPUTS` /
+   `PLANNED` already name it. Still to bundle: FFmpeg. Build place: another computer, or a container on the device.
+5. Smaller: a clear message instead of an abort when there is no display (KNOWN-ISSUES); `-j` for the compile is
+   not plumbed through the setup; `packaging/arch/PKGBUILD` was changed (VMA fetch, no python-lz4) but `makepkg`
+   was not rerun with it; the flow's removal of `work/pack` after packing was added after the last full run.
+
+Owner-side, unchanged: `git reflog expire --expire=now --all && git gc --prune=now` for the old history's objects;
+the PKGBUILD's placeholder `url`; whether the brief (`hylian-melodies-prompt.md`) is published; movies through
+`libopenh264` on Fedora / openSUSE and any package install on a real desktop of another distro are untested
+(OPEN-QUESTIONS 8).
+
+How the checks of this session were done (to repeat them):
+- **Containers** (owner OK'd pulling images with podman for test builds; remove images and outputs afterwards):
+  bare image, install python3, then let `installer/deps.py` print the command and run exactly that, build with the
+  repo mounted read-only at `/repo`, `~/.cache/hylian-melodies/gen` at `/gen` (generated C from the dev machine, so
+  no dump or keys enter a container), an output folder under `~/.cache/hylian-melodies/ctr/`. For packages: a stage
+  made of symlinks to `packaging/arch/src/stage/hylian-melodies/{romfs,exefs,aoc,icon.jpg}` plus the executable
+  built there, then `python3 -m installer.pack`, install with the printed command, run the launcher as another
+  user, remove. The game cannot start there (no display).
+- **Full run here without touching the owner's settings**: `XDG_CACHE_HOME=<scratch>/cache
+  XDG_DATA_HOME=<scratch>/data python3 -m installer.tui --answers <file with base and keys>` (about 3 minutes).
+- **Static SDL3 / shaderc on the dev machine**: `python3 tools/build_sdl3.py`, `python3 tools/build_shaderc.py`,
+  then `build_game.py ... --out ~/.cache/hylian-melodies/build-own --sdl3 toolchain/sdl3 --shaderc
+  toolchain/shaderc` (that build exists; it ran 20 s cleanly with `HM_GAME_DIR=~/.cache/hylian-melodies/bench-game
+  HM_VK_NO_SPIRV_CACHE=1`). Running the game always needs the owner's OK first.

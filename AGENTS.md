@@ -74,6 +74,13 @@ python3 -m installer --base cadence-base.xci --keys prod.keys --dest ~/.cache/hy
 - The runtime takes SIGTERM: end test runs with `HM_RUN_SECONDS` (and `timeout -s KILL` as a backstop).
 - `pkill -f`/`pgrep -f <pattern>` match the shell running them (it killed the agent's shell twice); find processes
   by exact name (`pgrep -x`, `ps -eo comm`) or put the command in a script file.
+- The content guard refuses any 32- or 64-digit hex literal without a hash/commit context, also in tests: compute
+  such values (`hashlib`) instead of writing them out.
+- The project folder has a space in its name: never paste `pkg-config` output or unquoted paths into build flags
+  (`shlex.quote`); rpmbuild cannot work in a path with a space at all.
+- The owner's shell is zsh: no word splitting of unquoted variables in one-off commands; scripts are `sh`/Python.
+- Packages installed on the dev machine from the AUR hide missing dependencies (it happened with
+  `vulkan-memory-allocator`): a dependency counts as checked only after a build on a bare image.
 - When adapting LAS Recomp code: rename its user-visible strings and `LARECOMP_*` variables at once, and drop
   anything keyed to Link's Awakening's shader words, hashes or game data.
 
