@@ -41,3 +41,10 @@ game data, and their own `profile/` (saves), `hylian-melodies.ini`, `logs/`, `ca
 - The VMA header is fetched at a pinned commit (`tools/fetch_vma.py`), as the brief planned: the
   `vulkan-memory-allocator` package is AUR only.
 - The game's icon comes from the dump (owner's request), converted at build time; never stored in the repository.
+
+## The same package without makepkg's source step, and for other distros
+
+`python3 -m installer.pack --stage <setup folder> --out <folder>` wraps a finished setup folder (`python3 -m
+installer --dest ...`) as a pacman package, a `.deb` or an `.rpm`, with the paths and hooks above
+(docs/installer.md, section 4). It is what the installer UI will call; this PKGBUILD stays for building from a
+checkout.

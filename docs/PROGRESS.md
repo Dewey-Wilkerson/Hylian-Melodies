@@ -343,3 +343,12 @@ Open questions 5 (AppImage tools) and minor leak items (mangled SDK names, code-
   so shaderc compiles): window, audio out, shader programs compiled, both splash movies (H.264, AAC) decoded, title
   screen captured at frame 800 as PNG, 824 frames, clean exit, no error lines. Not checked by a person at the
   screen or by ear. Next: the three packers (docs/installer.md section 8, step 2).
+- 2026-11-14 packers (docs/installer.md section 8, step 2): `installer/pack.py` (`python3 -m installer.pack`): one
+  package tree from a finished setup folder, then makepkg / dpkg-deb / rpmbuild; dependencies derived from the
+  executable; hooks shared with the Arch `.install` file; `tests/test_pack.py`. Arch package built here from
+  `packaging/arch/src/stage` (35 s; file list identical to r28's; not installed). `.deb` and `.rpm` built,
+  installed with the printed command, launcher run as another user, removed, in containers of Debian 13, Ubuntu
+  24.04, Fedora 45, openSUSE Tumbleweed: all clean, saves kept on removal. Seen there: without a display the game
+  ends with an abort (core dump) rather than a message: worth a clear error (docs/KNOWN-ISSUES.md). Test images,
+  outputs and packages removed. Next: step 3 (UI model, `--answers`, plain prompts; the flow that runs deps ->
+  own libraries -> setup -> pack; manifest), then the options registry, the bootstrap.

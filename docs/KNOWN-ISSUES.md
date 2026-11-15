@@ -22,3 +22,5 @@
   its own waits, ~1 ms of work): in one of two scripted runs 2026-11-14 for most of the run, in the other for ~260
   frames. The game's own choice (the frame pacer no longer holds it there; fixed 2026-11-14, docs/PROGRESS.md); why
   its frame controller goes there with that much headroom is not yet known.
+- Started without a display (seen in containers), the game ends with an abort and a core dump instead of saying
+  that it found no display or no Vulkan device.

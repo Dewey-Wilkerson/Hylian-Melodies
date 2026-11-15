@@ -114,24 +114,35 @@ share it**.
 | **AppImage** (portable) | `mksquashfs`; zig (fetched, pinned) | inside the image | XDG data folder, like the package | replace the file; uninstall removes it and its menu entry |
 | **Flatpak** (last) | `flatpak-builder` | inside the app, built locally, never exported to a remote | the app's data folder | `flatpak uninstall` |
 
-- **System package** (the first output built; section 9 has the packages each distro needs). One path for all
-  three formats: the UI runs the setup engine itself into a staging folder (dump and keys read in place), then a
-  packer wraps that tree. The bootstrap's source is a tarball without `.git`, so the developer PKGBUILD
-  (`git+file://` source, `git describe` version, its own setup run in `$srcdir`) is not what the UI calls; it stays
-  for building from a checkout.
-  - Arch: a generated minimal PKGBUILD whose `package()` hard-links the staged tree (`makepkg` gives the pacman
-    metadata and fakeroot); same `.install` hooks, `PKGEXT=.pkg.tar`.
+- **System package** (the first output built; section 9 has the packages each distro needs). Implemented:
+  `python3 -m installer.pack --stage DIR --out DIR [--format arch|deb|rpm]` (`installer/pack.py`). One path for all
+  three formats: the setup engine fills a staging folder (dump and keys read in place), the packer lays out one
+  package tree from it (game data hard-linked, the executable copied and stripped of debug data, launcher, menu
+  entry, icon, default settings, license; nothing of a player's or the setup's own) and the distro's tool wraps it.
+  It prints a JSON line with the package file and the command to install it; it never installs and never needs root.
+  The bootstrap's source is a tarball without `.git`, so the developer PKGBUILD (`git+file://` source, `git
+  describe` version, its own setup run in `$srcdir`) is not what the UI calls; it stays for building from a checkout.
+  - Arch: a generated minimal PKGBUILD whose `package()` hard-links the tree (`makepkg -d` gives the pacman
+    metadata and fakeroot); the same `.install` hooks, `PKGEXT=.pkg.tar`.
   - Debian family: `dpkg-deb --root-owner-group -Znone --build` (no fakeroot, no `dpkg-dev`; the data is already
-    compressed); maintainer scripts generated from the `.install` hooks' logic.
-  - Fedora/openSUSE: `rpmbuild -bb` from a generated spec, staged tree as its source, uncompressed payload
-    (`%define _binary_payload w0.ufdio`), `%defattr(-,root,root)`.
+    compressed); `postinst` / `prerm` are the `.install` hooks' text plus a call (`configure` -> `post_install`,
+    `remove` -> `pre_remove`).
+  - Fedora/openSUSE: `rpmbuild -bb` from a generated spec whose `%install` hard-links the tree; uncompressed
+    payload, no debug package, no strip, `AutoProv: no`; `%post` / `%preun` are the same hooks (`%` doubled).
+    rpmbuild cannot work in a path with a space: the packer says so.
   - Run-time dependencies are never a hand-written list of library packages (their names carry soname versions
-    that change per release, e.g. the FFmpeg ones): they are derived from the built executable. pacman: the fixed
-    names of section 9; deb: each `DT_NEEDED` library resolved with `ldd`, then `dpkg-query -S` names its package;
-    rpm: rpmbuild's own ELF dependency generator. A Vulkan driver is a recommendation, not a dependency, outside
-    Arch (no common virtual name).
-  - Same package name (`hylian-melodies-recomp`), paths, launcher and version (`VERSION`, plus the tag) everywhere.
-    The UI prints e.g. `sudo pacman -U <file>` / `sudo apt install ./<file>` / `sudo dnf install <file>`.
+    that change per release, e.g. the FFmpeg ones): they come from the built executable. pacman and deb: each
+    `DT_NEEDED` library as `ldd` resolves it, then `pacman -Qqo` / `dpkg-query -S` names its package (pacman adds
+    `vulkan-driver`); rpm: rpmbuild's own ELF dependency generator. With our own static SDL3 the desktop libraries it
+    opens by name (found through `ldconfig -p`) become recommendations. `fontconfig` and `xdg-user-dirs` are
+    recommendations everywhere.
+  - Same package name (`hylian-melodies-recomp`), paths, launcher and hooks everywhere; version from `VERSION`.
+  - Tried 2026-11-14. Arch (dev machine): the file list equals the developer PKGBUILD's package (r28), all
+    `root:root`. In containers (Debian 13, Ubuntu 24.04 with our own SDL3, Fedora 45, openSUSE Tumbleweed), each from
+    a bare image: dependencies by `installer/deps.py`, game built there, package built, installed with the printed
+    command (dependencies resolved by apt / dnf / zypper), hooks ran, the launcher set up a player's folder as
+    another user (the game itself then stops: no display in a container), package removed: `/opt` and the launcher
+    gone, the player's saves and settings kept. Not tried: installing on a real desktop of those distros.
 - **Loose folder.** The install folder itself, with the executable at its top, plus (optional) a menu entry and icon
   in `~/.local/share/applications` and `~/.local/share/icons`. The launcher logic (player folder = install folder)
   becomes a mode of `hylian-melodies.sh` instead of a second script.
@@ -208,8 +219,8 @@ Owner, 2026-11-14: the first version gets the system packages right; the other o
 
 1. Dependencies: done 2026-11-14 (`installer/deps.py`, `python3 -m installer.deps`; own LZ4 decoder, VMA pinned,
    container check). Left: movies on Fedora/openSUSE on a real system.
-2. Packers on the staged tree: pacman, `.deb`, `.rpm` (section 4), each built into a temporary `HOME` and its file
-   list compared with the others.
+2. Packers on the staged tree: done 2026-11-14 (`installer/pack.py`, section 4; pacman, `.deb`, `.rpm`, each
+   installed and removed in a container, the pacman one compared with the developer PKGBUILD's).
 3. UI model, `--answers`, plain prompts (enough to drive 1 and 2); manifest; update/uninstall for packages.
 4. Options registry + env-var audit (publication step 6); `launch.env` in the launcher.
 5. Bootstrap and `tools/release.py`; test against the private repository (push only with the owner's OK then).
