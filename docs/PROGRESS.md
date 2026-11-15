@@ -443,3 +443,44 @@ How the checks of this session were done (to repeat them):
   the player's. Both targets build, 109 unit tests; `settings.c` checked alone against sample files. Not yet run in
   the game (needs the owner's OK): `gpu = N` picking that card and `log_input = 1` logging, from the ini.
   Next: the bootstrap (`install.sh` + `tools/release.py`, item 2 of the evening hand-off).
+- 2026-11-15 bootstrap (hand-off item 2). `install.sh`: POSIX sh, one `main` called on the last line (a cut-short
+  pipe runs nothing: checked at three cut points and under dash), questions on `/dev/tty` (none there: a message
+  pointing to `--answers`), checks Linux x86-64 and python3 >= 3.11 first and prints the distro's install command for
+  what is missing (a bare Debian/Ubuntu image has no python3), then a pinned release tarball checked by SHA-256
+  into `~/.cache/hylian-melodies/src/<tag>/` (reused offline), or `--source PATH` / `--source URL --ref REF`
+  (git, the player's own credentials), and starts `installer.tui --root <src> --source-note ...`, which shows the
+  source first. `tools/release.py --repo-url ...` makes the reproducible tarball (content guard over every file;
+  the brief left out), the filled `install.sh` and `SHA256SUMS` under `~/.cache/hylian-melodies/release/<tag>/`;
+  it pushes and uploads nothing. Release asset instead of GitHub's generated archive (docs/DECISIONS.md).
+  `tests/test_bootstrap.py` (8 tests) runs both end to end on a stand-in repository with `file://` releases; the
+  real tree's tarball passes the guard. In the local ubuntu:22.04 image, offline (dash): help, missing python3,
+  Python too old, no terminal, a cut-short pipe, `--source`. 117 unit tests.
+  Not done, needs the owner: a private repository to push to (and the OK to push), then `release.py` against a real
+  tag and `curl | sh` from it. No tag was created.
+  Next (evening hand-off items 3 to 5): curses screens + file picker; AppImage; the smaller items.
+- 2026-11-15 owner's test of the installer (scratch XDG folders, then the package installed): the build worked, but
+  the game's first start was windowed. The choices had gone into the scratch folder's ini while the game read the
+  real one. Fix: the choices also go into the package's default ini (`pack.pack(..., settings)`), which the
+  launcher copies at the first start wherever the player's folder is; the player's own ini is edited only when it
+  exists. 118 unit tests. Not re-run by the owner yet.
+- 2026-11-15 curses screens and file picker (evening hand-off item 3, owner: before the bootstrap is committed).
+  `installer/screens.py`: the installer's questions as full screens on a terminal of 80x24 or more, over the same
+  flow as the prompts (`--plain`, `TERM=dumb`, small terminals: the prompts). `installer/picker.py`: desktop portal
+  through PyGObject, then zenity, kdialog; else an in-terminal browser. Checked: `tests/test_screens.py` (field,
+  completion, browser, dialog order, and the real screens in a pseudo-terminal: a whole run with the dump picked
+  in the in-terminal browser, and quitting); each screen captured as text at 80x24 and read (long options wrap, a
+  long folder path shows its end). 126 unit tests. Not tried by the owner yet; the desktop dialogs (portal, zenity,
+  kdialog) were not opened here (they would appear on the owner's desktop).
+- 2026-11-15 owner's notes on the screens: the keys question shows the Ctrl+O / F2 hint too; after the build the
+  installer asks "Install it now?": yes runs the package manager's install command (`pack.commands`, through sudo)
+  on the plain terminal with the screens stepped aside, then Enter goes back and the result is shown; no prints the
+  command as before; a failed install says so and prints the command. `--answers` never installs. 128 unit tests
+  (the runner is a stand-in in tests; sudo was not run here).
+- 2026-11-15 owner: build folder, disk space, clean-up. Build options ask where the build happens (the cache folder
+  or another, with free space for each, checked at once; another folder gets `hylian-melodies/temp` and
+  `packages`); the summary shows space needed vs free; after a successful install the installer offers to delete
+  the package file; the last screen lists what stays on the computer besides the package's own files (sizes, what
+  each is, which can be deleted) with one `rm -rf` line for the deletable ones (`plan.leftovers`). Folder picking
+  in the dialogs (portal `directory`, zenity `--directory`, kdialog `--getexistingdirectory`) and in the in-terminal
+  list ("Use this folder"). 130 unit tests; the screens captured at 80x24 and read. Bootstrap, screens and these
+  are not committed yet (owner: commit after trying the screens).

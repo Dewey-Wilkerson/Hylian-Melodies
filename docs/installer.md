@@ -34,7 +34,7 @@ curl -fsSL <url>/install.sh | sh               bootstrap (POSIX sh, ~200 lines)
        ├─ build options, launch options (each with an explanation)
        ├─ summary -> confirm
        ├─ progress (setup engine's JSON events) -> output-specific packaging
-       └─ done: how to start it; the package manager command to run, if any; manifest written
+       └─ done: "install it now?" (the package manager through sudo, on the terminal) or the command; manifest
 ```
 
 ### 1. Bootstrap `install.sh`
@@ -44,11 +44,15 @@ curl -fsSL <url>/install.sh | sh               bootstrap (POSIX sh, ~200 lines)
 - **Prompts via `/dev/tty`.** stdin is the script itself, so every question reads from `/dev/tty` and the UI is
   started with `</dev/tty`. No usable `/dev/tty` (CI, cron): stop with a message pointing to the non-interactive mode
   (`--answers FILE`, section 2).
-- **Pinned and checked.** The release tool (`tools/release.py`, to write) fills two constants into the published
-  script: `HM_TAG=vX.Y.Z` and `HM_SHA256=<tarball sha256>`. The bootstrap downloads
-  `${HM_REPO_URL}/archive/refs/tags/$HM_TAG.tar.gz` (one default URL: the private repository during testing, the
-  public one later), checks the SHA-256 with `sha256sum` (or `shasum -a 256`), and refuses on mismatch. A matching
-  tarball already in the cache is reused (offline rerun).
+- **Pinned and checked.** The release tool (`tools/release.py`) fills three constants into the published script:
+  `HM_TAG=vX.Y.Z`, `HM_SHA256=<tarball sha256>` and `HM_REPO_URL` (one default URL: the private repository during
+  testing, the public one later; the environment may override it). The bootstrap downloads
+  `${HM_REPO_URL}/releases/download/$HM_TAG/hylian-melodies-$HM_TAG.tar.gz`, a release asset the release tool
+  makes itself (`git archive` of the tag, gzip without a timestamp: the same bytes every run), not GitHub's
+  generated tag archive, whose bytes GitHub does not promise to keep (docs/DECISIONS.md). It checks the SHA-256 with
+  `sha256sum` (or `shasum -a 256`) and refuses on mismatch, keeping nothing. A matching tarball already in the
+  cache is reused (offline rerun). The release tool runs the content guard over every file of the tarball first
+  and leaves the brief (`hylian-melodies-prompt.md`) out until its publication is decided.
 - **Where.** `~/.cache/hylian-melodies/src/$HM_TAG/` (`$XDG_CACHE_HOME` honoured). Nothing else is written by the
   bootstrap.
 - **Overrides.**
@@ -80,24 +84,33 @@ curl -fsSL <url>/install.sh | sh               bootstrap (POSIX sh, ~200 lines)
      too little disk is reported before anything long runs.
   5. *Output* (section 4), with what each one means for updates, removal and where saves live.
   6. *Build options* and 7. *Launch options* (section 5).
-  8. *Summary*: every choice, disk space needed vs free, then "Install".
+  8. *Summary*: every choice, disk space needed vs free (done 2026-11-15), then "Start".
   9. *Progress*: one line per setup step with a bar from the `progress` events, the message text from
      `installer/messages.py`, the log path; on `error`, the message and "retry" (the setup resumes) / "quit".
-  10. *Done*: how to start the game, the package manager command to run (system package), manifest written.
+  10. *Done*: "Install it now?" (system package): yes runs the package manager's install command on the plain
+      terminal (the screens step aside; sudo asks for the password there, pacman / apt / dnf / zypper ask their own
+      questions; Enter goes back), no prints the command. The installer itself never runs as root; `--answers`
+      only prints the command. After a successful install: "Delete the package file now?" (its size; it is not
+      needed once installed). Then the files the install leaves besides the package's own, each with its size, what
+      it is and whether it can be deleted (the package file if kept, kept build files, the toolchain, the
+      installer's downloaded source, and the player's folder with saves and settings: keep), and one `rm -rf` line
+      for the deletable ones. `--answers` shows the same list.
 
 ### 3. Picking the dump and keys
 
 Order, first that works:
 
-1. **Desktop portal** (`org.freedesktop.portal.FileChooser.OpenFile`) through the `gdbus` command (glib, present on
-   practically every desktop): call, then wait for the `Response` signal with `gdbus monitor`. Native dialog on GNOME,
-   KDE and others, also inside sandboxes. Stdlib Python has no D-Bus; a hand-written D-Bus client is not worth it.
+1. **Desktop portal** (`org.freedesktop.portal.FileChooser.OpenFile`) through PyGObject (`gi`) when the system
+   Python has it (most desktops do). Native dialog on GNOME, KDE and others, also inside sandboxes. Not through the
+   `gdbus` command as first planned: the portal sends its `Response` signal only to the connection that asked, so
+   a separate `gdbus monitor` never sees it. Stdlib Python has no D-Bus; a hand-written client is not worth it.
 2. `zenity --file-selection` or `kdialog --getopenfilename` when present.
-3. **In-terminal browser** (curses list: folders, `.xci`/`.nsp`/`.keys` highlighted, `~` and recent folders as
-   shortcuts). Used directly when there is no graphical session (`$DISPLAY` and `$WAYLAND_DISPLAY` unset, or
+3. **In-terminal browser** (curses list: folders first, files of the wanted kind first and highlighted, `~` home,
+   `.` hidden files, Left / Backspace up a folder). Used directly when there is no graphical session (`$DISPLAY` and `$WAYLAND_DISPLAY` unset, or
    `$SSH_CONNECTION` set).
 
-A typed path (with Tab completion) is always accepted. The files are used where they are: the setup reads the XCI
+Ctrl+O (or F2) on a file question opens it; a cancelled desktop dialog falls back to the in-terminal browser. A
+typed path (with Tab completion) or a file dragged onto the terminal is always accepted. The files are used where they are: the setup reads the XCI
 in place and hactool gets the keys with `-k <path>` (already so in `installer/hactool.py`); the manifest records the
 paths and the dump's SHA-256 (facts only), never the keys' contents.
 
@@ -164,7 +177,7 @@ also generates the env-var list in the docs; a test checks the registry against 
 |---|---|---|
 | CPU level | **v2** (default), v3, native | "Generic" runs on any x86-64 CPU since about 2009, also on other computers. "Optimize for this computer's CPU" (v3/native) may be a little faster and will not start on an older CPU. v3 is offered only when this CPU has it; AppImage is always v2. Passed as `--march`. |
 | Keep build cache | **off**, on | Keeps the generated C and compiled objects (several GB) in the temp folder: an update or option change then recompiles only what changed. |
-| Work folder | default `~/.cache/hylian-melodies/temp` | Where extraction and compilation happen; free space shown. |
+| Build folder | default `~/.cache/hylian-melodies` | Where extraction, compilation and the package go (`temp/`, `packages/`); another folder gets a `hylian-melodies/` folder inside it. Free space shown for each choice and checked at once (about 12 GiB while building, 2 GiB for the package); a refused folder is not kept. |
 | Parallel jobs | default: all cores | Fewer keeps the computer usable during the compile. |
 
 **Game settings** (no rebuild; written into the player's own `hylian-melodies.ini`, the file the in-game menu (F1)
@@ -174,8 +187,10 @@ reads and saves; `installer/options.py`):
   menu entry's "Play fullscreen" action stays.
 - Behind one "something is wrong" question: frame pacing off, the shader cache off, Vulkan validation, input and
   audio-timing logs (`frame_pacing`, `shader_cache`, `vk_validation`, `log_input`, `audio_stats`).
-- Only those keys are edited; every other line (the menu's choices, controls, the player's comments) stays. A
-  missing file starts as the package's commented default. A key set back to its default is commented out again.
+- They go into the package's default ini (`/usr/share/hylian-melodies-recomp/hylian-melodies.ini`), which the
+  launcher copies at a player's first start, wherever that player's folder is; and into the player's own ini when
+  one exists already (a rebuild, "change the game settings"). Only those keys are edited; every other line (the
+  menu's choices, controls, the player's comments) stays. A key set back to its default is commented out again.
 - Each setting's `HM_*` variable still wins when set in the environment (developers, test runs). The full list of
   variables, sorted into player / troubleshooting / developer / internal, is generated into `docs/env-vars.md`;
   a test checks it against every variable `runtime/` reads.
@@ -230,8 +245,9 @@ Owner, 2026-11-14: the first version gets the system packages right; the other o
    (`installer/plan.py`, `flow.py`, `tui.py`; section 10).
 4. Options registry + env-var audit (publication step 6); game settings written into the player's ini: done
    2026-11-15 (`installer/options.py`, section 5).
-5. Bootstrap and `tools/release.py`; test against the private repository (push only with the owner's OK then).
-6. Curses screens and the file picker; loose folder; then AppImage; Flatpak last.
+5. Bootstrap and `tools/release.py`: done 2026-11-15 (`install.sh`, `tests/test_bootstrap.py`, `file://` releases;
+   dash checked in a container). Still: a test against the private repository (push only with the owner's OK then).
+6. Curses screens and the file picker: done 2026-11-15. Then loose folder; AppImage; Flatpak last.
 
 ### 9. System packages (checked 2026-11-14)
 
@@ -340,9 +356,15 @@ portal file picker (`glib2` / `libglib2.0-bin` / `glib2`), optional because of t
 4. `tools/build_game.py` ignored a failing `pkg-config` (missing library -> a confusing compile error much later):
    fixed, it stops and names the modules.
 
-### 10. What exists (2026-11-14)
+### 10. What exists (2026-11-14; bootstrap 2026-11-15)
 
 ```
+install.sh [--source PATH | --source URL --ref REF | --tag vX.Y.Z --sha256 HEX] [--answers FILE] [--print-only]
+  checks (Linux x86-64, python3 >= 3.11, tar/gzip/curl-or-wget/sha256sum for a release; the distro's command
+  when one is missing) -> fetch + verify into ~/.cache/hylian-melodies/src/<tag>/ -> python3 -m installer.tui
+  --root <src> --source-note "<release vX.Y.Z, SHA-256 checked | unverified source: ...>" </dev/tty
+tools/release.py --repo-url https://... [--tag vX.Y.Z]
+  -> ~/.cache/hylian-melodies/release/<tag>/: hylian-melodies-<tag>.tar.gz, install.sh (filled), SHA256SUMS
 python3 -m installer.tui [--answers FILE.json]
   plan.py   Plan (base, update, keys, output, march, keep_cache, work, out), validate(), the manifest
   flow.py   check_system (deps.py) -> build_tools (hactool; SDL3 / shaderc where the release needs our own)
@@ -353,15 +375,22 @@ python3 -m installer.tui [--answers FILE.json]
 - Prompts: welcome; an existing build (build again with last time's files and options / remove: the package
   manager's command, then forgotten / start over); what the system lacks and the one command, "check again";
   the dump and the keys (typed or dropped paths, quotes and `file://` handled), checked at once against the keys;
-  CPU level (v3 only offered when this CPU has it); keep the build files; summary; progress; the install command.
+  CPU level (v3 only offered when this CPU has it); keep the build files; game settings; summary; progress;
+  install it now (the package manager through sudo) or the install command.
 - `--answers`: exit status 0 built, 1 failed, 2 the plan is wrong, 3 packages are missing (command printed).
 - Everything under `${XDG_CACHE_HOME:-~/.cache}/hylian-melodies/` (`toolchain/`, `temp/`, `packages/`) and the
   manifest under `${XDG_DATA_HOME:-~/.local/share}/hylian-melodies/installs.json`; developer runs point both
   variables at a scratch folder.
 - Tried here unattended with the real dump (scratch folders): 2 min 50 s from the answers file to a pacman
   package whose file list equals the developer PKGBUILD's; manifest written; no key value in any log.
-- Still to come from sections 2 to 6: the curses screens and file picker, disk space on the summary screen,
-  parallel jobs.
+- Screens (2026-11-15, `installer/screens.py`, `installer/picker.py`): the same questions as full curses screens
+  when the terminal is 80x24 or more (else, with `TERM=dumb` or with `--plain`, the prompts). `CursesIO` has the
+  console's `say` / `ask` plus `section`, `choose`, `ask_path` and `progress`, which `tui.py` uses when present:
+  one question flow, tested once. A title bar, the text since the last question (paragraphs reflowed, PgUp /
+  PgDn when long), the question as an arrow-key list or an edit field (Tab completion, Ctrl+O file picker), keys
+  at the bottom; Esc asks before quitting; the build shows each step with a bar; the last screen's text (the
+  install command) is printed to the terminal when the screens close.
+- Still to come from sections 2 to 6: parallel jobs.
 
 **Immutable systems (SteamOS and the like): the AppImage channel** (owner, 2026-11-14). A system whose root is
 read-only cannot install a package, so it gets its own output, `appimage`; the plan, the answers file and the

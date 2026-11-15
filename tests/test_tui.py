@@ -72,7 +72,12 @@ class FakeFlow:
 
     def make_package(self):
         type(self).calls.append('make_package')
-        return os.path.join(self.plan.out, 'x.deb')
+        type(self).packed_settings = dict(self.plan.settings)  # (what pack.pack would put in the default ini)
+        os.makedirs(self.plan.out, exist_ok=True)
+        target = os.path.join(self.plan.out, 'x.deb')
+        with open(target, 'wb') as f:
+            f.write(b'p' * 3000)
+        return target
 
     def record(self, target):
         type(self).calls.append('record')
@@ -96,7 +101,7 @@ class Base(unittest.TestCase):
                 f.write('x')
         FakeFlow.missing_rounds = FakeFlow.bad_inputs_rounds = 0
         FakeFlow.fail_setup = False
-        FakeFlow.calls = []
+        FakeFlow.calls, FakeFlow.packed_settings = [], None
 
 
 class PlanTests(Base):
@@ -177,10 +182,31 @@ class FlowTests(Base):
         with self.assertRaises(F.FlowError):
             f.check_system()
 
+    def test_leftovers(self):
+        plan = P.Plan(self.env)
+        repo = os.path.join(P.cache_home(self.env), 'src', 'v1.0.0')
+        for d in (repo, plan.toolchain, plan.work, os.path.dirname(plan.manifest)):
+            os.makedirs(d, exist_ok=True)
+        with open(os.path.join(plan.work, 'setup.log'), 'w') as f:
+            f.write('x' * 100)
+        os.symlink('/usr', os.path.join(os.path.dirname(plan.manifest), 'romfs'))  # (a link into the install: not counted)
+        got = {path: (size, removable) for path, size, _, removable in P.leftovers(plan, repo, '/no/package')}
+        self.assertEqual(set(got), {plan.work, plan.toolchain, os.path.join(P.cache_home(self.env), 'src'),
+                                    os.path.dirname(plan.manifest)})
+        self.assertEqual(got[plan.work], (100, True))
+        self.assertFalse(got[os.path.dirname(plan.manifest)][1])  # (the saves: keep)
+        self.assertLess(got[os.path.dirname(plan.manifest)][0], 1000)
+        self.assertNotIn(os.path.join(P.cache_home(self.env), 'src'),
+                         [p for p, *_ in P.leftovers(plan, ROOT)])  # (run from a checkout: no download to list)
+        self.assertEqual(P.size_text(3 << 30), '3.0 GiB')
+
     def test_record_and_error(self):
         f = self.flow('debian13')
         f.check_system()
         f.plan.settings = {'fullscreen': True}
+        os.makedirs(os.path.dirname(f.plan.settings_file))
+        with open(f.plan.settings_file, 'w') as fh:  # (a player who has started the game before)
+            fh.write('volume = 0.5\n')
         r = f.record('/pkgs/hylian-melodies-recomp_0.1.0_amd64.deb')
         self.assertEqual(r['install'], 'sudo apt install /pkgs/hylian-melodies-recomp_0.1.0_amd64.deb')
         e = P.load_manifest(f.plan.manifest)['installs'][0]
@@ -189,31 +215,53 @@ class FlowTests(Base):
         self.assertNotIn('sha256', e['inputs']['keys'])  # (the keys: their path only)
         self.assertNotIn('x', json.dumps(e['inputs']['keys']).replace(self.keys, ''))
         self.assertEqual(O.read_settings(f.plan.settings_file), {'fullscreen': True})
+        os.remove(f.plan.settings_file)
+        f.record('/pkgs/x.deb')
+        self.assertFalse(os.path.exists(f.plan.settings_file))  # (none yet: left to the package's default)
         r = f.error(F.FlowError('it broke', '/the.log'))
         self.assertEqual(r, {'result': 'error', 'text': 'it broke', 'log': '/the.log'})
 
 
 class TuiTests(Base):
-    def run_tui(self, *answers, argv=(), gpus=()):
+    def run_tui(self, *answers, argv=(), gpus=(), install_rc=0):
         io = Script(*answers)
-        rc = tui.main(list(argv), io=io, make_flow=FakeFlow, env=self.env, gpus=lambda: list(gpus))
+        self.ran = []
+
+        def run(argv):
+            self.ran.append(argv)
+            return install_rc
+        rc = tui.main(list(argv), io=io, make_flow=FakeFlow, env=self.env, gpus=lambda: list(gpus), run=run)
         return rc, io
 
     def test_straight_through(self):
-        rc, io = self.run_tui(f'"{self.xci}"', self.keys, '', '', '', '', '')
+        os.makedirs(P.Plan(self.env).toolchain)  # (what a real build leaves: listed at the end)
+        rc, io = self.run_tui(f'"{self.xci}"', self.keys, '', '', '', '', '', '', '', '')  # (install it now, delete it)
         self.assertEqual(rc, 0, io.text())
+        self.assertEqual(self.ran, [['sudo', 'apt', 'install', os.path.join(self.t, '.cache', 'hylian-melodies',
+                                                                             'packages', 'x.deb')]])
+        self.assertIn('Installed. Start it from the menu or with "hylian-melodies".', io.said)
+        self.assertFalse(os.path.exists(self.ran[0][-1]))  # (installed, then deleted as offered)
+        t = io.text()
+        self.assertIn('Files this left on your computer', t)
+        self.assertNotIn('x.deb', t[t.index('Files this left'):])  # (gone: not listed)
         self.assertEqual(FakeFlow.calls, ['check_system', 'build_tools', 'check_inputs', 'setup', 'make_package', 'record'])
         self.assertIn('  game starts      in a window', io.said)
         self.assertNotIn('Which graphics card should draw the game?', io.said)  # (one card: not asked)
         t = io.text()
         for want in ('never share it', 'Ready to build:', self.xci, '==> Compiling the game', '    50%',
-                     'Install it with:', 'sudo apt install '):
+                     'Install it now?'):
             self.assertIn(want, t)
 
     def test_missing_packages_then_check_again(self):
         FakeFlow.missing_rounds = 1
-        rc, io = self.run_tui('', self.xci, self.keys, '', '', '', '', '')
+        rc, io = self.run_tui('', self.xci, self.keys, '', '', '', '', '', '', 'no')
         self.assertEqual(rc, 0, io.text())
+        self.assertEqual(self.ran, [])  # (not now: the command is shown)
+        self.assertIn('Install it with:', io.said)
+        t = io.text()
+        left = t[t.index('Files this left on your computer'):]
+        self.assertIn('the package file: not needed once it is installed', left)
+        self.assertIn('rm -rf ', left)
         self.assertIn('  sudo apt install ninja-build', io.said)
         self.assertEqual(FakeFlow.calls[:2], ['check_system', 'check_system'])
         FakeFlow.missing_rounds, FakeFlow.calls = 1, []
@@ -222,13 +270,49 @@ class TuiTests(Base):
 
     def test_wrong_files_are_asked_again(self):
         FakeFlow.bad_inputs_rounds = 1
-        rc, io = self.run_tui('/no/such.xci', self.xci, self.keys, '', self.xci, self.keys, '', '', '', '', '')
+        rc, io = self.run_tui('/no/such.xci', self.xci, self.keys, '', self.xci, self.keys, '', '', '', '', '', '', 'no')
         self.assertEqual(rc, 0, io.text())
         self.assertIn('  The cartridge dump is not a file: /no/such.xci', io.said)
         self.assertIn('  Cannot read the dump with these keys', io.said)
 
+    def test_build_folder(self):
+        big = os.path.join(self.t, 'big disk')
+        os.makedirs(big)
+        plan = P.Plan(self.env)
+        free = {big: 500.0}
+        io = Script('2', '/nowhere', '2', big)  # another folder: not one, then a real one
+        tui.ask_build_folder(io, plan, self.env, free_gib=lambda p: next((v for k, v in free.items()
+                                                                          if p.startswith(k)), 3.0))
+        self.assertEqual((plan.work, plan.out), (os.path.join(big, 'hylian-melodies', 'temp'),
+                                                 os.path.join(big, 'hylian-melodies', 'packages')))
+        self.assertIn('  Not a folder: /nowhere', io.said)
+        self.assertEqual(P.build_folder(plan, self.env), big)
+        io = Script('1', '')  # the cache folder has too little room here: said, and asked again
+        tui.ask_build_folder(io, plan, self.env, free_gib=lambda p: 500.0 if p.startswith(big) else 3.0)
+        self.assertIn('Not enough free space', io.text())
+        self.assertEqual(P.build_folder(plan, self.env), big)
+        io = Script('')  # next time: the folder of last time is the default
+        tui.ask_build_folder(io, plan, self.env, free_gib=lambda p: 500.0)
+        self.assertEqual(P.build_folder(plan, self.env), big)
+        io = Script('1')
+        tui.ask_build_folder(io, plan, self.env, free_gib=lambda p: 500.0)
+        self.assertEqual(plan.work, os.path.join(P.cache_home(self.env), 'temp'))
+
+    def test_install_fails(self):
+        rc, io = self.run_tui(self.xci, self.keys, '', '', '', '', '', '', 'yes', install_rc=1)
+        self.assertEqual(rc, 0, io.text())
+        self.assertEqual(len(self.ran), 1)
+        t = io.text()
+        self.assertIn('The package manager stopped (exit status 1)', t)
+        self.assertIn('Install it with:', t)  # (then the command to run by hand)
+
+    def test_answers_never_install(self):
+        rc, io = self.run_tui(argv=self.answers(base=self.xci, keys=self.keys))
+        self.assertEqual((rc, self.ran), (0, []), io.text())
+        self.assertIn('Install it with:', io.said)
+
     def test_options_and_decline(self):
-        rc, io = self.run_tui(self.xci, self.keys, 'native', '2', '', '', 'no')
+        rc, io = self.run_tui(self.xci, self.keys, 'native', '2', '', '', '', 'no')
         self.assertEqual(rc, 0)
         self.assertNotIn('setup', FakeFlow.calls)
         self.assertIn('  CPU level        native', io.said)
@@ -236,7 +320,7 @@ class TuiTests(Base):
 
     def test_failure_and_input_ending(self):
         FakeFlow.fail_setup = True
-        rc, io = self.run_tui(self.xci, self.keys, '', '', '', '', '')
+        rc, io = self.run_tui(self.xci, self.keys, '', '', '', '', '', '')
         self.assertEqual(rc, 1)
         self.assertIn('It did not work: Compiling the game failed', io.said)
         self.assertIn('The full log: /setup.log', io.said)
@@ -250,7 +334,7 @@ class TuiTests(Base):
                                'inputs': {'base': {'path': self.xci}, 'keys': {'path': self.keys}},
                                'build': {'march': 'native', 'keep_cache': True},
                                'package': {'file': '/p/x.deb', 'remove': 'sudo apt remove x'}})
-        rc, io = self.run_tui('', '', '', '', '', '', '', '')  # again, and every default: the files and options of last time
+        rc, io = self.run_tui('', '', '', '', '', '', '', '', '', 'no')  # again, and every default: the files and options of last time
         self.assertEqual(rc, 0, io.text())
         self.assertIn('  CPU level        native', io.said)
         self.assertIn(f'  cartridge dump   {self.xci}', io.said)
@@ -265,14 +349,15 @@ class TuiTests(Base):
     def test_settings_questions(self):
         cards = [(0, 'Fast Card'), (1, 'Built-in Graphics')]
         # fullscreen yes; the second card; troubleshooting one by one: pacing no, shaders yes, the rest no; start
-        rc, io = self.run_tui(self.xci, self.keys, '', '', 'yes', '3', 'pick', '', 'yes', '', '', '', '', gpus=cards)
+        rc, io = self.run_tui(self.xci, self.keys, '', '', '', 'yes', '3', 'pick', '', 'yes', '', '', '', '', 'no',
+                              gpus=cards)
         self.assertEqual(rc, 0, io.text())
         self.assertIn('  3. Built-in Graphics', io.said)
         self.assertIn('  game starts      fullscreen, graphics card 1, rebuild the shaders at every start', io.said)
         self.assertNotIn('audio', ' '.join(a for a in io.asked if 'timing' not in a).lower())  # (no "no audio" option)
-        self.assertEqual(O.read_settings(self.ini()), {'fullscreen': True, 'gpu': 1, 'shader_cache': False})
-        with open(self.ini()) as f:
-            self.assertIn('# volume = 1.0', f.read())  # (started from the package's default file)
+        self.assertEqual({k: v for k, v in FakeFlow.packed_settings.items() if v != O.BY_KEY[k].default},
+                         {'fullscreen': True, 'gpu': 1, 'shader_cache': False})
+        self.assertFalse(os.path.exists(self.ini()))  # (a new player: the package's default carries them)
 
     def test_change_settings_without_rebuild(self):
         plan = P.Plan(self.env)
@@ -309,7 +394,7 @@ class TuiTests(Base):
         rc, io = self.run_tui(argv=self.answers(base=self.xci, keys=self.keys,
                                                 settings={'fullscreen': True, 'gpu': 1}))
         self.assertEqual(rc, 0, io.text())
-        self.assertEqual(O.read_settings(self.ini()), {'fullscreen': True, 'gpu': 1})
+        self.assertEqual(FakeFlow.packed_settings, {'fullscreen': True, 'gpu': 1})
         for bad in (dict(base=self.xci), dict(base=self.xci, keys=self.keys, output='appimage'),
                     dict(base=self.xci, keys=self.keys, settings={'HM_NO_AUDIO': '1'}),
                     dict(base=self.xci, keys=self.keys, settings={'gpu': 'fast; rm -rf'}),

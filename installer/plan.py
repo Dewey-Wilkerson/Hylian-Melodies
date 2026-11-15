@@ -128,6 +128,81 @@ def validate(plan, fmt=None, has_v3=None, free_gib=_free_gib):
     return bad
 
 
+def build_folder(plan, env=None):
+    """-> the folder the work files and the package go in: the cache folder by default, else the player's choice."""
+    work = os.path.dirname(plan.work)
+    return cache_home(env) if work == cache_home(env) else os.path.dirname(work)
+
+
+def place_build(plan, folder, env=None):
+    """The work folder and the package in folder: the cache folder's own temp/ and packages/, or a hylian-melodies
+    folder inside any other (so nothing is scattered among the player's files)."""
+    folder = os.path.abspath(os.path.expanduser(folder))
+    base = folder if folder == cache_home(env) else os.path.join(folder, 'hylian-melodies')
+    plan.work, plan.out = os.path.join(base, 'temp'), os.path.join(base, 'packages')
+
+
+def space(plan, free_gib=_free_gib):
+    """-> [(what, folder, GiB needed, GiB free or None)] for the summary."""
+    out = []
+    for what, path, need in (('while building', plan.work, NEED_WORK_GIB), ('for the package', plan.out, NEED_OUT_GIB)):
+        try:
+            free = free_gib(path)
+        except OSError:
+            free = None
+        out.append((what, path, need, free))
+    return out
+
+
+def du(path):
+    """-> bytes under path (symbolic links counted as links, not followed); 0 when it is not there."""
+    if os.path.islink(path) or os.path.isfile(path):
+        try:
+            return os.lstat(path).st_size
+        except OSError:
+            return 0
+    total = 0
+    for d, dirs, files in os.walk(path):
+        for f in files + [x for x in dirs if os.path.islink(os.path.join(d, x))]:
+            try:
+                total += os.lstat(os.path.join(d, f)).st_size
+            except OSError:
+                pass
+    return total
+
+
+def size_text(n):
+    for unit, step in (('GiB', GiB), ('MiB', 1 << 20), ('KiB', 1 << 10)):
+        if n >= step:
+            return f'{n / step:.1f} {unit}'
+    return f'{n} bytes'
+
+
+def leftovers(plan, repo, package=None):
+    """What the install leaves on this computer besides the installed package's own files, for the last screen.
+    -> [(path, bytes, what it is, True when it can be deleted)] of the ones that exist."""
+    cache = os.path.dirname(plan.toolchain)  # (the plan's own cache folder, as the build used it)
+    items = []
+    if package and os.path.isfile(package):
+        items.append((package, 'the package file: not needed once it is installed', True))
+    if os.path.isdir(plan.work) and os.listdir(plan.work):
+        items.append((plan.work, 'build files' + (' kept for a faster rebuild' if plan.keep_cache else
+                                                  ' (logs; the game files were removed)'), True))
+    items.append((plan.toolchain, 'tools the build made (hactool and the like); made again when needed', True))
+    src = os.path.join(cache, 'src')
+    if os.path.realpath(repo).startswith(os.path.realpath(src) + os.sep):
+        items.append((src, "the installer's source that install.sh downloaded", True))
+    data = os.path.dirname(plan.manifest)
+    items.append((data, 'your saves, settings and the list of builds: keep this (removing the package keeps it)',
+                  False))
+    seen, out = set(), []
+    for path, what, removable in items:
+        if os.path.exists(path) and path not in seen:
+            seen.add(path)
+            out.append((path, du(path), what, removable))
+    return out
+
+
 def sha256_file(path, progress=None):
     h = hashlib.sha256()
     size, done = os.path.getsize(path) or 1, 0

@@ -20,6 +20,7 @@ import subprocess
 import sys
 
 from . import deps
+from . import options
 
 NAME = 'hylian-melodies-recomp'
 SUMMARY = 'Native Linux build of your own Cadence of Hyrule (static recompilation; personal use only)'
@@ -100,7 +101,7 @@ def desktop_copy_path(env=None):
     return os.path.join(desk, 'hylian-melodies.desktop')
 
 
-def build_root(stage, repo, root):
+def build_root(stage, repo, root, settings=None):
     """Lay out the package tree in `root` (must not exist). -> the files and folders it holds, as package paths"""
     exe = os.path.join(stage, 'hylian-melodies')
     if not os.path.isfile(exe) or not os.path.isdir(os.path.join(stage, 'romfs')):
@@ -128,6 +129,8 @@ def build_root(stage, repo, root):
     put('packaging/arch/hylian-melodies.sh', 'usr/bin/hylian-melodies', 0o755)
     put('packaging/arch/hylian-melodies.desktop', 'usr/share/applications/hylian-melodies.desktop')
     put('packaging/hylian-melodies.ini', SUPPORT + '/hylian-melodies.ini')
+    if settings:  # the installer's choices in the default a player's first start copies (installer/options.py)
+        options.write_settings(os.path.join(root, SUPPORT, options.INI), settings)
     put('LICENSE', f'usr/share/licenses/{NAME}/LICENSE')
     icon = make_icon(stage, repo, root)
     with open(os.path.join(root, SUPPORT, 'desktop-copy'), 'w') as f:
@@ -366,13 +369,13 @@ def pack_arch(root, repo, out, work):
 
 # ------------------------------------------------------------------
 
-def pack(stage, repo, out, work, fmt):
+def pack(stage, repo, out, work, fmt, settings=None):
     stage, repo, out, work = (os.path.abspath(p) for p in (stage, repo, out, work))
     os.makedirs(out, exist_ok=True)
     os.makedirs(work, exist_ok=True)
     root = os.path.join(work, 'pkgroot')
     shutil.rmtree(root, ignore_errors=True)
-    files = build_root(stage, repo, root)
+    files = build_root(stage, repo, root, settings)
     if fmt == 'deb':
         target = pack_deb(root, repo, out, work)
     elif fmt == 'rpm':

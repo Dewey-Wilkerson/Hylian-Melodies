@@ -1,8 +1,8 @@
 """Game settings the installer asks about, and the one list of the game's HM_* environment variables.
 
-The player's choices go into the game's own settings file, hylian-melodies.ini in the player's folder
-(${XDG_DATA_HOME:-~/.local/share}/hylian-melodies/), the same file the in-game menu (F1) reads and saves, so the
-two never disagree. The installer edits only the keys it asks about and keeps every other line (docs/DECISIONS.md:
+The player's choices go into the game's own settings file, hylian-melodies.ini: the package's default copy (which
+the launcher copies at a player's first start) and the player's own in ${XDG_DATA_HOME:-~/.local/share}/
+hylian-melodies/ when it exists, the same file the in-game menu (F1) reads and saves, so the two never disagree. The installer edits only the keys it asks about and keeps every other line (docs/DECISIONS.md:
 the ini, not a launch.env). No rebuild is needed when they change.
 
 Every `getenv("HM_...")` / `ENV("HM_...")` in runtime/ is in exactly one group here (tests/test_options.py checks

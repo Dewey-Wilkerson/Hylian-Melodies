@@ -31,6 +31,14 @@ class Pack(unittest.TestCase):
             out += [os.path.relpath(os.path.join(d, f), self.root) for f in fs]
         return sorted(out)
 
+    def test_settings_in_the_default(self):
+        from installer import options
+        pack.build_root(self.stage, ROOT, self.root, {'fullscreen': True, 'gpu': 'auto'})
+        ini = os.path.join(self.root, 'usr/share/hylian-melodies-recomp/hylian-melodies.ini')
+        self.assertEqual(options.read_settings(ini), {'fullscreen': True})
+        with open(ini) as f:
+            self.assertIn('# volume = 1.0', f.read())
+
     def test_tree(self):
         files = pack.build_root(self.stage, ROOT, self.root)
         got = self.listing()

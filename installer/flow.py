@@ -136,7 +136,7 @@ class Flow:
         self.step('pack')
         p = self.plan
         try:
-            target = pack.pack(p.stage, self.repo, p.out, os.path.join(p.work, 'pack'), self.format)
+            target = pack.pack(p.stage, self.repo, p.out, os.path.join(p.work, 'pack'), self.format, p.settings)
         except pack.PackError as e:
             raise FlowError(str(e)) from None
         self.emit({'event': 'progress', 'step': 'pack', 'pct': 100})
@@ -146,9 +146,10 @@ class Flow:
         return target
 
     def save_settings(self):
-        """The plan's game settings into the player's ini: the game's own file, not the manifest, where the in-game
-        menu could not keep it current."""
-        if self.plan.settings:
+        """The plan's game settings into the player's ini when the player has one already. A new player gets them
+        from the package's default ini (make_package), which the launcher copies at the first start wherever the
+        player's folder is. Not in the manifest, where the in-game menu could not keep them current."""
+        if self.plan.settings and os.path.isfile(self.plan.settings_file):
             O.write_settings(self.plan.settings_file, self.plan.settings, default_settings(self.repo))
 
     def record(self, target):
