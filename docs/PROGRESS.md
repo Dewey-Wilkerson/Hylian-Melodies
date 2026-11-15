@@ -352,3 +352,12 @@ Open questions 5 (AppImage tools) and minor leak items (mangled SDK names, code-
   ends with an abort (core dump) rather than a message: worth a clear error (docs/KNOWN-ISSUES.md). Test images,
   outputs and packages removed. Next: step 3 (UI model, `--answers`, plain prompts; the flow that runs deps ->
   own libraries -> setup -> pack; manifest), then the options registry, the bootstrap.
+- 2026-11-14 installer flow (section 8, step 3; docs/installer.md section 10): `installer/plan.py` (plan, checks,
+  manifest), `installer/flow.py` (deps -> hactool / own SDL3 / own shaderc -> input check -> setup -> pack ->
+  manifest), `installer/tui.py` (`python3 -m installer.tui`: plain prompts, or `--answers FILE`), `tests/test_tui.py`
+  (scripted console, fake flow). Unattended run here with the real dump and `XDG_CACHE_HOME` / `XDG_DATA_HOME` in a
+  scratch folder: 2 min 50 s to a pacman package (file list equal to r28's), manifest written, no key value in the
+  logs. The prompts themselves were only driven by tests, not typed by a person. Owner: immutable systems
+  (SteamOS) will get the AppImage as their channel; constraints written down in section 10. Next: options registry
+  + env-var audit and `launch.env` (step 4), bootstrap `install.sh` + `tools/release.py` (step 5), curses screens
+  and file picker (step 6), then AppImage.

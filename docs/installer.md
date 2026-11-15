@@ -221,7 +221,8 @@ Owner, 2026-11-14: the first version gets the system packages right; the other o
    container check). Left: movies on Fedora/openSUSE on a real system.
 2. Packers on the staged tree: done 2026-11-14 (`installer/pack.py`, section 4; pacman, `.deb`, `.rpm`, each
    installed and removed in a container, the pacman one compared with the developer PKGBUILD's).
-3. UI model, `--answers`, plain prompts (enough to drive 1 and 2); manifest; update/uninstall for packages.
+3. UI model, `--answers`, plain prompts; manifest; build again / remove for packages: done 2026-11-14
+   (`installer/plan.py`, `flow.py`, `tui.py`; section 10).
 4. Options registry + env-var audit (publication step 6); `launch.env` in the launcher.
 5. Bootstrap and `tools/release.py`; test against the private repository (push only with the owner's OK then).
 6. Curses screens and the file picker; loose folder; then AppImage; Flatpak last.
@@ -332,6 +333,45 @@ portal file picker (`glib2` / `libglib2.0-bin` / `glib2`), optional because of t
    not started in them.
 4. `tools/build_game.py` ignored a failing `pkg-config` (missing library -> a confusing compile error much later):
    fixed, it stops and names the modules.
+
+### 10. What exists (2026-11-14)
+
+```
+python3 -m installer.tui [--answers FILE.json]
+  plan.py   Plan (base, update, keys, output, march, keep_cache, work, out), validate(), the manifest
+  flow.py   check_system (deps.py) -> build_tools (hactool; SDL3 / shaderc where the release needs our own)
+            -> check_inputs (setup --until check) -> setup -> make_package (pack.py) -> record (manifest)
+  tui.py    plain prompts over that flow, or no questions at all with --answers
+```
+
+- Prompts: welcome; an existing build (build again with last time's files and options / remove: the package
+  manager's command, then forgotten / start over); what the system lacks and the one command, "check again";
+  the dump and the keys (typed or dropped paths, quotes and `file://` handled), checked at once against the keys;
+  CPU level (v3 only offered when this CPU has it); keep the build files; summary; progress; the install command.
+- `--answers`: exit status 0 built, 1 failed, 2 the plan is wrong, 3 packages are missing (command printed).
+- Everything under `${XDG_CACHE_HOME:-~/.cache}/hylian-melodies/` (`toolchain/`, `temp/`, `packages/`) and the
+  manifest under `${XDG_DATA_HOME:-~/.local/share}/hylian-melodies/installs.json`; developer runs point both
+  variables at a scratch folder.
+- Tried here unattended with the real dump (scratch folders): 2 min 50 s from the answers file to a pacman
+  package whose file list equals the developer PKGBUILD's; manifest written; no key value in any log.
+- Still to come from sections 2 to 6: the curses screens and file picker, launch options and `launch.env`, the
+  options registry, disk space on the summary screen, parallel jobs.
+
+**Immutable systems (SteamOS and the like): the AppImage channel** (owner, 2026-11-14). A system whose root is
+read-only cannot install a package, so it gets its own output, `appimage`; the plan, the answers file and the
+manifest already know the name (and refuse it until it is built). What that channel has to solve, beyond
+section 4's notes:
+
+- *Where it is built.* Such a system cannot install the build packages either (clang, the development files).
+  Either the AppImage is built on another Linux computer and copied over (it is portable: x86-64-v2), or the build
+  runs inside a container on the device (SteamOS ships distrobox and podman). The flow's `check_system` step is the
+  place to choose "this system" or "a container"; the rest of the flow does not care.
+- *What goes inside.* Everything the game loads except the Vulkan driver and loader and the C library: our own
+  static SDL3 and shaderc (both exist now, section 9), and FFmpeg, which is the one library still to bundle.
+- *Old C library.* Built against an old glibc (section 4: `zig cc` target, or simply building in an old-release
+  container, which the Debian 12 work shows is possible) so it starts on every system.
+- *Player data* in the XDG data folder, as for the package; the menu entry is the player's own
+  (`~/.local/share/applications`), nothing system-wide.
 
 ## Part 2: the setup engine `python3 -m installer`
 

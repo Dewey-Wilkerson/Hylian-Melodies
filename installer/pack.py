@@ -32,6 +32,8 @@ HOOKS = 'packaging/arch/hylian-melodies-recomp.install'
 FORMATS = {'arch': 'arch', 'debian': 'deb', 'fedora': 'rpm', 'suse': 'rpm'}
 INSTALL = {'arch': 'sudo pacman -U {}', 'debian': 'sudo apt install {}', 'fedora': 'sudo dnf install {}',
            'suse': 'sudo zypper install --allow-unsigned-rpm {}'}
+REMOVE = {'arch': 'sudo pacman -R ' + NAME, 'debian': 'sudo apt remove ' + NAME, 'fedora': 'sudo dnf remove ' + NAME,
+          'suse': 'sudo zypper remove ' + NAME}
 OPTIONAL = ('fontconfig', 'xdg-user-dirs')  # (same names on all four families)
 
 # What a statically linked SDL3 loads by name at run time (tools/build_sdl3.py): not in the executable's DT_NEEDED,
@@ -385,6 +387,23 @@ def pack(stage, repo, out, work, fmt):
     return target
 
 
+def this_family():
+    try:
+        with open('/etc/os-release') as f:
+            return deps.family(deps.parse_os_release(f.read()))
+    except OSError:
+        return None
+
+
+def commands(fmt, target, fam=None):
+    """-> (install command, remove command) for a package of this format, worded for this distro family."""
+    fam = fam or this_family()
+    if FORMATS.get(fam) != fmt:
+        fam = {'arch': 'arch', 'deb': 'debian', 'rpm': 'fedora'}[fmt]
+    q = "'" + target.replace("'", "'\\''") + "'" if any(c in target for c in ' \'"$') else target
+    return INSTALL[fam].format(q), REMOVE[fam]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='python -m installer.pack', description=__doc__.splitlines()[0])
     ap.add_argument('--stage', required=True, help='the finished setup folder (python -m installer --dest)')
@@ -395,12 +414,7 @@ def main(argv=None):
     ap.add_argument('--root', default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     help='repository root')
     a = ap.parse_args(argv)
-    try:
-        with open('/etc/os-release') as f:
-            fam = deps.family(deps.parse_os_release(f.read()))
-    except OSError:
-        fam = None
-    fmt = a.format or FORMATS.get(fam)
+    fmt = a.format or FORMATS.get(this_family())
     if not fmt:
         print(json.dumps({'result': 'error', 'error': 'no package format for this distribution; pass --format'}))
         return 1
@@ -409,9 +423,7 @@ def main(argv=None):
     except PackError as e:
         print(json.dumps({'result': 'error', 'error': str(e)}))
         return 1
-    fam = fam if FORMATS.get(fam) == fmt else {'arch': 'arch', 'deb': 'debian', 'rpm': 'fedora'}[fmt]
-    q = "'" + target.replace("'", "'\\''") + "'" if any(c in target for c in ' \'"$') else target
-    print(json.dumps({'result': 'ok', 'format': fmt, 'file': target, 'install': INSTALL[fam].format(q)}))
+    print(json.dumps({'result': 'ok', 'format': fmt, 'file': target, 'install': commands(fmt, target)[0]}))
     return 0
 
 

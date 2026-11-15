@@ -24,7 +24,8 @@ The full brief is `hylian-melodies-prompt.md`; this file is the working summary.
 
 ```
 installer/       setup stages (check, extract, lift, compile, shaders, cleanup); JSON events on stdout;
-                 deps.py (what the system lacks, the install command), pack.py (pacman / .deb / .rpm)
+                 deps.py (what the system lacks, the install command), pack.py (pacman / .deb / .rpm),
+                 plan.py + flow.py + tui.py (the player-facing installer: python3 -m installer.tui)
 recomp/          lifter (ARM64 -> C) and install-time patch location (no game bytes)
 runtime/         C runtime: loader, kernel, IPC services, NVN-on-Vulkan, audio, input, saves
 tools/           build_game.py, build_hactool.py, fetch_imgui.py, fetch_vma.py, build_sdl3.py, build_shaderc.py
