@@ -85,6 +85,7 @@ class HookTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
 
 
+@unittest.skipUnless(os.path.exists(os.path.join(ROOT, '.git')), 'not a git checkout (a release tarball or zip)')
 class RepoTest(unittest.TestCase):
     def test_tracked_files_clean(self):
         r = subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'check_content.py'), '--tracked'],

@@ -42,3 +42,6 @@ refs/
 # Local settings
 config.local.toml
 .venv/
+
+# Local hand-out builds (tester zips): never committed
+dist/
