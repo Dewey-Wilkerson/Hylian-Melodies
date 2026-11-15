@@ -178,7 +178,6 @@ GameFont *game_font_pick(const char *romfs_dir, int want_line, const GameFont *s
 int game_font_line(const GameFont *f) { return f->line; }
 int game_font_cell_height(const GameFont *f) { return f->cell_h; }
 int game_font_glyphs(const GameFont *f, const GameGlyph **out) { *out = f->g; return f->ng; }
-const char *game_font_path(const GameFont *f) { return f->path; }
 
 // ---- sheets: Tegra block-linear (GOBs of 64 bytes x 8 rows, block_h GOBs high) over BC4 blocks (8 bytes each)
 static size_t gob_offset(size_t x, size_t y) {

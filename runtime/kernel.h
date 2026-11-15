@@ -38,7 +38,7 @@ struct KThread {
     KThread *wnext;
     KThread *snext;        // in WaitSynchronization (g_syncwaiters)
     pthread_cond_t cond;   // each thread sleeps on its own condition; wakers signal it directly
-    // in-place reboot (kernel_stop_threads): thread_main's setjmp point, where the thread unwinds to and ends
+    // thread_main's setjmp point, where svcExitThread unwinds to
     jmp_buf unwind;
     bool started, finished;
     KThread *anext;        // every thread of this boot (g_klock)
@@ -69,7 +69,6 @@ KObject *handle_get(uint32_t h);
 uint32_t kernel_new_handle(KObject *o);
 void kernel_signal(KObject *o);  // caller holds g_klock
 KEvent *kernel_create_event_pair(uint32_t *writable, uint32_t *readable);
-KThread *kernel_current_thread(void);
 // (diagnostics) the "[hang]" dump (kernel.c): every guest thread and what it waits on, the kernel trace
 void kernel_dump_threads(const char *prefix);
 // The renderer's part of the hang dump (runtime/nvn/rqueue.c), called from the hang watch thread every second:

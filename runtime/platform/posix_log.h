@@ -1,8 +1,8 @@
-// macOS / Linux session log (included by macos.c and linux.c): hylian-melodies.log in the data folder is always the latest
-// run; a new start moves the previous one aside as hylian-melodies-backup-<YYYYMMDD-HHMMSS>-<pid>.log (its last write, the
-// pid from its first line, 0 if unknown) and keeps the five newest of those, as on Windows. Moving instead of
-// truncating also means a copy still running or quitting keeps writing to its own (moved) file. Processes started by
-// this one (the start screen re-executing itself for the game) get LASRECOMP_LOG_APPEND and append to the same log.
+// macOS / Linux session log (included by linux.c, and by a future macos.c): hylian-melodies.log in the data folder is always the latest run; a new start
+// moves the previous one aside as hylian-melodies-backup-<YYYYMMDD-HHMMSS>-<pid>.log (its last write, the pid from
+// its first line, 0 if unknown) and keeps the five newest of those. Moving instead of truncating also means a copy
+// still running or quitting keeps writing to its own (moved) file. A process that re-executes itself (main.c, when
+// the guest address range was taken) passes HM_LOG_APPEND on and appends to the same log.
 #pragma once
 #include <dirent.h>
 #include <stdbool.h>
@@ -75,16 +75,15 @@ static void session_log_prune(const char *dir) {
 // stdout / stderr -> <dir>/hylian-melodies.log (path_out: its path, emptied on failure).
 static void session_log_open(const char *dir, char *path_out, size_t n) {
     snprintf(path_out, n, "%s/hylian-melodies.log", dir);
-    bool append = getenv("LASRECOMP_LOG_APPEND") != NULL;
+    bool append = getenv("HM_LOG_APPEND") != NULL;
     if (!append) {
-        session_log_backup(dir, "hylian-melodies.prev.log");  // (the earlier macOS scheme's one backup)
         session_log_backup(dir, "hylian-melodies.log");
         session_log_prune(dir);
     }
     if (!freopen(path_out, "a", stderr)) { path_out[0] = 0; return; }
     setvbuf(stderr, NULL, _IONBF, 0);
     dup2(STDERR_FILENO, STDOUT_FILENO);
-    setenv("LASRECOMP_LOG_APPEND", "1", 1);
+    setenv("HM_LOG_APPEND", "1", 1);
     // (a first line: an empty log then means writing failed - e.g. a full disk - not another start; its pid names
     // the backup later)
     time_t now = time(NULL);

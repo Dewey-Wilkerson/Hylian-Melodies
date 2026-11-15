@@ -73,9 +73,6 @@ class Plan:
                 v = clean_path(v) if v else getattr(self, k)
             setattr(self, k, v)
 
-    def to_dict(self):
-        return {k: getattr(self, k) for k in self.FIELDS}
-
     @property
     def stage(self):
         return os.path.join(self.work, 'stage', 'hylian-melodies')

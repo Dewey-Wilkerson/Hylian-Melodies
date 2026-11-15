@@ -24,7 +24,6 @@
 #include "record.h"
 #include "../renderer.h"
 #include "../pace.h"
-#include "../recolour.h"
 #include "../screen_filter.h"
 #include "../shader_prep.h"
 #include "../../settings.h"
@@ -48,7 +47,6 @@ static bool key_memo_on(void);
 static uint64_t prof_sets_reused, prof_sets_new;  // (VK_PROF) set reuse (allocations: record.c RecStats)
 static bool set_reuse_on(void);
 static uint64_t prof_slot_wait;  // (VK_PROF) sub(): ring slot waits (ns; GPU waits, inside "pre" when begin_pass starts a submission)
-static uint64_t prof_hook_draws, prof_hook_known;  // (VK_PROF) draws through the texture hook pass, with a known texture
 // HM_VK_PROF=1: render-thread time per category in the fps log (exec = whole command lists, draw = draw(),
 // sets = descriptor sets incl. cbuf copies, vtx = index scan + vertex copies, submit = vkQueueSubmit2)
 static int prof = -1;
@@ -320,8 +318,6 @@ static void gpu_timer_add(const uint64_t *t, bool skip, bool win) {
     if (prof) prof_gpu += ns;
 }
 
-// GPU time of all counted submissions so far (ns); -1: no GPU timer on this device
-int64_t vk_gpu_total_ns(void) { return gpu_timer_on ? (int64_t)__atomic_load_n(&gpu_total_ns, __ATOMIC_RELAXED) : -1; }
 // (cumulative) out: game submissions' GPU ns, window submissions' GPU ns, frame spans' ns, frames with a span.
 // false: no GPU timer.
 bool vk_gpu_split_ns(uint64_t out[4]) {
@@ -1131,10 +1127,6 @@ const char *renderer_stats(void) {
             snprintf(stats_text + n, sizeof stats_text - n, " | const blocks %s: %llu reused %llu copied", cbuf_lean() ? "lean" : "full",
                      (unsigned long long)prof_cb_reused, (unsigned long long)prof_cb_copied);
             prof_cb_reused = prof_cb_copied = 0;
-            n = strlen(stats_text);
-            snprintf(stats_text + n, sizeof stats_text - n, " | hook pass %llu draws, %llu with known textures",
-                     (unsigned long long)prof_hook_draws, (unsigned long long)prof_hook_known);
-            prof_hook_draws = prof_hook_known = 0;
             n = strlen(stats_text);
             snprintf(stats_text + n, sizeof stats_text - n, " | key memo %s: program %llu pipeline %llu of %llu", key_memo_on() ? "on" : "off",
                      (unsigned long long)prof_prog_memo, (unsigned long long)prof_pipe_memo, (unsigned long long)prof_key_draws);
@@ -2697,7 +2689,6 @@ static bool alias_make(NvnTexture *src, NvnTexture *dst, TexBackend *s, TexBacke
 void vk_alias_texture_destroyed(NvnTexture *t) {
     if (naliases) alias_before_write(t, 0, "freed");
 }
-void vk_alias_reset(void) { naliases = 0; }  // (reboot: every texture goes)
 
 // (renderer_stats, once per stats interval) copies made aliases / renamed / partly or fully copied later
 void vk_alias_stats(void) {
@@ -2889,21 +2880,6 @@ static bool snap_on(void) {
     return snap_state;
 }
 static uint64_t snap_ring_end(void) { return snap_on() ? snap_base + SNAP_RING : 0; }  // (heap offset; 0: no ring)
-static void snap_reset(void) {  // (vk_exec_reset: a reboot - the heap is set up again, its pages replaced)
-    snap_state = -1;
-    snap_base = snap_off = 0;
-    snap_half = 0;
-    snap_half_seq[0] = snap_half_seq[1] = 0;
-    snap_gen++;
-    nrs = 0;
-    sb_eff_on = false;
-}
-static void rs_level_tick(void) {  // (a new level: every range is probed again on its next use)
-    extern const char *game_level_name(void);
-    static char last[64];
-    const char *lv = game_level_name();
-    if (lv && strncmp(lv, last, sizeof last - 1)) { snprintf(last, sizeof last, "%s", lv); rs_level_gen++; }
-}
 static void rs_log(RangeState *e, const char *what, bool cs_slot, uint64_t f) {  // (rare: a new range, a decision)
     static int n;
     if (e->size >= 2040 ? n < 100000 : n++ < 200)  // (the small per-object ranges are many: capped)
@@ -3210,7 +3186,6 @@ static uint64_t snap_storage(uint64_t addr, uint64_t size, bool cs_slot) {
     extern int nvn_pool_flags_at(uint64_t addr);
     int pf = nvn_pool_flags_at(addr);
     if (pf < 0 || (pf & 1)) return addr;  // (CPU_NO_ACCESS: static data, nothing to race with)
-    rs_level_tick();
     extern uint64_t renderer_exec_frame(void);
     uint64_t f = renderer_exec_frame();
     rs_release_unused(f);
@@ -3664,21 +3639,6 @@ static const char *heap_map_placed(VkDeviceMemory mem) {
     if (!plat_reset_guest(HEAP_BASE, HEAP_BASE + HEAP_MAX)) FATAL("cannot restore the guest heap mapping\n");
     return "the driver's placed mapping failed";
 #endif
-}
-
-// The driver memory heap at a reboot (vk_exec_reset, GPU idle, guest threads stopped): the driver's mapping is left
-// as a reserved range (or unmapped), then HEAP_BASE gets fresh zeroed guest memory at once, so no hole is left in the
-// guest window until the window's reset.
-static void heap_unmap_placed(void) {
-    if (!gmem_placed) return;
-#ifdef VK_EXT_map_memory_placed  // (older Vulkan headers, e.g. Debian 12's 1.3.239: never placed, nothing to undo)
-    PFN_vkUnmapMemory2KHR unmap2 = (PFN_vkUnmapMemory2KHR)vkGetDeviceProcAddr(g_vk.dev, "vkUnmapMemory2KHR");
-    VkMemoryUnmapInfoKHR ui = {.sType = VK_STRUCTURE_TYPE_MEMORY_UNMAP_INFO_KHR, .memory = gmem_mem,
-                               .flags = 0};
-    if (g_vk.unmap_reserve) ui.flags = VK_MEMORY_UNMAP_RESERVE_BIT_EXT;
-    if (unmap2) unmap2(g_vk.dev, &ui);
-#endif
-    gmem_placed = false;
 }
 
 static bool guest_heap_dmabuf(void) {
@@ -4615,8 +4575,6 @@ static int pages_written(uint64_t addr, uint64_t size, uint32_t since, uint32_t 
 int vk_pages_changed(uint64_t addr, uint64_t size, uint32_t since, uint32_t *now) { return pages_written(addr, size, since, now, true); }
 // The storage write watch (watch_check): CPU writes only; the GPU's own writes to the range (DMA) don't count
 static int pages_cpu_written(uint64_t addr, uint64_t size, uint32_t since, uint32_t *now) { return pages_written(addr, size, since, now, false); }
-// (for textures.c) the same query
-int vk_pages_cpu_written(uint64_t addr, uint64_t size, uint32_t since, uint32_t *now) { return pages_cpu_written(addr, size, since, now); }
 // Pages [addr, addr+size) stamped written after generation `since` by the looks so far (no OS query: the caller just
 // looked at them). 1 yes, 0 no, -1 no tracking.
 static int pages_seen_written(uint64_t addr, uint64_t size, uint32_t since) {
@@ -4784,50 +4742,6 @@ static bool guest_direct(int kind, uint64_t addr, uint64_t size, VkBuffer *buf, 
 
 static int g_cs_n;  // (compute program table below)
 
-// In-place reboot (device.c backend_reset; GPU idle): drop what is keyed by guest addresses - programs by code
-// address (the old Prog / Pipe objects are leaked, so pipeline keys holding their pointers can't collide), compute
-// programs, shared copies - and the heap import: its pages are replaced (re-imported on first use).
-void vk_exec_reset(void) {
-    memset(prog_tab, 0, sizeof prog_tab);
-    memset(pipe_tab, 0, sizeof pipe_tab);
-    key_gen++;  // (the key memo: the tables' answers are gone)
-    ds_gen++;   // (set reuse: the heap import below is destroyed at once)
-    g_cs_n = 0;
-    gcopy_gen++;
-    if (gmem_buf) {
-#ifdef __linux__
-        bool placed = gmem_placed;
-        heap_unmap_placed();
-#endif
-        vkDestroyBuffer(g_vk.dev, gmem_buf, NULL);
-        vkFreeMemory(g_vk.dev, gmem_mem, NULL);
-        gmem_buf = VK_NULL_HANDLE;
-        gmem_mem = VK_NULL_HANDLE;
-#ifdef __linux__
-        if (placed && !plat_reset_guest(HEAP_BASE, HEAP_BASE + HEAP_MAX)) FATAL("cannot restore the guest heap mapping\n");
-        gmem_dmabuf = false;  // (the next boot decides again)
-#endif
-    }
-    gmem_size = gmem_tried = 0;
-    for (int k = 0; k < gc_n; k++) {  // (lazy chunks: their pages are replaced too)
-        if (gc[k].buf) { vkDestroyBuffer(g_vk.dev, gc[k].buf, NULL); vkFreeMemory(g_vk.dev, gc[k].mem, NULL); }
-        memset(&gc[k], 0, sizeof gc[k]);
-    }
-    gc_imported = 0; gc_scanned = 0; gc_imported_bytes = 0; gc_gen++;  // (gc_remembered stays: the same heap layout next boot)
-    gc_remembered_heap = 0;  // (imported again at the next boot's first chunk set)
-    if (gc_miss) { memset(gc_miss, 0, sizeof(uint32_t) * GC_MAX); memset(gc_miss + GC_MAX, 0xFF, sizeof(uint32_t) * GC_MAX); }
-    for (int i = 0; i < VC_TAB; i++)  // (the vertex cache: copies of the old pages)
-        if (vc_tab[i].buf) vmaDestroyBuffer(g_vk.vma, vc_tab[i].buf, vc_tab[i].mem);
-    memset(vc_tab, 0, sizeof vc_tab);
-    vc_npend = 0;
-    vc_free_dead(true);
-    vc_bytes = 0;
-    if (vc_page_gpu) memset(vc_page_gpu, 0, HEAP_MAX / VC_PAGE);
-    vc_epoch++;
-    snap_reset();  // (overlap: the storage copies' ring follows the heap, decided again once it is set up)
-    st_defaults();
-}
-
 // Shadow (sampler*Shadow) slots need a depth view whose format can be compared (VUID-vkCmdDrawIndexed-None-06479):
 // the colour dummy or a colour texture there is replaced by a 1x1 depth dummy at 1.0 (lit, textures.c). Each cause is
 // logged once (HM_SHADOW_SLOT_LOG=1: every change of cause / handle, up to 200 lines), with the texture's
@@ -4932,7 +4846,7 @@ static void texture_info(int stage, ShaderInfo *si, int i, VkDescriptorImageInfo
 // Writes the descriptor set of one stage. gx..gz: compute group counts (driver constants).
 // pre_ii: texture descriptors already resolved by the caller (draw: fragment textures, needed earlier for the
 // viewport decision), or NULL.
-static float g_mirror_w;  // mirror mode's composite: its render target width (rscale[65].x; 0 otherwise)
+#define TINT_FLOATS 16  // the per-draw tint buffer the translated fragment shaders declare (vec4[4], binding 19)
 
 // (set reuse) what a set holds, one entry per descriptor written, in stage_set's order (fixed per program)
 typedef struct { uint32_t binding, type; uint64_t a, b, c; } SetEnt;
@@ -4941,7 +4855,7 @@ typedef struct SetCache { uint64_t seq; uint32_t view_gen, ds_gen; int n; VkDesc
 // dyn / ndyn: the set's dynamic offsets are appended at dyn[*ndyn] (binding order, as vkCmdBindDescriptorSets takes
 // them); NULL for programs without dynamic buffers (compute).
 static VkDescriptorSet stage_set(Prog *p, VkDescriptorSetLayout layout, uint32_t set, int stage, ShaderInfo *si, const float *rscale_row0,
-                                 const float tint[RECOLOUR_TINT_FLOATS], uint32_t gx, uint32_t gy, uint32_t gz, const VkDescriptorImageInfo *pre_ii,
+                                 const float tint[TINT_FLOATS], uint32_t gx, uint32_t gy, uint32_t gz, const VkDescriptorImageInfo *pre_ii,
                                  uint32_t *dyn, uint32_t *ndyn) {
     VkWriteDescriptorSet w[MAX_BIND];
     VkDescriptorBufferInfo bi[MAX_BIND];
@@ -4954,7 +4868,7 @@ static VkDescriptorSet stage_set(Prog *p, VkDescriptorSetLayout layout, uint32_t
     if (!lean) memset(rs, 0, sizeof rs);
     rs[0][0] = rs[0][1] = 1; rs[0][2] = rs[0][3] = 0;
     if (rscale_row0) memcpy(rs[0], rscale_row0, 16);
-    rs[65][0] = g_mirror_w; rs[65][1] = rs[65][2] = rs[65][3] = 0;
+    rs[65][0] = 0; rs[65][1] = rs[65][2] = rs[65][3] = 0;
     for (int i = 0; i < p->nbinds; i++) {
         VkBindingInfo *b = &p->binds[i];
         if (b->set != set) continue;
@@ -5000,7 +4914,7 @@ static VkDescriptorSet stage_set(Prog *p, VkDescriptorSetLayout layout, uint32_t
             if (lean) bi[n] = ubo_span(rscale_dedupe(sg, (const float (*)[4])rs, si->ntex < 64 ? si->ntex : 64), sizeof rs);
             else bi[n] = ubo_span(copy_dedupe(sg ? DEDUPE_RSCALE_F : DEDUPE_RSCALE_V, rs, sizeof rs, 256), sizeof rs);
         } else {
-            float zero[RECOLOUR_TINT_FLOATS] = {0};
+            float zero[TINT_FLOATS] = {0};
             bi[n] = ubo_span(copy_dedupe(DEDUPE_TINT, tint ? tint : zero, sizeof zero, 256), sizeof zero);
         }
         w[n].pBufferInfo = &bi[n];
@@ -5600,29 +5514,9 @@ static void draw_(CmdRec *r, bool indexed) {
     for (int i = 0; i < st.rt.ncolor; i++) if (st.rt.color[i]) fkey.rt_kind[i] = (uint8_t)rt_kind(st.rt.color[i]->format);
     Prog *pr = get_program(st.program, &vkey, &fkey);
     if (!pr || atomic_load(&pr->state) != 1) { SKIP(!pr ? SK_NO_STAGES : atomic_load(&pr->state) == 2 ? SK_PROG_FAILED : SK_PROG_BUILDING); return; }
-    g_mirror_w = 0;
-    {   // mirror mode (runtime/hle/mirror.c; as renderer.m): the scene's composite into the window image is mirrored
-        extern bool mirror_draw(bool composite);
-        extern bool mirror_scene_size(uint32_t sw, uint32_t sh, uint32_t w, uint32_t h);
-        bool composite = false;
-        if (st.rt.ncolor && st.rt.color[0] && renderer_texture_presented(st.rt.color[0]) && !(st.color_state[0] & 1) &&
-            r->x[2] <= 6 && st.viewport[0][0] == 0 && st.viewport[0][1] == 0 &&
-            st.viewport[0][2] >= st.rt.color[0]->width && st.viewport[0][3] >= st.rt.color[0]->height && pr->fi->ntex) {
-            NvnTexture *t0 = shader_texture_object(1, &pr->fi->tex[0]);
-            composite = t0 && mirror_scene_size(t0->width, t0->height, st.rt.color[0]->width, st.rt.color[0]->height);
-            extern void scene_size_log(bool composite, uint32_t sw, uint32_t sh, uint32_t w, uint32_t h);
-            if (t0) scene_size_log(composite, t0->width, t0->height, st.rt.color[0]->width, st.rt.color[0]->height);
-        }
-        if (mirror_draw(composite)) {
-            vkey.flip_x = fkey.flip_x = true;
-            pr = get_program(st.program, &vkey, &fkey);
-            if (!pr || atomic_load(&pr->state) != 1) { SKIP(!pr ? SK_NO_STAGES : atomic_load(&pr->state) == 2 ? SK_PROG_FAILED : SK_PROG_BUILDING); return; }
-            g_mirror_w = (float)st.rt.color[0]->width;
-        }
-    }
     snap_apply(0, pr->vi->ssbo_read);  // (overlap) the storage slots the shaders read: a copy where the CPU rewrites the range
     snap_apply(1, pr->fi->ssbo_read);
-    {   // fragment-shader hash: interior backdrop detection (widescreen), skip lists, item twinkle (renderer.m)
+    {   // fragment-shader hash: the debug skip list (HM_SKIP_FSHASH) and log lines
         static uint64_t last_fs, last_hash;
         uint64_t fs = st.program->stages[1].code_addr;
         if (fs != last_fs) {
@@ -5639,13 +5533,8 @@ static void draw_(CmdRec *r, bool indexed) {
             }
         }
         for (int i = 0; i < nskip; i++) if (last_hash == skip[i]) { SKIP(SK_DEBUG_SKIP); return; }
-        extern bool pot_level_active(void);
         if (g_debug_frame && getenv("HM_LOG_FSHASH")) LOG("[fshash] fs=%llx hash %016llx\n", (unsigned long long)fs, (unsigned long long)last_hash);
         g_cur_fs_hash = last_hash;
-        extern void widescreen_backdrop_seen(uint64_t hash);
-        if (last_hash) widescreen_backdrop_seen(last_hash);
-        extern void widescreen_scene_ubo(const float *u, uint64_t size);  // (the camera's view-projection)
-        if (st.ubuf[0][5].addr) widescreen_scene_ubo((const float *)(uintptr_t)st.ubuf[0][5].addr, st.ubuf[0][5].size);
     }
     if (g_debug_frame) debug_draw(pr, r, indexed);
     if (ct_on()) ct_draw(pr, "draw");
@@ -5811,68 +5700,7 @@ static void draw_(CmdRec *r, bool indexed) {
     float *vp = st.viewport[0];
     float zn = st.depth_range[0][0], zf = st.depth_range[0][1];
     vp_sx = pass_sx; vp_sy = pass_sy; vp_ox = 0; vp_oy = 0;
-    // The hooks below look for known textures (texpatch ids, TexBackend.tp > 0) among the fragment textures: one pass
-    // finds the texture objects and whether any is known; the loops only run when one is (most draws have none).
-    // HM_VK_NO_HOOK_PASS=1: every loop looks its textures up, as before.
-    static int hook_pass = -1;
-    if (hook_pass < 0) hook_pass = getenv("HM_VK_NO_HOOK_PASS") == NULL;
-    NvnTexture *ftex[64];
-    bool fknown = true;
-    if (hook_pass) {
-        fknown = false;
-        for (int i = 0; i < pr->fi->ntex; i++) {
-            ftex[i] = shader_texture_object(1, &pr->fi->tex[i]);
-            const TexBackend *b = ftex[i] ? (const TexBackend *)ftex[i]->backend : NULL;
-            if (b && b->tp > 0) fknown = true;
-        }
-        prof_hook_draws++;
-        if (fknown) prof_hook_known++;
-    }
-#define FTEX(i) (hook_pass ? ftex[i] : shader_texture_object(1, &pr->fi->tex[i]))
-    {   // the Items page's cursor brackets while the cursor is on the companion card (runtime/hle/pets.c)
-        extern bool pets_hide_item_cursor(void);
-        extern bool texpatch_is_item_cursor(int id);
-        if (pets_hide_item_cursor() && fknown)
-            for (int i = 0; i < pr->fi->ntex; i++) {
-                NvnTexture *t = FTEX(i);
-                const TexBackend *b = t ? (const TexBackend *)t->backend : NULL;
-                if (b && b->tp > 0 && texpatch_is_item_cursor(b->tp - 1)) { SKIP(SK_HIDDEN); return; }
-            }
-    }
-    float tint[RECOLOUR_TINT_FLOATS] = {0};
-    int recol[2] = {0, 0};  // Cosmetics recolour textures' classes (runtime/nvn/recolour.c)
-    if (pr->fi->uses_tint) {
-        for (int i = 0; i < pr->fi->ntex && fknown; i++) {
-            NvnTexture *t = FTEX(i);
-            const TexBackend *b = t ? (const TexBackend *)t->backend : NULL;
-            if (b && b->tp > 0) recolour_add(recol, recolour_class_of(b->tp - 1));
-        }
-        recolour_tint_draw(recol, tint);  // (the highlights below win)
-        extern bool pot_tint(const float *m, float tint[8], uint64_t mesh);
-        extern bool pot_glow_active(void);
-        // (uniform buffer 2 = the model matrix, hardware cbuf 5 - only when the vertex shader reads it: a binding left
-        // from an earlier draw is another object's matrix)
-        if (((pr->vi->cbuf_mask >> 5) & 1) && st.ubuf[0][2].addr && st.ubuf[0][2].size >= 48 && pot_glow_active())
-            pot_tint((const float *)(uintptr_t)st.ubuf[0][2].addr, tint, st.vbuf[0].addr);
-        // the gold Escape Bottle (runtime/hle/escape.c): draws sampling the bottle's item icon / model map
-        // and the HUD hearts (heart colour, Cosmetics tab)
-        extern int texpatch_bottle_kind(int id);
-        extern int texpatch_heart_kind(int id);
-        extern void texpatch_heart_tint(int kind, float tint[8]);
-        int bottle = 0, heart = 0;
-        for (int i = 0; i < pr->fi->ntex && fknown; i++) {
-            NvnTexture *t = FTEX(i);
-            const TexBackend *b = t ? (const TexBackend *)t->backend : NULL;
-            if (b && b->tp > 0 && !bottle) bottle = texpatch_bottle_kind(b->tp - 1);
-            if (b && b->tp > 0 && !heart) heart = texpatch_heart_kind(b->tp - 1);
-        }
-        if (heart) texpatch_heart_tint(heart, tint);
-        if (bottle) {
-            extern void escape_bottle_tint(int kind, const float *ui, uint32_t ui_size, float tint[8]);
-            int u = bottle == 3 || bottle == 6 ? 3 : 0;  // (fairy / Piece of Power models: their bone matrices - souls.c, triforce.c)
-            escape_bottle_tint(bottle, (const float *)(uintptr_t)st.ubuf[0][u].addr, (uint32_t)st.ubuf[0][u].size, tint);
-        }
-    }
+    const float tint[TINT_FLOATS] = {0};  // the per-draw tint the translated fragment shaders declare: unused, zero
     // fragment textures are bound before deciding the viewport (tex_sc / tex_wh), rscale depends on the decision:
     // build the vertex set now and the fragment set after the decision (stage_set fills tex_sc for stage 1).
     if (prof) prof_dyn += SDL_GetTicksNS() - prof_td_;
@@ -5887,23 +5715,7 @@ static void draw_(CmdRec *r, bool indexed) {
         texture_info(1, pr->fi, i, &fii[i], sc, wh, fr);
         tex_sc[1][i][0] = sc[0]; tex_sc[1][i][1] = sc[1]; tex_wh[1][i][0] = wh[0]; tex_wh[1][i][1] = wh[1];
         tex_fr[1][i][0] = fr[0]; tex_fr[1][i][1] = fr[1];
-        // the Hint Sheet (runtime/hle/hint_sheet.c): the dungeon map's icon in place of the first bottle's
-        // (tp read after texture_info: its upload check may have identified the texture just now)
-        NvnTexture *t = FTEX(i);
-        const TexBackend *b = t ? (const TexBackend *)t->backend : NULL;
-        extern int texpatch_bottle_kind(int id);
-        if (b && b->tp > 0 && texpatch_bottle_kind(b->tp - 1) == 1) {
-            extern bool hint_sheet_icon_draw(const float *ui, uint32_t ui_size);
-            extern NvnTexture *texpatch_hint_icon(void);
-            NvnTexture *ht;
-            if (hint_sheet_icon_draw((const float *)(uintptr_t)st.ubuf[0][0].addr, (uint32_t)st.ubuf[0][0].size) &&
-                (ht = texpatch_hint_icon())) {
-                static NvnTextureView none;
-                fii[i].imageView = vk_view(ht, &none, false, false, pr->fi->tex[i].type);
-            }
-        }
     }
-#undef FTEX
     if (prof) prof_tex += SDL_GetTicksNS() - prof_tx_;
     if (fabsf(pass_sx - pass_sy) > 0.01f * pass_sy && st.rt.ncolor && renderer_texture_presented(st.rt.color[0])) {
         // Draws into the swapchain image (see renderer.m): composites fill the window, UI goes in a centred 16:9 box.
@@ -5914,9 +5726,7 @@ static void draw_(CmdRec *r, bool indexed) {
                 reads_scene = true;
         bool fullscreen_quad = r->x[2] <= 6 && st.viewport[0][0] == 0 && st.viewport[0][1] == 0 &&
                                st.viewport[0][2] >= st.rt.color[0]->width && st.viewport[0][3] >= st.rt.color[0]->height;
-        extern bool widescreen_ui_pane_partial(const float *u, uint64_t size);  // (a smaller layout pane: boxed UI)
-        bool fullscreen_fill = pr->fi->ntex == 0 && fullscreen_quad &&
-                               !widescreen_ui_pane_partial((const float *)(uintptr_t)st.ubuf[0][0].addr, st.ubuf[0][0].size);
+        bool fullscreen_fill = pr->fi->ntex == 0 && fullscreen_quad;
         if (fullscreen_quad && !reads_scene && pr->fi->ntex == 1 && (tex_sc[1][0][0] != 1 || tex_sc[1][0][1] != 1)) reads_scene = true;
         static uint64_t wide_frame = ~0ull;
         extern uint64_t renderer_exec_frame(void);  // (the frame being translated)
@@ -5938,16 +5748,13 @@ static void draw_(CmdRec *r, bool indexed) {
             vp_oy = (ph - st.rt.color[0]->height * u) * 0.5f;
         }
     }
-    {   // camera-attached effects sized for 16:9 are widened with the view (runtime/hle/widescreen.c)
-        extern float widescreen_effect_stretch(uint64_t fs_hash);
-        float k = widescreen_effect_stretch(g_cur_fs_hash);
+    {
         float vx = vp[0] * vp_sx + vp_ox, vw = vp[2] * vp_sx;
-        if (k > 1.0f) { vx -= vw * (k - 1) / 2; vw *= k; }
         set_viewport(vx, vp[1] * vp_sy + vp_oy, vw, vp[3] * vp_sy, zn, zf);
         if (g_debug_frame) {
             VkRect2D sr = scissor_rect();
-            LOG("[draw]   vp %.2f %.2f %.2f %.2f (stretch %.3f, fs hash %016llx) scissor %d %d %u %u | guest sc %d %d %d %d | pass %ux%u s %.4f %.4f\n",
-                vx, vp[1] * vp_sy + vp_oy, vw, vp[3] * vp_sy, k, (unsigned long long)g_cur_fs_hash, sr.offset.x, sr.offset.y,
+            LOG("[draw]   vp %.2f %.2f %.2f %.2f (fs hash %016llx) scissor %d %d %u %u | guest sc %d %d %d %d | pass %ux%u s %.4f %.4f\n",
+                vx, vp[1] * vp_sy + vp_oy, vw, vp[3] * vp_sy, (unsigned long long)g_cur_fs_hash, sr.offset.x, sr.offset.y,
                 sr.extent.width, sr.extent.height, st.scissor[0][0], st.scissor[0][1], st.scissor[0][2], st.scissor[0][3], pass_w, pass_h,
                 vp_sx, vp_sy);
             Range u = st.ubuf[1][0];  // (the fragment stage (NVN stage 1)'s binding 0 = the shader's c3: this game's per-sprite tint and parameters)
@@ -6076,43 +5883,8 @@ static void draw_(CmdRec *r, bool indexed) {
 
     if (prof) prof_vtx += SDL_GetTicksNS() - prof_t2_;
     // ---- draw
-    // Instanced draws with item spots among their instances (bushsanity: bushes are drawn in batches, each instance's
-    // model matrix in vertex storage buffer 0, indexed by instance id): drawn as runs of instances, gold runs tinted
-    // (as renderer.m; gl_InstanceIndex includes the base instance, so a run [b + k, b + k + n) draws exactly those).
-    // Only for a vertex shader that reads storage buffer 0 (its binding stays from the last draw that set it).
-    enum { MAX_RUNS = 64 };
-    uint32_t run_at[MAX_RUNS], run_n[MAX_RUNS];
-    bool run_gold[MAX_RUNS];
-    int nruns = 0;
-    if (pr->fi->uses_tint && (pr->vi->ssbo_read & 1) && st.sbuf[0][0].addr) {
-        extern bool pot_glow_active(void);
-        extern bool pot_instance_gold(const float *m);
-        uint64_t recs = st.sbuf[0][0].size / 64;
-        if (pot_glow_active() && (uint64_t)base_inst + inst <= recs) {
-            const float *m = (const float *)(uintptr_t)st.sbuf[0][0].addr;
-            for (uint32_t i = 0; i < inst; i++) {
-                bool g = pot_instance_gold(m + (size_t)(base_inst + i) * 16);
-                if (nruns && run_gold[nruns - 1] == g) { run_n[nruns - 1]++; continue; }
-                if (nruns == MAX_RUNS) { nruns = 0; break; }  // (too fragmented: draw as is)
-                run_at[nruns] = i; run_n[nruns] = 1; run_gold[nruns] = g; nruns++;
-            }
-            if (nruns == 1 && !run_gold[0]) nruns = 0;
-        }
-    }
-    if (!nruns) { run_at[0] = 0; run_n[0] = inst; nruns = 1; run_gold[0] = false; }
-    for (int ri = 0; ri < nruns; ri++) {
-        if (nruns > 1 || run_gold[0]) {  // this run's tint: a fragment set of its own
-            float rtint[RECOLOUR_TINT_FLOATS] = {0};
-            extern void pot_gold_tint(float tint[8]);
-            if (run_gold[ri]) pot_gold_tint(rtint);
-            else recolour_tint_draw(recol, rtint);
-            uint32_t rdyn[MAX_BIND], nrdyn = 0;
-            VkDescriptorSet rset = stage_set(pr, pr->set_layout[1], 1, 1, pr->fi, rs0, rtint, 0, 0, 0, fii, rdyn, &nrdyn);
-            rec_CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pr->layout, 1, 1, &rset, nrdyn, nrdyn ? rdyn : NULL);
-        }
-        if (!use_index) rec_CmdDraw(cb, count, run_n[ri], first, base_inst + run_at[ri]);
-        else rec_CmdDrawIndexed(cb, icount, run_n[ri], 0, base_vertex, base_inst + run_at[ri]);
-    }
+    if (!use_index) rec_CmdDraw(cb, count, inst, first, base_inst);
+    else rec_CmdDrawIndexed(cb, icount, inst, 0, base_vertex, base_inst);
     stat_draws++;
     cum_draws++;
     if (g_gpuprof_frame && gp_n) {
@@ -6658,9 +6430,8 @@ static VkImageView raw_view(TexBackend *b) {
     return vk_image_view(b, VK_IMAGE_VIEW_TYPE_2D, f, 0, 1, 0, 1, id, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
-// ---- post passes (Video tab "Anti-aliasing" / "Upscaler"): SMAA 1x at the game image's size, then AMD FSR 1 (EASU
-// upscale to the image's size in the window, RCAS sharpen) when it is smaller than its place in the window, as
-// metal.m does with MetalFX. Each pass: a fullscreen triangle into an RGBA8 image (gamma-encoded, like the input);
+// ---- post passes (the "upscaler" setting): AMD FSR 1 (EASU upscale to the image's size in the window, RCAS
+// sharpen) when it is smaller than its place in the window. Each pass: a fullscreen triangle into an RGBA8 image (gamma-encoded, like the input);
 // up to three inputs (bindings 0-2), sampled linear / clamp.
 static VkPipelineLayout post_layout;
 static VkDescriptorSetLayout post_set_layout;
@@ -6678,8 +6449,8 @@ static void post_layout_init(void) {  // (post passes and depth_upsample_draw: u
     VK_CHECK(vkCreatePipelineLayout(g_vk.dev, &ci, NULL, &post_layout));
 }
 
-// kind: 0 a plain post pass; 1 SMAA edges also writing stencil 1 where they draw, 2 SMAA weights only where the
-// stencil is 1 (g_vk.smaa_stencil; dsfmt: the stencil format)
+// kind: 0 a plain post pass; 1 also writes stencil 1 where it draws, 2 draws only where the stencil is 1 (dsfmt:
+// the stencil format). Only kind 0 is used in this port.
 static VkPipeline post_pipeline_kind(const char *fs, int kind, VkFormat dsfmt) {
     static struct { const char *fs; int kind; VkFormat f; VkPipeline p; } cache[16];
     for (int i = 0; i < 16; i++) if (cache[i].p && cache[i].fs == fs && cache[i].kind == kind && cache[i].f == dsfmt) return cache[i].p;
@@ -6726,8 +6497,7 @@ static VkPipeline post_pipeline_kind(const char *fs, int kind, VkFormat dsfmt) {
     return p;
 }
 
-// Post image `i` at w x h (RGBA8, kept until the size changes). 0, 1: SMAA edges / weights, 2: SMAA output,
-// 3, 4: FSR EASU / RCAS.
+// Post image `i` at w x h (RGBA8, kept until the size changes). 3, 4: FSR EASU / RCAS (0-2 unused).
 static TexBackend *post_image(int i, uint32_t w, uint32_t h) {
     static TexBackend img[5];
     TexBackend *d = &img[i];
@@ -6756,69 +6526,11 @@ static VkImageView post_view(TexBackend *d) {
     return vk_image_view(d, VK_IMAGE_VIEW_TYPE_2D, d->format, 0, 1, 0, 1, id, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
-// SMAA's lookup textures (runtime/nvn/smaa_data.c): 0 = area (160 x 560 R8G8), 1 = search (64 x 16 R8), uploaded once.
-static VkImageView smaa_lut(int i) {
-    static TexBackend t[2];
-    TexBackend *d = &t[i];
-    if (!d->image) {
-        extern const unsigned char *smaa_area_tex(void);
-        extern const unsigned char *smaa_search_tex(void);
-        uint32_t w = i ? 64 : 160, h = i ? 16 : 560, bpp = i ? 1 : 2;
-        VkFormat f = i ? VK_FORMAT_R8_UNORM : VK_FORMAT_R8G8_UNORM;
-        VkImageCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = f,
-                                .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
-                                .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT};
-        VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-        VK_CHECK(vmaCreateImage(g_vk.vma, &ci, &ai, &d->image, &d->mem, NULL));
-        d->format = f; d->width = w; d->height = h; d->depth = 1; d->layers = 1; d->levels = 1;
-        d->samples = 1; d->aspect = VK_IMAGE_ASPECT_COLOR_BIT; d->base_type = VK_IMAGE_VIEW_TYPE_2D;
-        VkCommandBuffer cb = vk_cmd();
-        vk_image_init_layout(cb, d->image, d->aspect);
-        VkSpan s = vk_transient_copy(i ? smaa_search_tex() : smaa_area_tex(), (uint64_t)w * h * bpp, 16);
-        VkBufferImageCopy c = {.bufferOffset = s.off, .imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, .imageExtent = {w, h, 1}};
-        rec_CmdCopyBufferToImage(cb, s.buf, d->image, VK_IMAGE_LAYOUT_GENERAL, 1, &c);
-    }
-    return post_view(d);
-}
 
 // One post pass (outside the window image's rendering): srcs (bindings 0..n-1) -> dst, fragment shader `fs`.
-// clear: start from zero (SMAA's edge pass only writes edge pixels; its weights / output read them).
+// clear: start from zero.
 // post_area_w / _h (> 0): only that top-left part of dst (Dynamic resolution: the contents' part)
 static uint32_t post_area_w, post_area_h;
-// (g_vk.smaa_stencil) a stencil image at w x h for SMAA's edge mask (kept until the size changes; NULL: none usable)
-static TexBackend *smaa_stencil_image(VkCommandBuffer cb, uint32_t w, uint32_t h) {
-    static TexBackend img;
-    static bool unusable;
-    TexBackend *d = &img;
-    if (unusable) return NULL;
-    if (d->image && (d->width != w || d->height != h)) {
-        vk_views_forget(d);
-        vk_defer_image(d->image, d->mem);
-        d->image = VK_NULL_HANDLE;
-        d->mem = VK_NULL_HANDLE;
-    }
-    if (!d->image) {
-        static const VkFormat cand[3] = {VK_FORMAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT};
-        VkFormat f = VK_FORMAT_UNDEFINED;
-        for (int i = 0; i < 3 && !f; i++) {
-            VkFormatProperties fp;
-            vkGetPhysicalDeviceFormatProperties(g_vk.phys, cand[i], &fp);
-            if (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) f = cand[i];
-        }
-        if (!f) { unusable = true; LOG("[vk] SMAA stencil: no stencil format, off\n"); return NULL; }
-        VkImageCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, .imageType = VK_IMAGE_TYPE_2D, .format = f,
-                                .extent = {w, h, 1}, .mipLevels = 1, .arrayLayers = 1, .samples = VK_SAMPLE_COUNT_1_BIT,
-                                .tiling = VK_IMAGE_TILING_OPTIMAL, .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT};
-        VmaAllocationCreateInfo ai = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-        if (vmaCreateImage(g_vk.vma, &ci, &ai, &d->image, &d->mem, NULL) != VK_SUCCESS) { d->image = VK_NULL_HANDLE; return NULL; }
-        d->format = f; d->width = w; d->height = h; d->depth = 1; d->layers = 1; d->levels = 1; d->samples = 1;
-        d->aspect = f == VK_FORMAT_S8_UINT ? VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-        d->base_type = VK_IMAGE_VIEW_TYPE_2D;
-        vk_image_init_layout(cb, d->image, d->aspect);
-        LOG("[vk] SMAA stencil image %ux%u format %d\n", w, h, f);
-    }
-    return d;
-}
 
 static void post_pass_ex(VkCommandBuffer cb, const char *fs, const VkImageView *srcs, int n, TexBackend *dst, const float pc[8],
                          bool clear, TexBackend *sten, int kind);
@@ -6826,7 +6538,7 @@ static void post_pass(VkCommandBuffer cb, const char *fs, const VkImageView *src
                       bool clear) {
     post_pass_ex(cb, fs, srcs, n, dst, pc, clear, NULL, 0);
 }
-// sten / kind (g_vk.smaa_stencil): kind 1 clears sten and writes 1 where the pass draws, kind 2 draws only there
+// sten / kind: kind 1 clears sten and writes 1 where the pass draws, kind 2 draws only there
 static void post_pass_ex(VkCommandBuffer cb, const char *fs, const VkImageView *srcs, int n, TexBackend *dst, const float pc[8],
                          bool clear, TexBackend *sten, int kind) {
     if (!sten) kind = 0;
@@ -6975,37 +6687,16 @@ static bool depth_upsample_draw(VkCommandBuffer cb, TexBackend *s, TexBackend *d
 // size in the window (its crop is drawn into the viewport).
 static VkImageView post_process(VkCommandBuffer cb, TexBackend *b, float fx, float fy, double ow_d, double oh_d, bool *upscaled) {
     VkImageView v = raw_view(b);
-    bool smaa = g_settings.antialias == AA_SMAA;
     uint32_t ow = (uint32_t)lround(ow_d), oh = (uint32_t)lround(oh_d);
     if (ow > 16384) ow = 16384;
     if (oh > 16384) oh = 16384;
     uint32_t cw = (uint32_t)lroundf(b->width * fx), ch = (uint32_t)lroundf(b->height * fy);  // (the contents' size)
     bool fsr = g_settings.upscaler == UPSCALE_FSR1 && (ow > cw + 1 || oh > ch + 1);  // (an upscale only)
     *upscaled = fsr;
-    if (!smaa && !fsr) return v;
+    if (!fsr) return v;
     extern void vk_frame_suspend(void);
     extern void vk_frame_resume(void);
     vk_frame_suspend();
-    if (smaa) {  // SMAA 1x: luma edges -> blending weights -> neighbourhood blending
-        float w = (float)b->width, h = (float)b->height;
-        float m[8] = {1.0f / w, 1.0f / h, w, h};
-        TexBackend *edges = post_image(0, b->width, b->height), *weights = post_image(1, b->width, b->height);
-        TexBackend *out = post_image(2, b->width, b->height);
-        // Dynamic resolution: only the contents' part, and 64 pixels past it (the edge searches reach 2 x 16 pixels, so
-        // the contents' pixels never read past it) - the window step's cost then scales with the factor like the game's
-        post_area_w = cw + 64, post_area_h = ch + 64;
-        // (g_vk.smaa_stencil, integrated GPUs) the weights only where the edge pass found edges (its shader discards
-        // the others), as SMAA's reference integration does with a stencil
-        TexBackend *sten = g_vk.smaa_stencil ? smaa_stencil_image(cb, b->width, b->height) : NULL;
-        VkImageView in[3] = {v};
-        post_pass_ex(cb, "smaa_edge.frag", in, 1, edges, m, true, sten, 1);
-        VkImageView wi[3] = {post_view(edges), smaa_lut(0), smaa_lut(1)};
-        post_pass_ex(cb, "smaa_weight.frag", wi, 3, weights, m, true, sten, 2);
-        VkImageView bi[3] = {v, post_view(weights)};
-        post_pass(cb, "smaa_blend.frag", bi, 2, out, m, false);
-        post_area_w = post_area_h = 0;
-        v = post_view(out);
-    }
     if (fsr) {
         float iw = (float)cw, ih = (float)ch;  // (EASU fetches texels of the contents: a larger texture needs no uv scale)
         TexBackend *e = post_image(3, ow, oh), *r = post_image(4, ow, oh);
@@ -7021,10 +6712,10 @@ static VkImageView post_process(VkCommandBuffer cb, TexBackend *b, float fx, flo
     vk_frame_resume();
     {
         static uint32_t piw, pih, pow_, poh;
-        static int psm = -1, pfs = -1;
-        if (b->width != piw || b->height != pih || ow != pow_ || oh != poh || smaa != psm || fsr != pfs)
-            LOG("[post] %ux%u%s%s -> %ux%u\n", b->width, b->height, smaa ? " smaa" : "", fsr ? " fsr1" : "", ow, oh);
-        piw = b->width; pih = b->height; pow_ = ow; poh = oh; psm = smaa; pfs = fsr;
+        static int pfs = -1;
+        if (b->width != piw || b->height != pih || ow != pow_ || oh != poh || fsr != pfs)
+            LOG("[post] %ux%u%s -> %ux%u\n", b->width, b->height, fsr ? " fsr1" : "", ow, oh);
+        piw = b->width; pih = b->height; pow_ = ow; poh = oh; pfs = fsr;
     }
     return v;
 }

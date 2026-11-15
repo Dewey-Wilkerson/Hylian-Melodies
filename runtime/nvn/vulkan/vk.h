@@ -44,10 +44,8 @@ typedef struct {
     bool ssbo_chunks;  // stores and atomics from fragment and vertex shaders (exec.c: the heap in chunks counts misses)
     bool lazy_heap, bda;  // the heap imported chunk by chunk (device.c lazy_heap_predicted), buffer device addresses enabled for it
     bool heap_probe;      // one import tried at the start, lazy chunks if it runs out of memory (exec.c whole_import_probe_oom)
-    // on by default on integrated GPUs only (device.c; HM_VK_LEAN_USAGE / HM_VK_SMAA_STENCIL /
-    // HM_NO_FRAME_CLEAR =0 / =1 override):
+    // on by default on integrated GPUs only (device.c; HM_VK_LEAN_USAGE / HM_NO_FRAME_CLEAR =0 / =1 override):
     bool lean_usage;      // colour images list their view formats instead of a bare MUTABLE_FORMAT (textures.c create_image)
-    bool smaa_stencil;    // SMAA's weights pass only where the edge pass found edges (exec.c post_process)
     bool no_frame_clear;  // scene targets not cleared at their first use in each frame (textures.c renderer_texture_frame_fresh)
     // window
     VkSurfaceKHR surface;
@@ -108,8 +106,6 @@ typedef struct TexBackend {
     uint32_t pending_uv_off;
     uint8_t astc_bw, astc_bh;  // ASTC without GPU support: decoded to RGBA8 on upload (runtime/nvn/astc.c)
     bool astc_srgb;
-    int tp;              // runtime/nvn/texpatch.c: 0 not checked yet, -1 none, else known UI texture + 1
-    uint32_t tp_gen;     // texpatch_generation() it was last uploaded with
     int reg;  // slot in textures.c's live list + 1 (a reboot destroys them all)
     // (g_vk.lean_usage) the only formats views of this image may have: nview_fmt 0 = any compatible one
     VkFormat view_fmt[2];
@@ -120,7 +116,6 @@ TexBackend *vk_tex(NvnTexture *t, bool for_render);  // backend image (uploads C
 VkFormat vk_format(uint32_t nvn_format);
 VkFormat vk_image_format(uint32_t nvn_format, VkImageAspectFlags *aspect);  // (shader preparation)
 void vk_pipeline_cache_save(void);
-bool vk_format_alpha_one(uint32_t nvn_format);
 // View of t (optionally through an NVN texture view) for rendering or sampling.
 VkImageView vk_view(NvnTexture *t, const NvnTextureView *v, bool has_view, bool render, int want_textype);
 VkImageView vk_image_view(TexBackend *b, VkImageViewType type, VkFormat fmt, uint32_t lv0, uint32_t nlv, uint32_t ly0,
@@ -137,7 +132,6 @@ VkSampler vk_default_sampler(bool linear);
 void vk_image_init_layout(VkCommandBuffer cb, VkImage img, VkImageAspectFlags aspect);
 // Destruction once every submission that may use the object has completed.
 void vk_defer_image(VkImage img, VmaAllocation mem);
-void vk_defer_view(VkImageView v);
 void vk_defer_buffer(VkBuffer b, VkDeviceMemory m);  // raw memory (an import); destroyed once the pending submission is done
 void vk_views_forget(TexBackend *b);  // drop (deferred) the cached views of an image being replaced
 uint64_t vk_frame_counter(void);

@@ -290,11 +290,6 @@ def extract(c):
     return {'version': version, 'aoc': [f'{m["title"]:016x}' for m in aocs]}
 
 
-def not_yet(name):
-    def step(c):
-        raise SetupError('not_implemented', step=name)
-    return step
-
 
 LIFT_MODULES = (('main', 0x7000000000), ('sdk', 0x7004000000))  # must match runtime/rt.h MAIN_BASE, SDK_BASE
 

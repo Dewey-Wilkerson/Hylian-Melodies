@@ -179,7 +179,6 @@ static void wait_until(pthread_cond_t *cv, bool (*ready)(uint64_t), uint64_t arg
     bool noted = what && !ready(arg);
     if (noted) rq_watch(what, arg);
     while (!ready(arg)) {
-        if (guest && g_rt_unwind) break;
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
         ts.tv_nsec += 50000000;
@@ -513,7 +512,7 @@ static bool hang_check(uint64_t limit, char *why, size_t nwhy) {
     if (!frames_at) frames_at = now;
     extern uint64_t renderer_present_count(void);
     uint64_t f = renderer_present_count() + atomic_load(&presents_done);
-    if (f != last_frames || g_rt_unwind) last_frames = f, frames_at = now, reported_stall = false;
+    if (f != last_frames) last_frames = f, frames_at = now, reported_stall = false;
     bool hit = false;  // (one reason per check: the dump shows every wait anyway)
     if (!f && !reported_first && now - t_start > 2 * limit) {  // (the first frame: twice the time, loading)
         reported_first = hit = true;

@@ -53,20 +53,6 @@ static uint64_t d(uint64_t a, uint64_t b) { return a > b ? a - b : 0; }  // (a b
 #define WINDOW_NS 60000000000ull  // the rate limit's period
 #define LINES_PER_WINDOW 20
 
-// The level now, compared with the one seen last: a change starts a load window. False: not in play (title, file
-// select, the start screen, a reboot) - loading as well.
-static bool level_check(uint64_t now, uint64_t *changed_at, char *name, size_t n) {
-    extern const char *game_level_name(void);
-    extern int game_in_play(void);
-    static char last[64];
-    const char *lv = game_level_name();
-    if (strncmp(lv, last, sizeof last - 1)) {
-        snprintf(last, sizeof last, "%s", lv);
-        *changed_at = now;
-    }
-    if (name) snprintf(name, n, "%s", last);
-    return game_in_play() != 0;
-}
 
 void slow_frame_present(uint64_t now, uint64_t gcpu) {
     static int64_t limit = -1;  // ns (0: off)
@@ -76,14 +62,12 @@ void slow_frame_present(uint64_t now, uint64_t gcpu) {
         if (limit < 0) limit = 0;
     }
     if (!limit) return;
-    static uint64_t last, frames, changed_at, win_start, win_lines, win_busy, win_load;
+    static uint64_t last, changed_at, win_start, win_lines, win_busy, win_load;
     static Snap prev;
     Snap cur;
     snap(&cur, gcpu);
     uint64_t gap = last ? now - last : 0;
     last = now;
-    frames++;
-    if (!(frames & 15)) level_check(now, &changed_at, NULL, 0);  // (sampled: a level change starts a load window)
     if (win_start && now - win_start >= WINDOW_NS) {
         if (win_busy || win_load) {
             char s[160] = "";
@@ -96,17 +80,15 @@ void slow_frame_present(uint64_t now, uint64_t gcpu) {
         win_start = win_lines = win_busy = win_load = 0;
     }
     if (gap > (uint64_t)limit) {
-        char lv[64];
-        bool play = level_check(now, &changed_at, lv, sizeof lv);
         if (!win_start) win_start = now;
-        if (!play || now - changed_at < LOAD_NS) win_load++;
+        if (now - changed_at < LOAD_NS) win_load++;  // (changed_at: never set in this port, which doesn't know the game's level)
         else if (win_lines >= LINES_PER_WINDOW) win_busy++;
         else {
             win_lines++;
             extern uint64_t renderer_present_count(void);
             char b[640];
-            int n = snprintf(b, sizeof b, "[slow] frame %llu %llu ms in %s:", (unsigned long long)renderer_present_count(),
-                             (unsigned long long)(gap / 1000000), lv);
+            int n = snprintf(b, sizeof b, "[slow] frame %llu %llu ms:", (unsigned long long)renderer_present_count(),
+                             (unsigned long long)(gap / 1000000));
             const char *sep = " ";
 #define PART(...) do { if (n < (int)sizeof b) n += snprintf(b + n, sizeof b - n, __VA_ARGS__); sep = ", "; } while (0)
             uint64_t v = d(cur.pipes, prev.pipes), hits = d(cur.hits, prev.hits);

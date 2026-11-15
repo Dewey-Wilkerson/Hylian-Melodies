@@ -103,7 +103,6 @@ static void timezone_service(Service *s, IpcReq *req, IpcResp *resp) {
 }
 
 static uint32_t g_shmem_handle;
-RT_ON_RESET(time_reset) { g_shmem_handle = 0; }
 
 static void static_service(Service *s, IpcReq *req, IpcResp *resp) {
     (void)s;

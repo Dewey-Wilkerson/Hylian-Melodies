@@ -42,10 +42,3 @@ extern "C" bool vk_imgui_backend_init(void) {
     }
     return ok;
 }
-
-extern "C" void vk_imgui_backend_shutdown(void) {
-    if (!ImGui::GetCurrentContext() || !ImGui::GetIO().BackendRendererUserData) return;
-    rec_drain();  // (the queue is the recorder's: idle for the wait below)
-    vkDeviceWaitIdle(g_vk.dev);
-    ImGui_ImplVulkan_Shutdown();
-}

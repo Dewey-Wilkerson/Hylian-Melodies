@@ -117,18 +117,6 @@ static uint64_t align16(uint64_t x) { return (x + 15) & ~15ull; }
 static void put32(uint8_t *p, uint32_t v) { memcpy(p, &v, 4); }
 static void put64(uint8_t *p, uint64_t v) { memcpy(p, &v, 8); }
 
-uint64_t romfs_dir_bytes(const char *dir) {
-    Dir *t = scan(dir, "", NULL, 0);
-    if (!t) return 0;
-    Lists l = {0};
-    flatten(t, &l);
-    uint64_t n = 0;
-    for (int i = 0; i < l.nf; i++) n += l.files[i]->size;
-    free(l.dirs), free(l.files);
-    free_tree(t);
-    return n;
-}
-
 bool romfs_layout(const char *dir, RomfsLayout *out, char *why, size_t why_size) {
     #define FAIL(...) do { if (why) snprintf(why, why_size, __VA_ARGS__); goto fail; } while (0)
     bool ok = false;
@@ -220,77 +208,4 @@ fail:
     free_tree(root);
     return ok;
     #undef FAIL
-}
-
-void romfs_layout_free(RomfsLayout *l) {
-    for (int i = 0; i < l->nfiles; i++) free(l->files[i].path);
-    free(l->files), free(l->tables);
-    memset(l, 0, sizeof *l);
-}
-
-// ------------------------------------------------------------------ copying the player's folder
-static bool copy_file(const char *src, const char *dst, uint64_t size, uint64_t *done, uint64_t total,
-                      void (*progress)(uint64_t, uint64_t)) {
-    remove(dst);
-#ifdef __APPLE__
-    if (clonefile(src, dst, 0) == 0) goto linked;  // (APFS: a copy-on-write clone, instant)
-#endif
-#ifdef _WIN32
-    if (CreateHardLinkA(dst, src, NULL)) goto linked;  // (same NTFS volume: a hard link)
-#else
-    if (link(src, dst) == 0) goto linked;  // (same volume: a hard link)
-#endif
-    {
-        FILE *in = fopen(src, "rb"), *out = in ? fopen(dst, "wb") : NULL;
-        bool ok = in && out;
-        static uint8_t buf[1 << 20];
-        while (ok) {
-            size_t n = fread(buf, 1, sizeof buf, in);
-            if (!n) break;
-            if (fwrite(buf, 1, n, out) != n) ok = false;
-            *done += n;
-            if (progress) progress(*done, total);
-        }
-        if (in) fclose(in);
-        if (out && fclose(out) != 0) ok = false;
-        return ok;
-    }
-linked:
-    *done += size;
-    if (progress) progress(*done, total);
-    return true;
-}
-
-static bool copy_dir(Dir *d, const char *dst, uint64_t *done, uint64_t total, void (*progress)(uint64_t, uint64_t)) {
-    mkdir(dst, 0755);
-    for (int i = 0; i < d->nfiles; i++) {
-        size_t n = strlen(dst) + strlen(d->files[i]->name) + 2;
-        char *p = malloc(n);
-        snprintf(p, n, "%s/%s", dst, d->files[i]->name);
-        bool ok = copy_file(d->files[i]->path, p, d->files[i]->size, done, total, progress);
-        free(p);
-        if (!ok) return false;
-    }
-    for (int i = 0; i < d->ndirs; i++) {
-        size_t n = strlen(dst) + strlen(d->dirs[i]->name) + 2;
-        char *p = malloc(n);
-        snprintf(p, n, "%s/%s", dst, d->dirs[i]->name);
-        bool ok = copy_dir(d->dirs[i], p, done, total, progress);
-        free(p);
-        if (!ok) return false;
-    }
-    return true;
-}
-
-bool romfs_copy_tree(const char *src, const char *dst, void (*progress)(uint64_t, uint64_t)) {
-    Dir *t = scan(src, "", NULL, 0);
-    if (!t) return false;
-    Lists l = {0};
-    flatten(t, &l);
-    uint64_t total = 0, done = 0;
-    for (int i = 0; i < l.nf; i++) total += l.files[i]->size;
-    bool ok = copy_dir(t, dst, &done, total, progress);
-    free(l.dirs), free(l.files);
-    free_tree(t);
-    return ok;
 }

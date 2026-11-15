@@ -161,14 +161,6 @@ class AsmInsn:
         self.consts = consts or []  # list of (bit position, constant) loaded into scratch
 
 
-def is_fp_simd_dp(w):
-    return bits(w, 25, 3) == 0b111
-
-
-def is_ldst(w):
-    return bits(w, 25, 1) == 0 and bits(w, 27, 1) == 1
-
-
 class Lifter:
     def __init__(self, base, simd='asm'):
         self.base = base  # absolute load address of the module (guest == host)

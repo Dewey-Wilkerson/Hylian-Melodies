@@ -438,7 +438,6 @@ static void script_frame(uint64_t frame) {
 void input_frame(uint64_t frame) { script_frame(frame); }
 
 // The real keyboard and pads stay live in scripted runs too (nothing to block).
-bool input_user_blocked(const SDL_Event *e) { (void)e; return false; }
 void input_cursor_event(const SDL_Event *e) {
     if (e->type == SDL_EVENT_KEY_DOWN || e->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) SDL_HideCursor();
     else if (e->type == SDL_EVENT_MOUSE_MOTION) SDL_ShowCursor();

@@ -116,15 +116,6 @@ static int nregions;
 static uint64_t heap_size;
 static uint64_t tls_next = TLS_BASE;
 uint64_t kernel_heap_size(void) { return heap_size; }  // bytes from HEAP_BASE set by SetHeapSize
-// Writable guest data regions (heap, mapped/physical memory, module .data): for debug/runtime memory scans.
-int kernel_data_regions(uint64_t *addr, uint64_t *size, int max) {
-    int n = 0;
-    for (int i = 0; i < nregions && n < max; i++)
-        if ((regions[i].perm & 2) && regions[i].type != 0xB && regions[i].type != 0xC) {
-            addr[n] = regions[i].addr; size[n] = regions[i].size; n++;
-        }
-    return n;
-}
 
 static void region_add(uint64_t addr, uint64_t size, uint32_t type, uint32_t perm) {
     if (nregions == 1024) FATAL("too many regions\n");
@@ -173,19 +164,7 @@ static void query_memory(uint64_t addr, uint64_t out) {
 // ------------------------------------------------------------------ threads
 static uint64_t next_thread_id = 0x50;
 
-// ------------------------------------------------------------------ in-place reboot
-// Recompiled guest code can't be killed from outside, so a reboot (runtime/main.c) sets g_rt_unwind, wakes every
-// waiting thread, and each guest thread longjmps back to thread_main at its next safe point: rt_svc (entry and
-// exit), an HLE call (runtime/dispatch.c), or a kernel wait (which returns early while g_rt_unwind is set). The
-// frames dropped are recompiled code (its state lives in guest memory, which is wiped next) and HLE functions;
-// none of those hold a host lock across a call into the guest, so nothing stays locked. svcExitThread ends a
-// thread the same way.
-volatile int g_rt_unwind;
-static KThread *g_threads;  // every thread of this boot (g_klock)
-
-void rt_unwind_point(void) {
-    if (__builtin_expect(g_rt_unwind, 0) && t_cur) longjmp(t_cur->unwind, 1);
-}
+static KThread *g_threads;  // every thread (g_klock)
 
 static void *thread_main(void *arg) {
     KThread *t = arg;
@@ -268,9 +247,7 @@ void kernel_run_main(KThread *t, uint64_t x0, uint64_t x1, uint64_t x2, uint64_t
     }
 }
 
-uint32_t kernel_current_thread_handle(void) { return t_cur ? t_cur->handle : 0; }
 Cpu *kernel_current_cpu(void) { return t_cur ? &t_cur->cpu : NULL; }
-KThread *kernel_current_thread(void) { return t_cur; }
 uint64_t kernel_current_thread_id(void) { return t_cur ? t_cur->id : 0; }
 
 // ------------------------------------------------------------------ mutex / condvar (Horizon semantics)
@@ -340,11 +317,6 @@ static uint32_t block_current(int64_t timeout_ns) {
     t->wait_since = plat_now_ns();
     waitlist_add(t);
     while (t->wait_kind != WAIT_NONE) {
-        if (g_rt_unwind) {  // reboot: give up the wait (the thread unwinds when its svc returns)
-            t->wait_kind = WAIT_NONE;
-            t->wait_result = R_CANCELLED;
-            break;
-        }
         if (!kwait(timeout_ns, &ts)) {
             if (t->wait_kind == WAIT_NONE) break;  // (woken just as the time ran out: the waker's result stands)
             t->wait_kind = WAIT_NONE;
@@ -563,7 +535,6 @@ static uint32_t svc_wait_synchronization(uint64_t handles_ptr, int32_t count, in
         }
         if (timeout == 0) { r = R_TIMEOUT; goto out; }  // (before the cancel: a poll leaves it for the next real wait)
         if (t->cancel) { t->cancel = false; r = R_CANCELLED; goto out; }
-        if (g_rt_unwind) { r = R_CANCELLED; goto out; }
         t->in_sync_wait = true;
         t->wait_since = plat_now_ns();
         t->sync_handles = handles_ptr, t->sync_count = count;
@@ -596,9 +567,7 @@ static int prof_svc = -1;
 
 static void svc_entry(Cpu *c, uint32_t imm, uint64_t pc);
 void rt_svc(Cpu *c, uint32_t imm, uint64_t pc) {
-    rt_unwind_point();
     svc_entry(c, imm, pc);
-    rt_unwind_point();
 }
 
 static void svc_entry(Cpu *c, uint32_t imm, uint64_t pc) {
@@ -689,10 +658,10 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
         break;
     }
     case 0x0A: longjmp(t_cur->unwind, 1);  // ExitThread: back to thread_main, which signals the thread object
-    case 0x0B: {  // SleepThread (in slices of at most 50 ms: a reboot doesn't wait out a long sleep)
+    case 0x0B: {  // SleepThread (in slices of at most 50 ms)
         int64_t ns = (int64_t)x[0];
         if (ns <= 0) { sched_yield(); break; }
-        for (uint64_t end = plat_now_ns() + (uint64_t)ns, now; !g_rt_unwind && (now = plat_now_ns()) < end;) {
+        for (uint64_t end = plat_now_ns() + (uint64_t)ns, now; (now = plat_now_ns()) < end;) {
             uint64_t d = end - now < 50000000 ? end - now : 50000000;
             struct timespec ts = {(time_t)(d / 1000000000), (long)(d % 1000000000)};
             nanosleep(&ts, NULL);
@@ -866,44 +835,6 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
     }
 }
 
-// Reboot, step 1: stop every guest thread (see rt_unwind_point) and join it. `idle` keeps the window responsive.
-void kernel_stop_threads(void (*idle)(void)) {
-    g_rt_unwind = 1;
-    uint64_t t0 = plat_now_ns(), logged = t0;
-    for (;;) {
-        int live = 0;
-        pthread_mutex_lock(&g_klock);
-        for (KThread *t = g_threads; t; t = t->anext)
-            if (t->started && !t->finished) { live++; wake(t); }
-        pthread_cond_broadcast(&g_nothread_cond);
-        pthread_mutex_unlock(&g_klock);
-        if (!live) break;
-        uint64_t now = plat_now_ns();
-        if (now - logged > 3000000000ull) {  // (a thread that never reaches a safe point: who and where)
-            logged = now;
-            LOG("[reboot] still waiting for %d guest threads after %llums:\n", live, (unsigned long long)((now - t0) / 1000000));
-            for (KThread *t = g_threads; t; t = t->anext)
-                if (t->started && !t->finished)
-                    LOG("[reboot]   thread %llu (entry %llx) pc %llx lr %llx wait %d sync %d\n", (unsigned long long)t->id,
-                        (unsigned long long)t->entry, (unsigned long long)t->cpu.pc, (unsigned long long)t->cpu.x[30],
-                        t->wait_kind, t->in_sync_wait);
-        }
-        if (idle) idle();
-        usleep(2000);
-    }
-    int n = 0;
-    for (KThread *t = g_threads; t; t = t->anext)
-        if (t->started) {
-#ifdef _WIN32
-            if (!guest_thread_join(t->host)) FATAL("Could not join a game thread.\n");
-#else
-            pthread_join(t->host, NULL);
-#endif
-            n++;
-        }
-    LOG("[reboot] %d guest threads stopped in %llums\n", n, (unsigned long long)((plat_now_ns() - t0) / 1000000));
-}
-
 // (diagnostics) every guest thread and what it waits on, with the guest frame chain (x29 / x30 pairs on the guest
 // stack: the game function that waits). Doesn't wait for g_klock: a hang may hold it (then says so).
 void kernel_dump_threads(const char *prefix) {
@@ -1011,28 +942,6 @@ static void *hang_watch(void *arg) {
         dumps++;
     }
     return NULL;
-}
-
-// Reboot, step 2 (threads stopped): a fresh kernel. Kernel objects are leaked rather than freed: host statics
-// can still point at some (vi.c's vsync event, signalled by its host timer thread).
-void kernel_reset(void) {
-    pthread_mutex_lock(&g_klock);
-    for (KThread *t = g_threads, *next; t; t = next) {
-        next = t->anext;
-        pthread_cond_destroy(&t->cond);
-        free(t);
-    }
-    g_threads = NULL;
-    g_main_thread = NULL;
-    g_waitlist = NULL;
-    g_syncwaiters = NULL;
-    memset(handles, 0, sizeof handles);
-    nregions = 0;
-    heap_size = 0;
-    tls_next = TLS_BASE;
-    next_thread_id = 0x50;
-    g_rt_unwind = 0;
-    pthread_mutex_unlock(&g_klock);
 }
 
 void kernel_init(void) {

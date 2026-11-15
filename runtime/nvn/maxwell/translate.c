@@ -2516,13 +2516,3 @@ ShaderInfo *maxwell_translate(const uint8_t *blob, size_t max_size, int stage, c
     free(c);
     return info;
 }
-
-void maxwell_free(ShaderInfo *s) {
-    if (!s) return;
-    free(s->msl);
-    free(s);
-}
-
-void maxwell_disassemble(const uint8_t *code, size_t max_size, int stage, void *file) {
-    (void)code; (void)max_size; (void)stage; (void)file;
-}

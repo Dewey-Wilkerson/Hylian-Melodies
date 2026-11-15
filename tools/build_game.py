@@ -152,7 +152,7 @@ def main():
                  glob.glob(os.path.join(rt, 'services', '*.c')) + glob.glob(os.path.join(rt, 'nvn', '*.c')) +
                  [os.path.join(rt, 'platform', 'linux.c')])
         if headless:  # (the renderer's helpers that need the Vulkan backend stay out)
-            vk_only = ('pace.c', 'output_scale.c', 'shader_prep.c', 'shader_seen.c', 'slowframe.c', 'las_feature_stubs.c')
+            vk_only = ('pace.c', 'output_scale.c', 'shader_prep.c', 'shader_seen.c', 'slowframe.c')
             rsrcs = [x for x in rsrcs if os.path.basename(x) not in vk_only]
         else:
             rsrcs = [x for x in rsrcs if os.path.basename(x) not in ('null_backend.c', 'ui_headless.c')]

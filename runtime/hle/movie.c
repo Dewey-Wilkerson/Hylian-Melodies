@@ -822,20 +822,6 @@ static void dec_dtor(Cpu *c) {
     c->x[0] = 0;
 }
 
-// Reboot: close what a movie left open (decoder threads, the file), new vtables in the next boot's HLE heap.
-RT_ON_RESET(movie_reset) {
-    for (int i = 0; i < MAX_MOVIE_OBJS; i++) {
-        Extractor *e = g_movie_objs[0][i];
-        if (e && e->pkt) av_packet_free(&e->pkt);
-        if (e && e->fmt) avformat_close_input(&e->fmt);
-        Decoder *d = g_movie_objs[1][i];
-        if (d) dec_free(d);
-        g_movie_objs[0][i] = g_movie_objs[1][i] = NULL;
-    }
-    g_ex_vt = g_dec_vt = 0;
-    g_nbuf_pool = 0;  // (the HLE heap starts over)
-}
-
 static void dec_get_counts(Cpu *c) {  // slot 14: (int*, int64*) queried after Configure
     if (c->x[1]) *(int32_t *)(uintptr_t)c->x[1] = 0;
     if (c->x[2]) *(int64_t *)(uintptr_t)c->x[2] = 0;

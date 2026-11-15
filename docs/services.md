@@ -30,9 +30,9 @@ in a 30 s run, no crash, no unimplemented call.
 
 ## Host replacements (HLE by symbol)
 
-- `nn::vi` display/layer (`hle/vi.c`), libc `mem*`/`str*` (`hle/libc.c`), software keyboard (`hle/swkbd.c`:
+- `nn::vi` display/layer (`hle/vi.c`), software keyboard (`hle/swkbd.c`:
   returns the initial text).
-- NVN: LAS Recomp's front end with `nvn/null_backend.c` (headless; M5 brings the Vulkan backend).
+- NVN: LAS Recomp's front end, on its Vulkan backend (`nvn/vulkan/`) or `nvn/null_backend.c` (headless build).
 - `nn::hid` state, vibration and the controller-support applet (`hle/input.c`, `hle/controller_applet.c`).
 - `movie::` over FFmpeg (`hle/movie.c`): the extractor reports end of stream with the movie library's status
   `0x2000`, which this game checks for (LAS Recomp's game accepted any non-zero value).

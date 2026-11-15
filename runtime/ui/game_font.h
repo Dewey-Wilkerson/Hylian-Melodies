@@ -23,4 +23,3 @@ int game_font_cell_height(const GameFont *f);
 int game_font_glyphs(const GameFont *f, const GameGlyph **out);  // characters up to U+2FFF (no CJK), sorted by code
 // The glyph's cell as 8-bit coverage (white text: alpha), top-left first; *pitch: bytes per row. NULL on failure.
 const uint8_t *game_font_cell(GameFont *f, int index, int *pitch);
-const char *game_font_path(const GameFont *f);

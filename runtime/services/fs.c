@@ -142,9 +142,6 @@ static Service *open_aoc_storage(uint64_t id) {
     return im ? service_new("IStorage(aoc)", storage, im) : NULL;
 }
 
-static void mounts_reset(void);
-RT_ON_RESET(fs_reset) { mounts_reset(); }
-
 // ------------------------------------------------------------------ host-directory filesystem
 // Save data is all-or-nothing, as on the Switch (its save storage commits a mount's changes at once): a file opened
 // for writing on a save mount works on a copy, <file>.pending, which the mount's Commit syncs and renames over the
@@ -168,11 +165,6 @@ typedef struct {
 static pthread_mutex_t g_mount_lock = PTHREAD_MUTEX_INITIALIZER;
 #define LIVE_MOUNTS_MAX 16
 static HostFs *g_live_mounts[LIVE_MOUNTS_MAX];
-static void mounts_reset(void) {
-    pthread_mutex_lock(&g_mount_lock);
-    memset(g_live_mounts, 0, sizeof g_live_mounts);
-    pthread_mutex_unlock(&g_mount_lock);
-}
 typedef struct {
     int fd;
     char path[1100];

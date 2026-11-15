@@ -23,14 +23,6 @@ typedef struct {
 
 // Lays out the RomFS image of the folder `dir`. false = failed (why: a short message).
 bool romfs_layout(const char *dir, RomfsLayout *out, char *why, size_t why_size);
-void romfs_layout_free(RomfsLayout *l);
-
-// Bytes of file data under dir (the image is about this plus its tables).
-uint64_t romfs_dir_bytes(const char *dir);
-
-// Copies the folder tree src to dst (hard links where the file system allows: no second copy of 6 GB). progress as
-// above. false = failed.
-bool romfs_copy_tree(const char *src, const char *dst, void (*progress)(uint64_t done, uint64_t total));
 
 #ifdef __cplusplus
 }

@@ -7,10 +7,13 @@
 - `show_fps = 1` shows the frame rate in the window title (not checked by eye yet).
 - The window has no icon of its own; desktops show the menu entry's icon through the app id (`hylian-melodies`).
 - Loading and the splash videos run at 30 fps (the game's own choice while loading; to confirm on hardware).
-- No overlay menu (M10); the software keyboard returns the initial text unchanged.
-- Restored LAS Recomp renderer code still contains comments and dormant paths about Link's Awakening; the hooks are
-  answered "off" (`runtime/nvn/las_feature_stubs.c`). To trim over time.
-- SMAA anti-aliasing is not built (not useful for pixel art anyway).
+- The software keyboard returns the initial text unchanged.
+- LAS Recomp's renderer still carries parts made for its 3D game that this port does not need or has not judged
+  yet: the per-draw tint and mirror flip in translated shaders, the
+  present shader's colour filter, dynamic resolution and FSR, the ambient-occlusion and shadow special cases, and
+  many comments that point at files of LAS Recomp's tree (`renderer.m`, `metal.m`, issue numbers). Its hooks into
+  Link's Awakening features, the in-place reboot, SMAA and the `audren:u` mixer were removed 2026-11-14
+  (docs/PROGRESS.md). Removing the rest changes shader text or behaviour and needs a run of the game each time.
 - Audio is measured (docs/audio.md) but not yet checked by ear against the beat; end-to-end latency to the speakers
   is not measured (use the game's calibration).
 - The game is built for x86-64-v2 by default, so a build runs on other x86-64 machines; `HM_MARCH=v3 makepkg` (or

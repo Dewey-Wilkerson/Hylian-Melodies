@@ -69,7 +69,6 @@ NVN(nvnDeviceGetSeparateSamplerHandle) { RET((A(1) & 0xFFF) << 20); }
 NVN(nvnDeviceInstallDebugCallback) { (void)c; }
 NVN(nvnDeviceGenerateDebugDomainId) { RET(1); }
 static uint32_t window_origin, depth_mode;
-RT_ON_RESET(nvn_device_reset) { window_origin = depth_mode = 0; }  // (the next boot sets its own)
 NVN(nvnDeviceSetWindowOriginMode) { window_origin = (uint32_t)A(1); LOG("[nvn] window origin mode %u\n", window_origin); }
 uint32_t nvn_window_origin(void) { return window_origin; }
 uint32_t nvn_depth_mode(void) { return depth_mode; }
@@ -613,7 +612,6 @@ NvnDescPool *g_texture_pools[64], *g_sampler_pools[64];
 // the translation take no lock: the game doesn't change a slot that queued work still uses before its fence, as on
 // the Switch, and the emptying runs on the translating thread itself.)
 static pthread_mutex_t g_pool_lock = PTHREAD_MUTEX_INITIALIZER;
-RT_ON_RESET(desc_pools_reset) { memset(g_texture_pools, 0, sizeof g_texture_pools); memset(g_sampler_pools, 0, sizeof g_sampler_pools); }
 
 static NvnDescPool *desc_pool_init(uint64_t guest, uint64_t pool, uint64_t off, int count, size_t entry, NvnDescPool **reg) {
     NvnDescPool *d = calloc(1, sizeof *d);
@@ -712,10 +710,6 @@ NVN(nvnSamplerPoolRegisterSamplerBuilder) {
     NvnDescPool *d = HOST(NvnDescPool, A(0));
     int id = (int)A(1);
     if (id >= 0 && id < d->count) ((NvnSamplerDesc *)d->entries)[id] = *(NvnSamplerDesc *)(AP(2) + 8);
-}
-
-NvnDescPool *nvn_find_pool(NvnDescPool **reg, uint64_t guest_pool) {
-    return guest_pool ? HOST(NvnDescPool, guest_pool) : NULL;
 }
 
 // ================================================================== programs

@@ -17,8 +17,7 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M8 Playable | done: a 7-minute owner session (title, crypt, castle, a dungeon area) at 61 fps with saves and a clean window close; DLC served |
 | M9 Packaging | done: `makepkg` builds the package from a clean directory and resumes after interruption; contents and build-path checks pass (docs/packaging.md) |
 | M10 Polish | in progress: 60 Hz frame pacing, native-scale sharp scaling, FPS display, overlay settings menu in the game's own fonts |
-| M5-M8, M10 | not started |
-| M9 Packaging | launcher + pacman hooks written and tested early; PKGBUILD not yet |
+| Installer | in progress: system packages (pacman / `.deb` / `.rpm`) through `python3 -m installer.tui`; see the last hand-off |
 
 ## Log
 
@@ -405,3 +404,29 @@ How the checks of this session were done (to repeat them):
   then `build_game.py ... --out ~/.cache/hylian-melodies/build-own --sdl3 toolchain/sdl3 --shaderc
   toolchain/shaderc` (that build exists; it ran 20 s cleanly with `HM_GAME_DIR=~/.cache/hylian-melodies/bench-game
   HM_VK_NO_SPIRV_CACHE=1`). Running the game always needs the owner's OK first.
+- 2026-11-14 (late) clean-up before the options registry (owner: check for dead code, LAS-specific code and LAS
+  names first). Method: the runtime compiled with one section per function and linked with `--gc-sections
+  --print-gc-sections -z nostart-stop-gc` (lists what nothing reaches; a function listed there may still be used
+  inlined, so each removal was confirmed by a normal link), `-Wunused`, and greps. Removed, about 2,500 lines, all of
+  it code that could not run or always answered "nothing": `runtime/nvn/las_feature_stubs.c` and every call into it
+  (recolouring, texture patches, widescreen, mirror mode, pots, hint sheet, warp / save-editor / reboot hooks), with
+  `recolour.h` and `texpatch.h`; the in-place reboot (`RT_ON_RESET`, `g_rt_unwind`, the `*_reset` functions); SMAA
+  (no shader source was ever here); the `audren:u` mixer and reverb in `services/audio.c` (this game only opens
+  `audout:u`; it was a port of Ryujinx code with no notices row); `hle/libc.c` (never wired: the lifter has no
+  symbol list); the start screen's process helpers and the never-armed data watchpoint; crash-dialog cases keyed to LAS's messages and its file count; settings nothing read
+  (`aspect_unlocked`, `movie_audio`, `audio_latency_ms`, and the fields behind them; the first two were in the
+  default ini). Renamed: `LASRECOMP_LOG_APPEND` -> `HM_LOG_APPEND`; the profile nickname "Link" -> "Player"; the
+  crash dialog no longer says "GitHub issue" or "makepkg". A Link's Awakening level name in `textures.c` is gone.
+  Environment variables read in `runtime/`: 198 -> 175. Python: four unused helpers. Both targets build and link, 99
+  unit tests pass. Owner: keep the Windows and macOS branches as stubs (those ports come back later), so the
+  `_WIN32` / `__APPLE__` / `__OBJC__` branches removed at first were merged back (docs/DECISIONS.md). Run after
+  the clean-up (owner's OK, `bench-game` folder, fresh profile): `tests/test_saves_kill9.py` passes (new game into
+  play, saves committed, killed, reloaded); a 50 s run and two 95 s scripted runs end cleanly with no error line,
+  0 audio gaps; against the build from before the clean-up with the same script, the capture at frame 2500 is
+  identical and the one at frame 3300 (in play) differs in 0.5% of its pixels, spread over the frame (taken to be
+  the animated tiles' phase; not looked into further). Shader text is unchanged, so the shader cache stays valid. Left for later, each needs a run (docs/KNOWN-ISSUES.md): the per-draw tint and mirror
+  flip in translated shaders, the present shader's colour filter, dynamic resolution /
+  FSR, the ambient-occlusion and shadow special cases, stale comments pointing at LAS Recomp's files.
+  Next: the options registry (hand-off above, item 1). Owner's cut of the launch options: players get fullscreen /
+  windowed and the graphics card; no "no audio" option (a rhythm game); a short troubleshooting list; the rest
+  developer-only.

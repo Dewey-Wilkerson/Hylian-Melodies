@@ -16,7 +16,6 @@
 #include "../astc.h"
 #include "../tex_hash.h"
 #include "../renderer.h"
-#include "../texpatch.h"
 
 // ================================================================== formats
 typedef struct { VkFormat vf; uint8_t expand_rgb, alpha_one; } VkFmt;
@@ -157,8 +156,6 @@ static VkFmt fmt_of(uint32_t f) {
 bool renderer_format_is_depth(uint32_t f) { return f >= 0x31 && f <= 0x36; }
 bool renderer_format_has_stencil(uint32_t f) { return f == 0x31 || f == 0x35 || f == 0x36; }
 VkFormat vk_format(uint32_t f) { return fmt_of(f).vf; }
-bool vk_format_alpha_one(uint32_t f) { return fmt_of(f).alpha_one; }
-bool renderer_format_alpha_one(uint32_t f) { return fmt_of(f).alpha_one; }
 
 static VkImageAspectFlags aspect_of(uint32_t f) {
     if (f == 0x31) return VK_IMAGE_ASPECT_STENCIL_BIT;
@@ -186,7 +183,6 @@ VkFormat vk_image_format(uint32_t nvn, VkImageAspectFlags *aspect) {
 // Same rules as metal.m (see the comments there).
 static float g_rs_x = 1, g_rs_y = 1;   // the render scale: what the frame is drawn at
 static float g_al_x = 1, g_al_y = 1;   // the allocation scale: the size of scalable textures (Dynamic: the frame uses a part)
-void renderer_get_scale(float *sx, float *sy) { *sx = g_rs_x; *sy = g_rs_y; }
 void renderer_set_scale(float sx, float sy) { g_rs_x = sx; g_rs_y = sy; }
 void renderer_set_alloc_scale(float ax, float ay) { g_al_x = ax; g_al_y = ay; }
 // The part of a scalable texture its contents occupy (Dynamic: the render scale over the allocation scale; 1 otherwise).
@@ -224,16 +220,7 @@ bool renderer_texture_first_write(NvnTexture *t) {
     return true;
 }
 
-static uint32_t g_level_gen = 1;
-void vk_level_change_check(void) {
-    extern const char *game_level_name(void);
-    static char last[64];
-    const char *lv = game_level_name();
-    if (strncmp(lv, last, sizeof last - 1) != 0) {
-        strlcpy(last, lv, sizeof last);
-        if (!strncmp(lv, "TelephoneBox", 12) || getenv("HM_CLEAR_ALL_LEVELS")) g_level_gen++;
-    }
-}
+static const uint32_t g_level_gen = 1;  // (a texture's first use; nothing bumps it in this port)
 
 bool renderer_texture_frame_fresh(NvnTexture *t) {
     TexBackend *b = t ? (TexBackend *)t->backend : NULL;
@@ -480,7 +467,6 @@ static void defer(Dead d) {
 }
 
 void vk_defer_image(VkImage img, VmaAllocation mem) { defer((Dead){.img = img, .mem = mem}); }
-void vk_defer_view(VkImageView v) { defer((Dead){.view = v}); }
 void vk_defer_buffer(VkBuffer b, VkDeviceMemory m) { defer((Dead){.buf = b, .bmem = m}); }  // (raw memory, not VMA)
 
 void vk_dl_note_upload(void *img, uint32_t w, uint32_t h, uint32_t lv);  // (exec.c: HM_VK_DEVLOST_TRACE)
@@ -540,16 +526,6 @@ void backend_texture_destroyed(NvnTexture *t) {
         free(b);
     }
     t->backend = NULL;
-}
-
-// Reboot (device.c backend_reset; GPU idle): every game texture and its views go.
-void vk_textures_reset(void) {
-    int n = g_nlive;
-    extern void vk_alias_reset(void);
-    vk_alias_reset();
-    while (g_nlive > 0) backend_texture_destroyed(g_live[g_nlive - 1]);
-    vk_collect_dead();
-    LOG("[vk] reboot: %d textures released\n", n);
 }
 
 // ================================================================== uploads (same change detection as metal.m)
@@ -622,9 +598,6 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
     bool full = b->dynamic || !b->uploaded || always_full;
     bool periodic = frame - b->full_frame >= 120 && full_hash_budget >= total;  // (safety net: a full hash now and then)
     if (!full && periodic) { full = true; full_hash_budget -= total; }
-    bool identified_now = !b->tp;  // (button prompts / Hero Mode icon: re-uploaded when their look changes)
-    if (identified_now) b->tp = texpatch_marker(t);
-    bool restyle = b->tp > 0 && b->tp <= TEXPATCH_RECOLOUR_BASE && b->uploaded && b->tp_gen != texpatch_generation();
     // The OS's page write tracking (exec.c vk_pages_changed, shared with the vertex cache): texture memory the CPU
     // hasn't written since the last check is not hashed at all (dynamic textures were fully hashed every frame,
     // ~2.4 MB a frame in the overworld). The periodic full hash stays as a safety net. HM_VK_TEX_WATCH=0: off.
@@ -636,14 +609,14 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
         int ch = vk_pages_changed(t->addr, total, b->wgen, &now);
         if (ch >= 0) {
             b->wgen = now;
-            if (!ch && b->uploaded && !restyle) {
+            if (!ch && b->uploaded) {
                 if (!periodic) { prof_tex_watch_skips++; return; }
                 if (b->dynamic) full_hash_budget -= total;  // (the others took theirs above)
             }
         }
     }
     bool fast = tex_fast_hash();  // (runtime/nvn/tex_hash.h; HM_TEX_FASTHASH=0: the previous hashes)
-    if (!full && !restyle) {
+    if (!full) {
         prof_tex_samples++;
         uint64_t sh = fast ? tex_hash_sample(mem, total) : fnv_sample(mem, total);
         if (sh == b->sample_hash) return;
@@ -656,12 +629,8 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
     // (the sample is only compared while the texture isn't dynamic, and a dynamic one stays so: none for those)
     if (!fast) b->sample_hash = fnv_sample(mem, total);
     else if (!b->dynamic && !(b->uploaded && h != b->data_hash)) b->sample_hash = tex_hash_sample(mem, total);
-    if (b->uploaded && h == b->data_hash && !restyle) return;
+    if (b->uploaded && h == b->data_hash) return;
     if (b->uploaded && h != b->data_hash) b->dynamic = true;
-    // new contents (the game reused the memory for another image, or the data arrived after the first check): which
-    // known texture it is, if any, is decided again before this upload patches it
-    if (!identified_now && h != b->data_hash) b->tp = texpatch_marker(t);
-    if (b->tp > 0) b->tp_gen = texpatch_generation();
     b->data_hash = h;
     b->uploaded = true;
     if (b->format != mf.vf && !b->astc_bw) return;  // unsupported format: nothing sensible to copy
@@ -680,7 +649,6 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
                 uint8_t *blocks = malloc((uint64_t)l.wb * l.hb * 16);
                 if (linear) for (uint32_t y = 0; y < l.hb; y++) memcpy(blocks + (uint64_t)y * l.wb * 16, src + (uint64_t)y * t->stride, l.wb * 16);
                 else tegra_deswizzle(src, blocks, l.wb, l.hb, 1, 16, l.block_height_log2, l.block_depth_log2);
-                if (b->tp > 0 && layer == 0) texpatch_apply(b->tp - 1, lv, blocks, l.w, l.h, l.wb * 16);
                 VkSpan s = vk_transient((uint64_t)l.w * l.h * 4, 16);
                 astc_decode_ldr(blocks, l.w, l.h, b->astc_bw, b->astc_bh, b->astc_srgb, s.ptr);
                 free(blocks);
@@ -703,7 +671,6 @@ static void upload_texture(NvnTexture *t, TexBackend *b) {
             } else {
                 tegra_deswizzle(src, lin, l.wb, l.hb, l.d, fi->bpb, l.block_height_log2, l.block_depth_log2);
             }
-            if (b->tp > 0 && layer == 0) texpatch_apply(b->tp - 1, lv, lin, l.w, l.h, row);
             if (l.d > 1 && lv == 0 && getenv("HM_DUMP_3D")) {  // (diagnostics: 3D textures as uploaded, raw)
                 char path[160];
                 mkdir("build", 0755);
@@ -756,7 +723,6 @@ void renderer_mark_gpu_owned(NvnTexture *t) {
     b->gpu_owned = true;
     if (b->scalable) { b->sx = g_rs_x; b->sy = g_rs_y; }
 }
-bool renderer_is_gpu_owned(NvnTexture *t) { return tex_backend(t)->gpu_owned; }
 void backend_pool_written(uint64_t addr, uint64_t size) { (void)addr; (void)size; }
 
 // Host-produced texel data (decoded video, any thread): applied on the render thread at the texture's next use.

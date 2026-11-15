@@ -10,7 +10,6 @@ Replaces LAS Recomp's Unicorn-based resolver (GPL-2.0, not used here); the searc
 LAS Recomp's `tools/gen.py` (MIT).
 """
 
-import struct
 
 from lifter import bits, decode_bit_masks, sext
 

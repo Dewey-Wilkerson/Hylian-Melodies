@@ -66,12 +66,6 @@ HLE_FUNC("_ZN2nn2vi15GetNativeWindowEPPvPNS0_5LayerE", vi_get_native_window) {
     c->x[0] = 0;
 }
 
-// Reboot: the vsync timer and its event live on (the kernel's handle table doesn't): new handles at the next boot.
-RT_ON_RESET(vi_reset) {
-    vsync_r = vsync_w = 0;
-    g_native_window = 0;  // (HLE heap)
-}
-
 HLE_FUNC("_ZN2nn2vi20GetDisplayVsyncEventEPNS_2os15SystemEventTypeEPNS0_7DisplayE", vi_get_vsync_event) {
     if (!vsync_event) {
         vsync_event = kernel_create_event_pair(&vsync_w, &vsync_r);

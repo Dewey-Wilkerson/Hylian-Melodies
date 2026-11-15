@@ -162,19 +162,9 @@ static void spike_test(void) {
     }
 }
 
-// The scene a frame shows, for the way back to 60 (see above): 0 when it isn't gameplay (no save in play, or no world on
-// screen: the pause menu, title, file select), else the level and camera zone, hashed.
-static uint64_t pace_scene(void) {
-    extern int game_in_play(void);              // hle/warp.c
-    extern bool world_on_screen(void);          // hle/mirror.c
-    extern const char *game_level_name(void);   // hle/widescreen.c
-    extern uint64_t game_camera_zone(void);     // hle/widescreen.c
-    if (!game_in_play() || !world_on_screen()) return 0;
-    uint64_t h = 1469598103934665603ull;  // (FNV-1a)
-    for (const char *c = game_level_name(); *c; c++) h = (h ^ (uint8_t)*c) * 1099511628211ull;
-    h = (h ^ game_camera_zone()) * 1099511628211ull;
-    return h ? h : 1;
-}
+// The scene a frame shows, for the way back to 60 (see above): 0 when it isn't gameplay, else a value that changes
+// with the level. This port doesn't read the game's state: always "in play, the same scene".
+static uint64_t pace_scene(void) { return 1; }
 
 void pace_frame(void) {
     spike_test();

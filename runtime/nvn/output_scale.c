@@ -12,7 +12,7 @@
 //                  The render targets stay allocated at the Match display size (ax, ay) and the frame is drawn into
 //                  their top-left part at (sx, sy): no reallocation at a step, so no hitch (each step reallocated
 //                  every screen-sized texture before: ~325 ms on an M3 Max, seconds at 4K on Vulkan, issue #100).
-// Test overrides: HM_SCALE=<f> (render height = 1080 x f), HM_WIDE_TEST=<f> (forced shape),
+// Test overrides: HM_SCALE=<f> (render height = 1080 x f),
 // HM_DYN_TEST=<f> (Dynamic pinned at factor f of the allocation: shots at a fixed part), HM_DYN_START=<f>
 // (Dynamic starts at factor f).
 #include <math.h>
@@ -24,14 +24,6 @@
 #include "output_scale.h"
 
 #define MAX_TEX 16384.0
-
-// The game's own dynamic resolution (tools/patches.py GAME_DYNRES_SITE) is off: the resolution is the one chosen here,
-// and only our Dynamic changes it. HM_GAME_DYNRES=1 (test): the game lowers its main pass under GPU load again.
-int rt_game_dynres(void) {
-    static int on = -1;
-    if (on < 0) on = getenv("HM_GAME_DYNRES") && atoi(getenv("HM_GAME_DYNRES"));
-    return on;
-}
 
 // Dynamic resolution: a factor on the Match display scale, from the floor to 1 in coarse 0.1 steps. The floor: 1/3 of
 // the Match display, but never under 540 lines (half the Switch's 1080): a 1080p window 0.50 (960x540), 1440 lines
@@ -173,10 +165,6 @@ void output_scale_note_split(const DynSplit *d) {
 
 static double g_sum_ms;  // (Metal) spans summed since the last decision
 static int g_sum_n;
-void output_scale_note_sum(double ms) {
-    if (g_sum_n >= 600) g_sum_ms = 0, g_sum_n = 0;
-    g_sum_ms += ms, g_sum_n++;
-}
 
 static int cmp_double(const void *a, const void *b) {
     double x = *(const double *)a, y = *(const double *)b;
@@ -418,9 +406,6 @@ static void dyn_update(double now, double game_ms, double win_ms, double lines) 
     g_split_n = 0;
 }
 
-double output_scale_dynamic_factor(void) { return g_dyn; }
-double output_scale_dynamic_hold_fps(void) { return g_hold_dt > 0 ? 1000 / g_hold_dt : 0; }
-
 void output_scale_log(unsigned long long frame, double dw, double dh, const OutScale *o) {
     static double psx, psy, pdw, pdh;
     static int nlog;
@@ -434,10 +419,9 @@ void output_scale_log(unsigned long long frame, double dw, double dh, const OutS
 
 void output_scale(double dw, double dh, bool reshape_allowed, double now, double game_ms, double win_ms, OutScale *o) {
     double fit = fmin(dw / 1920.0, dh / 1080.0);
-    static double forced = -1, wide_test = -1;
+    static double forced = -1;
     if (forced < 0) forced = getenv("HM_SCALE") ? atof(getenv("HM_SCALE")) : 0;
-    if (wide_test < 0) wide_test = getenv("HM_WIDE_TEST") ? atof(getenv("HM_WIDE_TEST")) : 0;
-    double shape = wide_test > 0 ? wide_test : (dw / dh) / (16.0 / 9.0);
+    double shape = (dw / dh) / (16.0 / 9.0);
     bool reshape = reshape_allowed && fabs(shape - 1.0) > 0.005;
     if (!reshape) shape = 1.0;
     // render height in units of the Switch's 1080 lines
@@ -445,14 +429,13 @@ void output_scale(double dw, double dh, bool reshape_allowed, double now, double
     int mode = g_settings.res_mode;
     // The user changed a setting that changes the GPU's load (the menu, the start screen; Dynamic's own steps are g_dyn,
     // not a setting): the frame pacer's 30 fps hold and backoff were learned under the old load (pace.c).
-    static int p_mode = -1, p_ups, p_aa;
+    static int p_mode = -1, p_ups;
     if (p_mode >= 0) {
         extern void pace_settings_changed(const char *what);
         if (mode != p_mode) pace_settings_changed("resolution");
         else if (g_settings.upscaler != p_ups) pace_settings_changed("upscaler");
-        else if (g_settings.antialias != p_aa) pace_settings_changed("anti-aliasing");
     }
-    p_mode = mode, p_ups = g_settings.upscaler, p_aa = g_settings.antialias;
+    p_mode = mode, p_ups = g_settings.upscaler;
     if (forced > 0) h = forced;
     else if (mode >= 1 && mode <= 8) h = mode == 1 && g_gpu_integrated ? 720 / 1080.0 : mode;
     else {
@@ -476,9 +459,5 @@ void output_scale(double dw, double dh, bool reshape_allowed, double now, double
     // where the image goes in the window: fills it when reshaped, else a fitted 16:9 box
     if (reshape) { o->vw = dw; o->vh = dh; }
     else { o->vw = 1920.0 * fit; o->vh = 1080.0 * fit; }
-    if (wide_test > 0) {
-        double f2 = fmin(dw / (1920.0 * wide_test), dh / 1080.0);
-        o->vw = 1920.0 * wide_test * f2; o->vh = 1080.0 * f2;
-    }
     o->vx = (dw - o->vw) / 2; o->vy = (dh - o->vh) / 2;
 }

@@ -237,18 +237,16 @@ static void pick_device(void) {
     if (g_vk.qfam == UINT32_MAX) FATAL("no graphics+present queue\n");
     LOG("[vk] using %s\n", g_vk.props.deviceName);
     settings_resolve_defaults(g_vk.props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU);
-    // On by default on integrated GPUs only: lean usage and the SMAA stencil measured faster on an Intel UHD 770 and
-    // slightly slower on an RTX 3080 Ti; skipping the per-frame target clears saved 3.7 ms on the UHD 770 (2x) with
-    // identical images. HM_VK_LEAN_USAGE / HM_VK_SMAA_STENCIL / HM_NO_FRAME_CLEAR =0 / =1 override.
+    // On by default on integrated GPUs only (LAS Recomp's measurements with its game: lean usage faster on an Intel
+    // UHD 770, slightly slower on an RTX 3080 Ti; skipping the per-frame target clears saved time on the UHD 770 with
+    // identical images). HM_VK_LEAN_USAGE / HM_NO_FRAME_CLEAR =0 / =1 override.
     bool igpu = g_vk.props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
     const char *e = getenv("HM_VK_LEAN_USAGE");
     g_vk.lean_usage = e && *e ? atoi(e) != 0 : igpu;
-    e = getenv("HM_VK_SMAA_STENCIL");
-    g_vk.smaa_stencil = e && *e ? atoi(e) != 0 : igpu;
     e = getenv("HM_NO_FRAME_CLEAR");
     g_vk.no_frame_clear = e && *e ? atoi(e) != 0 : igpu;
-    LOG("[vk] lean usage %s, SMAA stencil %s, per-frame target clears %s (%s GPU)\n", g_vk.lean_usage ? "on" : "off",
-        g_vk.smaa_stencil ? "on" : "off", g_vk.no_frame_clear ? "off" : "on", igpu ? "integrated" : "not an integrated");
+    LOG("[vk] lean usage %s, per-frame target clears %s (%s GPU)\n", g_vk.lean_usage ? "on" : "off",
+        g_vk.no_frame_clear ? "off" : "on", igpu ? "integrated" : "not an integrated");
 }
 
 static bool g_fault_ext;
@@ -773,15 +771,6 @@ void vk_frame_resume(void) {
     rec_CmdSetScissor(cb, 0, 1, &sc);
 }
 
-VkExtent2D vk_frame_extent(void) { return g_vk.sc_extent; }
-// The window image's command buffer for direct recording (the start screen's ImGui): the recorder has recorded
-// everything queued before it, and records what is queued after it.
-void *vk_frame_cmd(void) {
-    VkCommandBuffer cb = vk_cmd();
-    rec_drain();
-    return (void *)cb;
-}
-
 // ---- the overlay (menu.mm menu_render: ImGui's FPS counter, run timer, cards, the menu)
 // ImGui's backend (imgui_impl_vulkan.cpp) makes its vkCmd* calls itself, on the thread that presents. With the recorder
 // thread on (record.c), the window image's command buffer and its pool are the recorder's until it has caught up:
@@ -929,7 +918,7 @@ void renderer_set_scale(float sx, float sy);
 uint64_t renderer_present_count(void);
 void renderer_save_texture_tex(TexBackend *b, const char *path);
 
-static uint64_t frames, total_frames, g_frame_counter;
+static uint64_t frames, total_frames;
 uint64_t renderer_present_count(void) { return total_frames; }  // (the game thread's frame: the HLE hooks')
 // The frame whose work is being translated (rqueue.h rq_frame): "once per frame" state of the translation. Without the
 // render thread, total_frames.
@@ -937,18 +926,12 @@ uint64_t renderer_exec_frame(void) { return rq_current_item() ? rq_frame() : tot
 uint64_t vk_frame_counter(void) { return renderer_exec_frame(); }  // (the translation's: g_frame_counter == total_frames)
 static float g_shot_crop[4] = {0, 0, 1, 1};
 static double last_fps_time;
-static NvnTexture *g_last_presented;
 
 const float *vk_shot_crop(void) { return g_shot_crop; }
 
 void backend_present(NvnTexture *t);
 void *backend_pool_push(void) { return NULL; }
 void backend_pool_pop(void *p) { (void)p; }
-void backend_represent(void) {
-    if (!g_last_presented) { SDL_Delay(16); return; }
-    if (rq_on()) rq_present(g_last_presented, total_frames, false);
-    else backend_present_now(g_last_presented, total_frames);
-}
 
 // (HM_VK_PROF) the present's time by part, per frame in the fps line ("present/frame"): submit = the frame's
 // last work submitted, acquire = frame slot + window image (waits included), scale = output scale / widescreen /
@@ -1007,10 +990,6 @@ void backend_present_now(NvnTexture *t, uint64_t frame) {
     }
     if (have) {
         double dw = g_vk.sc_extent.width, dh = g_vk.sc_extent.height;
-        extern void widescreen_frame_end(uint64_t frame);
-        widescreen_frame_end(frame);
-        extern void widescreen_set_factor(float f);
-        extern bool widescreen_allowed(void);
         // render scale + placement in the window: runtime/nvn/output_scale.c (Video tab "Internal resolution");
         // GPU time since the last frame (exec.c's GPU timer; -1 without one: dynamic resolution goes by frame times):
         // the game's submissions and the window image's (HM_DYNRES_COUNT_PRESENT=0: the game's only, as before)
@@ -1038,14 +1017,10 @@ void backend_present_now(NvnTexture *t, uint64_t frame) {
             sp_have = true;
         }
         OutScale os;
-        output_scale(dw, dh, widescreen_allowed(), SDL_GetTicksNS() / 1e9, game_ms, win_ms, &os);
-        double sx = os.sx, sy = os.sy, vx = os.vx, vy = os.vy, vw = os.vw, vh = os.vh, shape = os.shape;
+        output_scale(dw, dh, false, SDL_GetTicksNS() / 1e9, game_ms, win_ms, &os);
+        double sx = os.sx, sy = os.sy, vx = os.vx, vy = os.vy, vw = os.vw, vh = os.vh;
         output_scale_log((unsigned long long)frame, dw, dh, &os);  // (diagnostics: [scale] on a change)
-        // interiors / dungeons: their 16:9 centre, or the part inside a room wider than one screen
-        extern void widescreen_present_crop(uint64_t, double, float *, double *, double *, double *, double *);
-        float crop[4];  // uv origin and size
-        widescreen_present_crop(frame, shape, crop, &vx, &vy, &vw, &vh);
-        widescreen_set_factor((float)shape);
+        const float crop[4] = {0.0f, 0.0f, 1.0f, 1.0f};  // uv origin and size: the whole game image
         extern void renderer_set_alloc_scale(float ax, float ay);
         renderer_set_alloc_scale((float)os.ax, (float)os.ay);
         renderer_set_scale((float)sx, (float)sy);
@@ -1132,10 +1107,9 @@ void backend_present_now(NvnTexture *t, uint64_t frame) {
     prev_present = now;
     pp_mark(PP_REST);  // (the fps line itself is not counted)
     if (now - last_fps_time >= fps_iv) {
-        extern const char *game_level_name(void);
         if (last_fps_time > 0)
-            LOG("[vk] t=%.1f frame %llu %.1f fps max %.0fms level %s (%s%s)\n", now, (unsigned long long)frame,
-                frames / (now - last_fps_time), max_gap * 1000.0, game_level_name(), renderer_stats(), pp_text());
+            LOG("[vk] t=%.1f frame %llu %.1f fps max %.0fms (%s%s)\n", now, (unsigned long long)frame,
+                frames / (now - last_fps_time), max_gap * 1000.0, renderer_stats(), pp_text());
         max_gap = 0;
         frames = 0;
         last_fps_time = now;
@@ -1144,10 +1118,10 @@ void backend_present_now(NvnTexture *t, uint64_t frame) {
     if (now >= mem_at) { vk_log_memory("playing"); mem_at = now + 600.0; }
 }
 
+volatile int g_debug_frame_request;  // set by the debug key (ui/input.c): dump the next frame
 // The game thread's side of a present: the frame counters and the per-frame hooks (input, pacing, test hooks).
 static void present_hooks(void) {
     total_frames++;
-    g_frame_counter++;
     pace_frame();  // (pace.c: the game's 30 fps mode when frames don't fit 60)
     extern void input_frame(uint64_t frame);
     input_frame(total_frames);
@@ -1158,17 +1132,8 @@ static void present_hooks(void) {
     if (slow_ms > 0 && total_frames > 2600 && (!slow_until || (long)total_frames < slow_until)) SDL_Delay((Uint32)slow_ms);
     extern void fnprof_frame(uint64_t frame);
     fnprof_frame(total_frames);
-    extern void warp_frame(uint64_t frame);
-    warp_frame(total_frames);
-    extern void reboot_test_frame(uint64_t frame);  // runtime/main.c (HM_REBOOT_AT)
-    reboot_test_frame(total_frames);
-    extern void save_editor_frame(uint64_t frame);
-    save_editor_frame(total_frames);
-    extern void vk_level_change_check(void);
-    vk_level_change_check();
     static long debug_at = -1;
     if (debug_at < 0) { const char *e = getenv("HM_DEBUG_FRAME"); debug_at = e ? atol(e) : 0; }
-    extern volatile int g_debug_frame_request;
     if (g_debug_frame_request) { g_debug_frame_request = 0; debug_at = (long)total_frames + 1; }
     // HM_DEBUG_FRAMES=<n> (with HM_DEBUG_FRAME / F9): dump n consecutive frames (build/pass_<frame>_NNN.png)
     static long debug_n = -1;
@@ -1177,7 +1142,6 @@ static void present_hooks(void) {
 }
 
 void backend_present(NvnTexture *t) {
-    g_last_presented = t;
     uint64_t frame = total_frames, t0 = plat_now_ns();
     if (rq_on()) rq_present(t, frame, true);
     else backend_present_now(t, frame);
@@ -1273,11 +1237,9 @@ void ui_window_init(void) {
     if (getenv("HM_WINDOW")) sscanf(getenv("HM_WINDOW"), "%dx%d", &win_w, &win_h);
     SDL_WindowFlags wflags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
     if (getenv("HM_HIDDEN")) wflags |= SDL_WINDOW_HIDDEN;
-    {   // scripted test runs (user input ignored: runtime/hle/input.c input_user_blocked) open without taking the
-        // keyboard focus from whatever the player is doing
+    {   // HM_NO_USER_INPUT=1 (test runs): open without taking the keyboard focus from whatever the player is doing
         const char *v = getenv("HM_NO_USER_INPUT");
-        bool scripted = v ? atoi(v) != 0 : (getenv("HM_INPUT") || getenv("HM_DOORJUMP_TEST") || getenv("HM_PLACE") ||
-                                            getenv("HM_HOST_INPUT") || getenv("HM_BIND_TEST"));
+        bool scripted = v && atoi(v) != 0;
         if (scripted) SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0");
     }
     window = SDL_CreateWindow("Hylian Melodies", win_w, win_h, wflags);
@@ -1307,31 +1269,10 @@ void backend_init(void) {
     LOG("[vk] %s, swapchain %ux%u\n", g_vk.props.deviceName, g_vk.sc_extent.width, g_vk.sc_extent.height);
 }
 
-// ---- in-place reboot (runtime/main.c teardown; main thread, guest threads stopped)
-void backend_reset(void) {
-    if (!g_vk.dev) return;
-    rq_drain();  // (the render thread: everything queued ran; it idles while the game is down)
-    rec_drain();  // (the recorder: everything the render thread queued is recorded and submitted)
-    vkDeviceWaitIdle(g_vk.dev);
-    extern void vk_textures_reset(void);
-    extern void vk_exec_reset(void);
-    vk_textures_reset();
-    vk_exec_reset();
-    g_last_presented = NULL;
-}
-void backend_guest_memory_reset(void) {}  // (exec.c re-imports the heap on first use)
-void backend_clear_window(void) {
-    if (rq_stopping()) return;
-    rq_drain();
-    static const float black[4] = {0, 0, 0, 1};
-    if (g_vk.dev && vk_frame_begin(black)) vk_frame_end(NULL);
-}
-
 int ui_run(void) {
     ui_window_init();
     atomic_store(&ui_ready, true);
     for (;;) {
-        if (rt_reboot_requested()) return rt_reboot_requested();  // (runtime/main.c tears the game down)
         SDL_Event e;
         while (SDL_WaitEventTimeout(&e, 16)) {
             input_rumble_poll();
@@ -1342,8 +1283,6 @@ int ui_run(void) {
                 backend_quit();  // (before exit(): see there)
                 exit(0);
             }
-            extern bool input_user_blocked(const SDL_Event *e);
-            if (input_user_blocked(&e)) continue;  // scripted test runs: the real keyboard / mouse / pads do nothing (as metal.m)
             input_cursor_event(&e);
             if (menu_handle_event(&e)) continue;
             input_handle_event(&e);

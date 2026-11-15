@@ -65,14 +65,6 @@ const char *hle_name_at(uint64_t pc) {
     return i < hle_count ? hle_slots[i].name : NULL;
 }
 
-void hle_override(uint64_t addr, HostFn fn, const char *name) {
-    if (override_count == MAX_OVERRIDE) FATAL("too many overrides\n");
-    overrides[override_count].addr = addr;
-    overrides[override_count].fn = fn;
-    overrides[override_count].name = name;
-    override_count++;
-}
-
 static __thread uint64_t unimpl_pc;
 static int unimpl_counts[MAX_HLE];
 static void hle_unimplemented(Cpu *c) {
@@ -100,7 +92,6 @@ uint64_t guest_sym(const char *name) {
 }
 
 static uint64_t hle_next = HLE_HEAP;
-RT_ON_RESET(hle_heap_reset) { hle_next = HLE_HEAP; }  // (guest memory, wiped by the reboot)
 
 void *hle_alloc(uint64_t size) {
     static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
@@ -114,7 +105,7 @@ void *hle_alloc(uint64_t size) {
     return (void *)a;
 }
 
-void dispatch_init(void) {  // (after gamelib_load)
+void dispatch_init(void) {
     const GameLibTables *g = gamelib_tables();
     uint64_t nm = *g->main_count, ns = *g->sdk_count;
     tables[0] = (FnTable){g->main_addrs, g->main_fns, nm, g->main_addrs[0], g->main_addrs[nm - 1]};
@@ -143,7 +134,6 @@ static __thread struct { uint64_t addr; GuestFn fn; } dcache[DCACHE];
 __attribute__((noinline)) static GuestFn dispatch_slow(Cpu *c) {
     uint64_t pc = c->pc;
     if (pc >= HLE_BASE && pc < HLE_BASE + HLE_SIZE) {
-        rt_unwind_point();  // (HLE calls aren't cached below, so every one passes here: a reboot's safe point)
         int i = (int)((pc - HLE_BASE) / 16);
         if (i < hle_count) {
             if (hle_slots[i].fn) return hle_slots[i].fn;
@@ -264,71 +254,6 @@ void rt_brk(Cpu *c, uint32_t imm, uint64_t pc) {
 
 // ---- crash reporting
 
-// Debug data watchpoint: the page is protected; accesses in [lo, hi) are attributed to the host
-// function (f_<guest addr>) doing them, then the page is reopened until the next re-arm.
-uint64_t g_watch_lo, g_watch_hi;
-uint64_t g_fault_lr;  // (the platform's handler: the faulting thread's link register, for the watch log)
-static uint64_t watch_page;
-static void *watch_thread(void *a) {
-    (void)a;
-    int r = plat_protect(watch_page, PLAT_PAGE, PLAT_PROT_NONE);
-    fprintf(stderr, "[watch] page %llx protect -> %d\n", (unsigned long long)watch_page, r);
-    extern volatile int g_watch_stop;
-    while (!g_watch_stop) { plat_protect(watch_page, PLAT_PAGE, PLAT_PROT_NONE); usleep(100); }
-    plat_protect(watch_page, PLAT_PAGE, PLAT_PROT_RW);
-    fprintf(stderr, "[watch] page %llx released\n", (unsigned long long)watch_page);
-    return NULL;
-}
-volatile int g_watch_stop;  // (set by the watcher's client: the watch ends, the page opens for good)
-const char *rt_host_sym(uint64_t pc, uint64_t *off) { return host_sym(pc, off); }  // (the renderer's fault log)
-void watch_arm(void) {
-    if (!g_watch_lo) {  // (debug) HM_WATCH_ADDR=<lo>,<hi> (hex): who touches [lo, hi) - one page watched
-        const char *e = getenv("HM_WATCH_ADDR");
-        if (e) { g_watch_lo = strtoull(e, (char **)&e, 16); if (*e == ',') g_watch_hi = strtoull(e + 1, NULL, 16); }
-    }
-    if (!g_watch_lo || watch_page) return;
-    watch_page = g_watch_lo & ~(PLAT_PAGE - 1);
-    pthread_t t;
-    pthread_create(&t, NULL, watch_thread, NULL);
-}
-
-// The renderer's write watch on storage buffers (the Vulkan backend's renderer_watch_fault, exec.c; the Metal one's,
-// renderer.m): registered by the backend when it arms pages, called first for every fault on any thread. A plain
-// pointer, not a weak symbol: an undefined weak function reference doesn't link on Mach-O.
-static bool (*g_watch_hook)(uint64_t fa);
-void rt_fault_watch_hook(bool (*hook)(uint64_t fa)) { g_watch_hook = hook; }
-bool rt_fault_watch(uint64_t fa, uint64_t pc) {
-    if (g_watch_hook && g_watch_hook(fa)) return true;
-    if (!watch_page || fa < watch_page || fa >= watch_page + PLAT_PAGE) return false;
-    if (fa >= g_watch_lo && fa < g_watch_hi) {
-        uint64_t lr = g_fault_lr;
-        static int hits;  // (HM_WATCH_ADDR) each (frame, caller) once with its offset, the first 4000
-        extern uint64_t renderer_present_count(void);
-        static uint64_t last_frame, last_pc;
-        uint64_t fr = renderer_present_count();
-        if (getenv("HM_WATCH_ADDR") && (fr != last_frame || pc != last_pc) && hits++ < 4000) {
-            last_frame = fr, last_pc = pc;
-            uint64_t lo = 0;
-            const char *ls = host_sym(lr, &lo);
-            fprintf(stderr, "[watch] frame %llu +%#llx pc %s lr %s+%llx\n", (unsigned long long)fr,
-                    (unsigned long long)(fa - g_watch_lo), host_sym(pc, NULL) ? host_sym(pc, NULL) : "?", ls ? ls : "?", (unsigned long long)lo);
-        }
-        static char seen[64][48];
-        static int nseen;
-        const char *nm = host_sym(pc, NULL);
-        if (!nm) nm = "?";
-        char key[48];  // (each function + offset once)
-        snprintf(key, sizeof key, "%.36s+%llx", nm, (unsigned long long)(fa - g_watch_lo));
-        bool found = false;
-        for (int i = 0; i < nseen; i++) found |= !strcmp(seen[i], key);
-        if (!found && nseen < 64) {
-            snprintf(seen[nseen++], 48, "%s", key);
-            fprintf(stderr, "[watch] +%#llx by %s\n", fa - g_watch_lo, nm);
-        }
-    }
-    plat_protect(watch_page, PLAT_PAGE, PLAT_PROT_RW);
-    return true;
-}
 
 void rt_fault_report(const char *what, uint64_t fa, uint64_t pc, uint64_t lr) {
     rt_crash_fault(what, fa, pc);

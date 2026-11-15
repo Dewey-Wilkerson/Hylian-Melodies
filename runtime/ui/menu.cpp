@@ -72,7 +72,6 @@ static void push_key(ImGuiKey k, bool down) {
     push(q);
 }
 
-bool menu_is_open(void) { return g_open.load(); }
 bool menu_input_captured(void) { return g_open.load(); }
 
 static void set_open(bool open) {

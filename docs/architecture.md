@@ -36,7 +36,7 @@ Based on LAS Recomp's runtime, stripped of everything specific to Link's Awakeni
 
 - kernel (host threads for guest threads, SVCs, sync objects, memory), loader (relocations, imports bound to host
   HLE functions first), IPC + services (`fs` with saves in `profile/`, `hid`, `audout`, `time`, `acc`, `appletOE`,
-  `vi`, `set`, offline `nifm`/`bsd`), HLE for `movie::` (FFmpeg), glslc (glslang) and libc/heap helpers;
+  `vi`, `set`, offline `nifm`/`bsd`), HLE for `movie::` (FFmpeg), glslc (glslang) and heap helpers;
 - NVN recorded and replayed on Vulkan, Maxwell shader translator, SDL3 window;
 - audio: FMOD's AudioOut buffers -> SDL3 audio stream, paced like the console (the rhythm clock).
 

@@ -7,5 +7,4 @@ void menu_render(void *cmd, unsigned width, unsigned height);
 bool menu_handle_event(const SDL_Event *e);
 void menu_apply_window_requests(SDL_Window *w);
 void menu_test_open(void);
-bool menu_is_open(void);
 bool menu_input_captured(void);

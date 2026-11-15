@@ -15,8 +15,6 @@ typedef struct {
 // unknown), win_ms the window step's - the game's image drawn into the window (upscale, SMAA) and the menu (< 0:
 // unknown / not counted)
 void output_scale(double dw, double dh, bool reshape_allowed, double now, double game_ms, double win_ms, OutScale *o);
-double output_scale_dynamic_factor(void);
-double output_scale_dynamic_hold_fps(void);
 // (diagnostics) "[scale] frame f drawable WxH -> render scale sx x sy" whenever the render scale or the window changes
 void output_scale_log(unsigned long long frame, double dw, double dh, const OutScale *o);  // the frame rate Dynamic holds (60 out of reach), else 0
 
@@ -31,4 +29,3 @@ typedef struct {
 void output_scale_note_split(const DynSplit *s);
 // (Metal) the frame's command buffers' GPU spans summed, overlaps and all (what dynamic resolution went by before it
 // counted their union): shown in HM_LOG_DYNRES's [dynres] line
-void output_scale_note_sum(double ms);
