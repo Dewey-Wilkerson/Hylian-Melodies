@@ -4,7 +4,8 @@
 
 Plain numbered prompts for now (the curses screens come on top of the same Plan and flow). With --answers nothing
 is asked: the file holds the plan's fields (base, keys, and optionally update, output, march, keep_cache, work,
-out) and the exit status says how it went: 0 built, 1 failed, 2 the plan is wrong, 3 packages are missing (the
+out, settings = {"fullscreen": true, "gpu": 1}: keys of the game's ini, installer/options.py) and the exit status
+says how it went: 0 built, 1 failed, 2 the plan is wrong, 3 packages are missing (the
 command to install them is printed). Nothing is installed from here and nothing runs as root.
 """
 
@@ -14,6 +15,7 @@ import os
 import sys
 
 from . import flow as F
+from . import options as O
 from . import plan as P
 
 WELCOME = '''Hylian Melodies installer
@@ -98,7 +100,57 @@ def show_needs(io, result):
         io.say('  ' + result['command'])
 
 
-def existing(io, plan):
+def ask_settings(io, cur, gpus):
+    """The game settings the installer asks about (installer/options.py): fullscreen, the graphics card when there
+    are several, and the troubleshooting settings behind one question. cur: {key: value} now (the player's ini).
+    -> {key: value} for every setting"""
+    new = dict(cur)
+    o = O.BY_KEY['fullscreen']
+    io.say(o.title + ': ' + o.text)
+    new['fullscreen'] = choose(io, 'Start the game in fullscreen?', [('no', 'No, in a window'), ('yes', 'Yes')],
+                               'yes' if cur['fullscreen'] else 'no') == 'yes'
+    cards = gpus()
+    if len(cards) > 1:
+        io.say(O.BY_KEY['gpu'].text)
+        pick = [('auto', 'Let the game choose (recommended)')] + [(str(i), name) for i, name in cards]
+        a = choose(io, 'Which graphics card should draw the game?', pick,
+                   str(cur['gpu']) if str(cur['gpu']) in dict(pick) else 'auto')
+        new['gpu'] = 'auto' if a == 'auto' else int(a)
+    trouble = O.offered('troubleshooting')
+    on = [o.title for o in trouble if cur[o.key] != o.default]
+    io.say('Troubleshooting settings are for when something is wrong; a normal game needs none.'
+           + (' On now: ' + ', '.join(on) + '.' if on else ''))
+    a = choose(io, 'Troubleshooting settings?',
+               [('keep', 'Leave them as they are' if on else 'None'), ('pick', 'Choose them one by one')]
+               + ([('none', 'Turn them all off')] if on else []), 'keep')
+    for o in trouble:
+        if a == 'none':
+            new[o.key] = o.default
+        elif a == 'pick':
+            io.say(o.text)
+            yes = choose(io, o.title + '?', [('no', 'No'), ('yes', 'Yes')],
+                         'yes' if cur[o.key] != o.default else 'no') == 'yes'
+            new[o.key] = (cur[o.key] if cur[o.key] != o.default else o.trouble) if yes else o.default
+    return new
+
+
+def settings_summary(values):
+    parts = ['fullscreen' if values.get('fullscreen') else 'in a window']
+    if values.get('gpu', 'auto') != 'auto':
+        parts.append(f"graphics card {values['gpu']}")
+    parts += [o.title.lower() for o in O.offered('troubleshooting') if values.get(o.key, o.default) != o.default]
+    return ', '.join(parts)
+
+
+def change_settings(io, plan, repo, gpus):
+    """Settings of something already built: asked and written to the player's ini; no rebuild."""
+    values = ask_settings(io, O.current(plan.settings_file), gpus)
+    O.write_settings(plan.settings_file, values, F.default_settings(repo))
+    io.say('Saved in ' + plan.settings_file + ': the game starts ' + settings_summary(values)
+           + '. Nothing needs rebuilding; the in-game menu (F1) changes the same file.')
+
+
+def existing(io, plan, repo, gpus):
     """What to do about installs the manifest lists. -> an entry to build again from, or None for a fresh start"""
     m = P.load_manifest(plan.manifest)
     if not m['installs']:
@@ -107,8 +159,13 @@ def existing(io, plan):
     for e in m['installs']:
         io.say(f"  - version {e.get('version')}, {e.get('built', '?')}: {e.get('package', {}).get('file', '?')}")
     e = m['installs'][-1]
-    a = choose(io, 'What now?', [('again', 'Build it again (after an update, or with other options)'),
+    a = choose(io, 'What now?', [('again', 'Build it again (after an update, or with other build options)'),
+                                  ('settings', 'Change the game settings (fullscreen, graphics card, '
+                                               'troubleshooting); no rebuild'),
                                   ('remove', 'Remove it'), ('fresh', 'Start over with other files')], 'again')
+    if a == 'settings':
+        change_settings(io, plan, repo, gpus)
+        return 'quit'
     if a == 'remove':
         io.say('The package manager removes it (your saves and settings stay):')
         io.say('  ' + e.get('package', {}).get('remove', ''))
@@ -118,9 +175,9 @@ def existing(io, plan):
     return e if a == 'again' else None
 
 
-def interactive(io, plan, repo, make_flow):
+def interactive(io, plan, repo, make_flow, gpus=O.gpus):
     io.say(WELCOME)
-    prev = existing(io, plan)
+    prev = existing(io, plan, repo, gpus)
     if prev == 'quit':
         return 0
     if prev:
@@ -154,6 +211,8 @@ def interactive(io, plan, repo, make_flow):
                         plan.march if plan.march in dict(levels) else 'v2')
     plan.keep_cache = choose(io, 'Keep the build files (several GiB) so a later rebuild is faster?',
                              [('no', 'No'), ('yes', 'Yes')], 'yes' if plan.keep_cache else 'no') == 'yes'
+    io.say()
+    plan.settings = ask_settings(io, O.current(plan.settings_file), gpus)
     bad = P.validate(plan, fmt=flow.format)
     if bad:
         for _, t in bad:
@@ -165,6 +224,7 @@ def interactive(io, plan, repo, make_flow):
     io.say(f'  keys             {plan.keys}')
     io.say(f'  result           a {flow.format} package in {plan.out}')
     io.say(f'  CPU level        {plan.march}')
+    io.say(f'  game starts      {settings_summary(plan.settings)}')
     io.say(f'  work folder      {plan.work}' + ('  (kept afterwards)' if plan.keep_cache else '  (emptied afterwards)'))
     io.say('  This takes a few minutes, mostly compiling.')
     if choose(io, 'Start?', [('yes', 'Yes'), ('no', 'No')], 'yes') != 'yes':
@@ -212,7 +272,7 @@ def from_answers(io, path, repo, make_flow, env=None):
     return finish(io, F.run(plan, repo, flow.emit, flow=flow))
 
 
-def main(argv=None, io=None, make_flow=F.Flow, env=None):
+def main(argv=None, io=None, make_flow=F.Flow, env=None, gpus=O.gpus):
     ap = argparse.ArgumentParser(prog='python -m installer.tui', description=__doc__.splitlines()[0])
     ap.add_argument('--answers', help='a JSON file with the plan: nothing is asked')
     ap.add_argument('--root', default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -222,7 +282,7 @@ def main(argv=None, io=None, make_flow=F.Flow, env=None):
     if a.answers:
         return from_answers(io, a.answers, a.root, make_flow, env)
     try:
-        return interactive(io, P.Plan(env), a.root, make_flow)
+        return interactive(io, P.Plan(env), a.root, make_flow, gpus)
     except (EOFError, KeyboardInterrupt):
         io.say()
         io.say('Stopped. Nothing was installed.')

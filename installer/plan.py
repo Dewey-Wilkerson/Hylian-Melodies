@@ -8,6 +8,8 @@ import hashlib
 import json
 import os
 
+from . import options as O
+
 # Outputs. Only 'package' is built so far. The others are named so plans, answers files and the manifest keep one
 # vocabulary when they arrive: 'appimage' is the channel for immutable systems such as SteamOS, where no package can
 # be installed (docs/installer.md, section 4).
@@ -56,7 +58,7 @@ def cpu_has_v3():
 
 
 class Plan:
-    FIELDS = ('base', 'update', 'keys', 'output', 'march', 'keep_cache', 'work', 'out')
+    FIELDS = ('base', 'update', 'keys', 'output', 'march', 'keep_cache', 'work', 'out', 'settings')
 
     def __init__(self, env=None, **kw):
         self.base = self.update = self.keys = ''
@@ -65,6 +67,8 @@ class Plan:
         self.out = os.path.join(cache_home(env), 'packages')
         self.toolchain = os.path.join(cache_home(env), 'toolchain')
         self.manifest = os.path.join(data_home(env), 'installs.json')
+        self.settings = {}  # game settings to write ({key: value}, installer/options.py); no rebuild when they change
+        self.settings_file = os.path.join(data_home(env), O.INI)  # (the player's own, also saved by the in-game menu)
         unknown = set(kw) - set(self.FIELDS)
         if unknown:
             raise ValueError('unknown plan field(s): ' + ', '.join(sorted(unknown)))
@@ -107,6 +111,7 @@ def validate(plan, fmt=None, has_v3=None, free_gib=_free_gib):
         bad.append(('march', "This computer's CPU lacks AVX2/FMA/BMI2: a v3 build could not start here; use v2"))
     if not isinstance(plan.keep_cache, bool):
         bad.append(('keep_cache', 'keep_cache must be true or false'))
+    bad += [('settings', t) for t in O.check_settings(plan.settings)]
     if fmt == 'rpm':
         for field in ('work', 'out'):
             if ' ' in getattr(plan, field):

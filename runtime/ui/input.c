@@ -137,7 +137,7 @@ static void publish(void) {
     bool captured = menu_input_captured();  // (the overlay menu is open: the game sees nothing held)
     if (captured) b = 0;
     static int log = -1;
-    if (log < 0) log = getenv("HM_LOG_INPUT") != NULL;
+    if (log < 0) log = getenv("HM_LOG_INPUT") != NULL || g_settings.log_input;
     if (log && b != g_input_buttons) {
         char names[160] = "";
         for (int i = 0; i < NB; i++)
@@ -211,7 +211,7 @@ static void ensure_init(void) {
 
 void input_handle_event(const SDL_Event *e) {
     ensure_init();
-    if (getenv("HM_LOG_INPUT")) {  // (diagnostics: what the window receives)
+    if (getenv("HM_LOG_INPUT") || g_settings.log_input) {  // (diagnostics: what the window receives)
         if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat)
             LOG("[input] key down: %s\n", SDL_GetScancodeName(e->key.scancode));
         else if (e->type == SDL_EVENT_WINDOW_FOCUS_GAINED || e->type == SDL_EVENT_WINDOW_FOCUS_LOST)

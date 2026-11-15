@@ -141,7 +141,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_cb(VkDebugUtilsMessageSeverityFlagBi
     return VK_FALSE;
 }
 
-// HM_VK_VALIDATION=1: Khronos validation layer (MSYS2 package vulkan-validation-layers)
+// vk_validation = 1 in the ini or HM_VK_VALIDATION=1: Khronos validation layer (MSYS2 package vulkan-validation-layers)
 // HM_VK_VALIDATION_STOP=1: require that layer and its callback, and exit nonzero on the first error.
 static bool validating;  // the validation layer is on (validation_exit)
 static void create_instance(void) {
@@ -151,7 +151,7 @@ static void create_instance(void) {
     uint32_t n_ext = 0;
     for (Uint32 i = 0; i < n_sdl && n_ext < 14; i++) ext[n_ext++] = sdl_ext[i];
     bool strict = getenv("HM_VK_VALIDATION_STOP") != NULL;
-    bool validate = strict || getenv("HM_VK_VALIDATION") != NULL;
+    bool validate = strict || getenv("HM_VK_VALIDATION") != NULL || g_settings.vk_validation;
     if (validate) ext[n_ext++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     const char *layers[] = {"VK_LAYER_KHRONOS_validation"};
     VkApplicationInfo app = {.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "Hylian Melodies",
@@ -198,14 +198,14 @@ static bool has_ext(VkExtensionProperties *e, uint32_t n, const char *name) {
     return false;
 }
 
-// Discrete GPU first (HM_GPU=<index> picks one), needs Vulkan 1.3 and a queue that can present.
+// Discrete GPU first (gpu = <index> in the ini, or HM_GPU=<index>, which wins, picks one), needs Vulkan 1.3 and a queue that can present.
 static void pick_device(void) {
     uint32_t n = 0;
     vkEnumeratePhysicalDevices(g_vk.inst, &n, NULL);
     if (!n) FATAL("no Vulkan device\n");
     VkPhysicalDevice *pd = calloc(n, sizeof *pd);
     vkEnumeratePhysicalDevices(g_vk.inst, &n, pd);
-    int want = getenv("HM_GPU") ? atoi(getenv("HM_GPU")) : -1, best = -1, best_score = -1;
+    int want = getenv("HM_GPU") ? atoi(getenv("HM_GPU")) : g_settings.gpu, best = -1, best_score = -1;
     for (uint32_t i = 0; i < n; i++) {
         VkPhysicalDeviceProperties p;
         vkGetPhysicalDeviceProperties(pd[i], &p);

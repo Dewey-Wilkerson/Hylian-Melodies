@@ -167,15 +167,20 @@ also generates the env-var list in the docs; a test checks the registry against 
 | Work folder | default `~/.cache/hylian-melodies/temp` | Where extraction and compilation happen; free space shown. |
 | Parallel jobs | default: all cores | Fewer keeps the computer usable during the compile. |
 
-**Launch options** (no rebuild; written to the menu entry and to `<player dir>/launch.env`):
+**Game settings** (no rebuild; written into the player's own `hylian-melodies.ini`, the file the in-game menu (F1)
+reads and saves; `installer/options.py`):
 
-- *Start in fullscreen* (`--fullscreen` / `--windowed`) and a "Play fullscreen" menu action (exists today).
-- The player group of `HM_*` environment variables, from the env-var audit (docs/PROGRESS.md, publication step 6:
-  192 `getenv("HM_...")` in `runtime/` sorted into player / troubleshooting / developer, dead LAS Recomp leftovers
-  removed). Player and troubleshooting ones are listed, troubleshooting under "Advanced"; developer ones are not.
-- `launch.env` holds `KEY=value` lines; the launcher reads it (parsed, never `source`d; only `HM_*` keys accepted),
-  so starting from a terminal and from the menu behaves the same. Settings the in-game menu already covers
-  (`hylian-melodies.ini`: video, audio, controls) are not duplicated; the UI points to the menu (F1).
+- *Start in fullscreen* (`fullscreen`) and, on a computer with more than one, the *graphics card* (`gpu`). The
+  menu entry's "Play fullscreen" action stays.
+- Behind one "something is wrong" question: frame pacing off, the shader cache off, Vulkan validation, input and
+  audio-timing logs (`frame_pacing`, `shader_cache`, `vk_validation`, `log_input`, `audio_stats`).
+- Only those keys are edited; every other line (the menu's choices, controls, the player's comments) stays. A
+  missing file starts as the package's commented default. A key set back to its default is commented out again.
+- Each setting's `HM_*` variable still wins when set in the environment (developers, test runs). The full list of
+  variables, sorted into player / troubleshooting / developer / internal, is generated into `docs/env-vars.md`;
+  a test checks it against every variable `runtime/` reads.
+- Not a separate `launch.env` read by the launcher (the first design): that pinned fullscreen and frame pacing from
+  outside the game, so a change in the in-game menu was undone at the next start (docs/DECISIONS.md).
 
 ### 6. Manifest, update, uninstall
 
@@ -223,7 +228,8 @@ Owner, 2026-11-14: the first version gets the system packages right; the other o
    installed and removed in a container, the pacman one compared with the developer PKGBUILD's).
 3. UI model, `--answers`, plain prompts; manifest; build again / remove for packages: done 2026-11-14
    (`installer/plan.py`, `flow.py`, `tui.py`; section 10).
-4. Options registry + env-var audit (publication step 6); `launch.env` in the launcher.
+4. Options registry + env-var audit (publication step 6); game settings written into the player's ini: done
+   2026-11-15 (`installer/options.py`, section 5).
 5. Bootstrap and `tools/release.py`; test against the private repository (push only with the owner's OK then).
 6. Curses screens and the file picker; loose folder; then AppImage; Flatpak last.
 
@@ -354,8 +360,8 @@ python3 -m installer.tui [--answers FILE.json]
   variables at a scratch folder.
 - Tried here unattended with the real dump (scratch folders): 2 min 50 s from the answers file to a pacman
   package whose file list equals the developer PKGBUILD's; manifest written; no key value in any log.
-- Still to come from sections 2 to 6: the curses screens and file picker, launch options and `launch.env`, the
-  options registry, disk space on the summary screen, parallel jobs.
+- Still to come from sections 2 to 6: the curses screens and file picker, disk space on the summary screen,
+  parallel jobs.
 
 **Immutable systems (SteamOS and the like): the AppImage channel** (owner, 2026-11-14). A system whose root is
 read-only cannot install a package, so it gets its own output, `appimage`; the plan, the answers file and the

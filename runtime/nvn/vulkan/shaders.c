@@ -120,7 +120,7 @@ static uint32_t *no_contraction(uint32_t *spv, size_t *nwords) {
 uint32_t *vk_glsl_to_spirv(const char *src, int stage, const char *name, size_t *nwords) {
     uint64_t h = src_hash(src, stage);
     static int nocache = -1;
-    if (nocache < 0) nocache = getenv("HM_VK_NO_SPIRV_CACHE") != NULL;
+    if (nocache < 0) nocache = getenv("HM_VK_NO_SPIRV_CACHE") != NULL || !g_settings.shader_cache;
     uint32_t *out = nocache ? NULL : cache_load(h, nwords);
     if (out) return out;
     static __thread shaderc_compiler_t comp;

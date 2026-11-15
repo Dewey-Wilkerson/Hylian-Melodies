@@ -17,6 +17,7 @@ import sys
 import time
 
 from . import deps, pack
+from . import options as O
 from . import plan as P
 
 STEPS = {
@@ -27,6 +28,11 @@ STEPS = {
     'pack': 'Making the package',
     'record': 'Recording the install',
 }
+
+
+def default_settings(repo):
+    """The package's default hylian-melodies.ini (what the launcher copies for a new player)."""
+    return os.path.join(repo, 'packaging', O.INI)
 
 
 class FlowError(Exception):
@@ -139,6 +145,12 @@ class Flow:
             shutil.rmtree(os.path.dirname(p.stage), ignore_errors=True)
         return target
 
+    def save_settings(self):
+        """The plan's game settings into the player's ini: the game's own file, not the manifest, where the in-game
+        menu could not keep it current."""
+        if self.plan.settings:
+            O.write_settings(self.plan.settings_file, self.plan.settings, default_settings(self.repo))
+
     def record(self, target):
         self.step('record')
         p = self.plan
@@ -154,6 +166,7 @@ class Flow:
             'package': {'name': pack.NAME, 'format': self.format, 'file': target, 'install': install,
                         'remove': remove},
         }
+        self.save_settings()
         if p.update:
             entry['inputs']['update'] = {'path': p.update}
         P.record_install(p.manifest, entry)

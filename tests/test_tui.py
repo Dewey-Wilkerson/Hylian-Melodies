@@ -10,7 +10,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, 'tests'))
-from installer import flow as F, plan as P, tui  # noqa: E402
+from installer import flow as F, options as O, plan as P, tui  # noqa: E402
 from test_deps import OS, Fake  # noqa: E402
 from installer import deps  # noqa: E402
 
@@ -76,6 +76,7 @@ class FakeFlow:
 
     def record(self, target):
         type(self).calls.append('record')
+        F.Flow.save_settings(self)
         return {'result': 'ok', 'file': target, 'install': 'sudo apt install ' + target, 'remove': 'sudo apt remove x'}
 
     error = F.Flow.error
@@ -179,6 +180,7 @@ class FlowTests(Base):
     def test_record_and_error(self):
         f = self.flow('debian13')
         f.check_system()
+        f.plan.settings = {'fullscreen': True}
         r = f.record('/pkgs/hylian-melodies-recomp_0.1.0_amd64.deb')
         self.assertEqual(r['install'], 'sudo apt install /pkgs/hylian-melodies-recomp_0.1.0_amd64.deb')
         e = P.load_manifest(f.plan.manifest)['installs'][0]
@@ -186,20 +188,23 @@ class FlowTests(Base):
         self.assertEqual(len(e['inputs']['base']['sha256']), 64)
         self.assertNotIn('sha256', e['inputs']['keys'])  # (the keys: their path only)
         self.assertNotIn('x', json.dumps(e['inputs']['keys']).replace(self.keys, ''))
+        self.assertEqual(O.read_settings(f.plan.settings_file), {'fullscreen': True})
         r = f.error(F.FlowError('it broke', '/the.log'))
         self.assertEqual(r, {'result': 'error', 'text': 'it broke', 'log': '/the.log'})
 
 
 class TuiTests(Base):
-    def run_tui(self, *answers, argv=()):
+    def run_tui(self, *answers, argv=(), gpus=()):
         io = Script(*answers)
-        rc = tui.main(list(argv), io=io, make_flow=FakeFlow, env=self.env)
+        rc = tui.main(list(argv), io=io, make_flow=FakeFlow, env=self.env, gpus=lambda: list(gpus))
         return rc, io
 
     def test_straight_through(self):
-        rc, io = self.run_tui(f'"{self.xci}"', self.keys, '', '', '')
+        rc, io = self.run_tui(f'"{self.xci}"', self.keys, '', '', '', '', '')
         self.assertEqual(rc, 0, io.text())
         self.assertEqual(FakeFlow.calls, ['check_system', 'build_tools', 'check_inputs', 'setup', 'make_package', 'record'])
+        self.assertIn('  game starts      in a window', io.said)
+        self.assertNotIn('Which graphics card should draw the game?', io.said)  # (one card: not asked)
         t = io.text()
         for want in ('never share it', 'Ready to build:', self.xci, '==> Compiling the game', '    50%',
                      'Install it with:', 'sudo apt install '):
@@ -207,7 +212,7 @@ class TuiTests(Base):
 
     def test_missing_packages_then_check_again(self):
         FakeFlow.missing_rounds = 1
-        rc, io = self.run_tui('', self.xci, self.keys, '', '', '')
+        rc, io = self.run_tui('', self.xci, self.keys, '', '', '', '', '')
         self.assertEqual(rc, 0, io.text())
         self.assertIn('  sudo apt install ninja-build', io.said)
         self.assertEqual(FakeFlow.calls[:2], ['check_system', 'check_system'])
@@ -217,13 +222,13 @@ class TuiTests(Base):
 
     def test_wrong_files_are_asked_again(self):
         FakeFlow.bad_inputs_rounds = 1
-        rc, io = self.run_tui('/no/such.xci', self.xci, self.keys, '', self.xci, self.keys, '', '', '')
+        rc, io = self.run_tui('/no/such.xci', self.xci, self.keys, '', self.xci, self.keys, '', '', '', '', '')
         self.assertEqual(rc, 0, io.text())
         self.assertIn('  The cartridge dump is not a file: /no/such.xci', io.said)
         self.assertIn('  Cannot read the dump with these keys', io.said)
 
     def test_options_and_decline(self):
-        rc, io = self.run_tui(self.xci, self.keys, 'native', '2', 'no')
+        rc, io = self.run_tui(self.xci, self.keys, 'native', '2', '', '', 'no')
         self.assertEqual(rc, 0)
         self.assertNotIn('setup', FakeFlow.calls)
         self.assertIn('  CPU level        native', io.said)
@@ -231,7 +236,7 @@ class TuiTests(Base):
 
     def test_failure_and_input_ending(self):
         FakeFlow.fail_setup = True
-        rc, io = self.run_tui(self.xci, self.keys, '', '', '')
+        rc, io = self.run_tui(self.xci, self.keys, '', '', '', '', '')
         self.assertEqual(rc, 1)
         self.assertIn('It did not work: Compiling the game failed', io.said)
         self.assertIn('The full log: /setup.log', io.said)
@@ -245,14 +250,47 @@ class TuiTests(Base):
                                'inputs': {'base': {'path': self.xci}, 'keys': {'path': self.keys}},
                                'build': {'march': 'native', 'keep_cache': True},
                                'package': {'file': '/p/x.deb', 'remove': 'sudo apt remove x'}})
-        rc, io = self.run_tui('', '', '', '', '', '')  # again, and every default: the files and options of last time
+        rc, io = self.run_tui('', '', '', '', '', '', '', '')  # again, and every default: the files and options of last time
         self.assertEqual(rc, 0, io.text())
         self.assertIn('  CPU level        native', io.said)
         self.assertIn(f'  cartridge dump   {self.xci}', io.said)
-        rc, io = self.run_tui('2', '')  # remove: the command, then forgotten
+        rc, io = self.run_tui('3', '')  # remove: the command, then forgotten
         self.assertEqual(rc, 0)
         self.assertIn('  sudo apt remove x', io.said)
         self.assertEqual(P.load_manifest(man)['installs'], [])
+
+    def ini(self):
+        return P.Plan(self.env).settings_file
+
+    def test_settings_questions(self):
+        cards = [(0, 'Fast Card'), (1, 'Built-in Graphics')]
+        # fullscreen yes; the second card; troubleshooting one by one: pacing no, shaders yes, the rest no; start
+        rc, io = self.run_tui(self.xci, self.keys, '', '', 'yes', '3', 'pick', '', 'yes', '', '', '', '', gpus=cards)
+        self.assertEqual(rc, 0, io.text())
+        self.assertIn('  3. Built-in Graphics', io.said)
+        self.assertIn('  game starts      fullscreen, graphics card 1, rebuild the shaders at every start', io.said)
+        self.assertNotIn('audio', ' '.join(a for a in io.asked if 'timing' not in a).lower())  # (no "no audio" option)
+        self.assertEqual(O.read_settings(self.ini()), {'fullscreen': True, 'gpu': 1, 'shader_cache': False})
+        with open(self.ini()) as f:
+            self.assertIn('# volume = 1.0', f.read())  # (started from the package's default file)
+
+    def test_change_settings_without_rebuild(self):
+        plan = P.Plan(self.env)
+        P.record_install(plan.manifest, {'id': 'package:x', 'version': '0.1.0', 'built': 'then',
+                                         'inputs': {'base': {'path': self.xci}, 'keys': {'path': self.keys}},
+                                         'package': {'file': '/p/x.deb', 'remove': 'sudo apt remove x'}})
+        os.makedirs(os.path.dirname(plan.settings_file), exist_ok=True)
+        with open(plan.settings_file, 'w') as f:
+            f.write('volume = 0.3\nlog_input = 1\n')  # (the menu's and the player's)
+        rc, io = self.run_tui('2', 'yes', '')  # change the settings: fullscreen; troubleshooting left as it is
+        self.assertEqual((rc, FakeFlow.calls), (0, []), io.text())
+        self.assertIn('On now: Log controller and keyboard input', io.text())
+        self.assertEqual(O.read_settings(plan.settings_file), {'fullscreen': True, 'log_input': True})
+        rc, io = self.run_tui('2', 'no', 'none')  # and back: a window, troubleshooting all off
+        with open(plan.settings_file) as f:
+            self.assertEqual(f.read(), 'volume = 0.3\n# log_input = 0\n\n# --- set by the installer\n'
+                                       '# fullscreen = 0\n')
+        self.assertNotIn('launch', P.load_manifest(plan.manifest)['installs'][0])
 
     def answers(self, **kw):
         path = os.path.join(self.t, 'answers.json')
@@ -268,7 +306,13 @@ class TuiTests(Base):
         rc, io = self.run_tui(argv=self.answers(base=self.xci, keys=self.keys))
         self.assertEqual(rc, 3)
         self.assertIn('  sudo apt install ninja-build', io.said)
+        rc, io = self.run_tui(argv=self.answers(base=self.xci, keys=self.keys,
+                                                settings={'fullscreen': True, 'gpu': 1}))
+        self.assertEqual(rc, 0, io.text())
+        self.assertEqual(O.read_settings(self.ini()), {'fullscreen': True, 'gpu': 1})
         for bad in (dict(base=self.xci), dict(base=self.xci, keys=self.keys, output='appimage'),
+                    dict(base=self.xci, keys=self.keys, settings={'HM_NO_AUDIO': '1'}),
+                    dict(base=self.xci, keys=self.keys, settings={'gpu': 'fast; rm -rf'}),
                     dict(base=self.xci, keys=self.keys, nonsense=1)):
             rc, io = self.run_tui(argv=self.answers(**bad))
             self.assertEqual(rc, 2, io.text())

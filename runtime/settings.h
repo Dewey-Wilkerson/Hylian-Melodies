@@ -22,12 +22,18 @@ typedef struct {
     double audio_queue_ms; // what the output stream may hold before the next game buffer is taken (0 = one period)
     // game
     char language[8];      // the game's language code, e.g. en-US ("language" in the ini; default: system)
+    int gpu;               // Vulkan device index, -1 = auto (discrete first); "gpu" in the ini, HM_GPU wins
+    // troubleshooting (written by the installer, installer/options.py; each HM_* variable, when set, wins)
+    bool shader_cache;     // the saved SPIR-V cache (default on; HM_VK_NO_SPIRV_CACHE)
+    bool vk_validation;    // Khronos validation layer (HM_VK_VALIDATION)
+    bool log_input;        // buttons and keys to the log (HM_LOG_INPUT)
+    double audio_stats;    // seconds between audio timing lines, 0 = off (HM_AUDIO_STATS)
 } Settings;
 
 extern Settings g_settings;
 extern int g_default_upscaler, g_default_res_mode;
 extern bool g_gpu_integrated;
-void settings_load(void);
+void settings_load(void);                             // (once; later calls do nothing)
 void settings_resolve_defaults(bool integrated);
 const char *settings_language(void);
 

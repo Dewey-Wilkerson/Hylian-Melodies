@@ -5,7 +5,7 @@
 #include "settings.h"
 
 Settings g_settings = {.res_mode = 1, .upscaler = UPSCALE_BILINEAR, .frame_pacing = true, .volume = 1.0,
-                       .audio_period = 256, .audio_queue_ms = 0};
+                       .audio_period = 256, .audio_queue_ms = 0, .gpu = -1, .shader_cache = true};
 int g_default_upscaler = UPSCALE_BILINEAR, g_default_res_mode = 1;  // (1: native, 1280x720 pixel art at 1:1)
 bool g_gpu_integrated;
 
@@ -13,6 +13,9 @@ bool g_gpu_integrated;
 void settings_resolve_defaults(bool integrated) { g_gpu_integrated = integrated; }
 
 void settings_load(void) {
+    static bool loaded;
+    if (loaded) return;
+    loaded = true;
     FILE *f = fopen("hylian-melodies.ini", "r");
     if (!f) return;
     char line[256], key[64];
@@ -30,6 +33,11 @@ void settings_load(void) {
         else if (!strcmp(key, "upscale_filter")) g_settings.upscale_filter = (int)v;
         else if (!strcmp(key, "audio_period")) g_settings.audio_period = (int)v;
         else if (!strcmp(key, "audio_queue_ms")) g_settings.audio_queue_ms = v;
+        else if (!strcmp(key, "gpu")) g_settings.gpu = v >= 0 ? (int)v : -1;  // ("auto" does not parse: stays -1)
+        else if (!strcmp(key, "shader_cache")) g_settings.shader_cache = v != 0;
+        else if (!strcmp(key, "vk_validation")) g_settings.vk_validation = v != 0;
+        else if (!strcmp(key, "log_input")) g_settings.log_input = v != 0;
+        else if (!strcmp(key, "audio_stats")) g_settings.audio_stats = v > 0 ? v : 0;
     }
     fclose(f);
 }

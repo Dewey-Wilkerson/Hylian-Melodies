@@ -430,3 +430,16 @@ How the checks of this session were done (to repeat them):
   Next: the options registry (hand-off above, item 1). Owner's cut of the launch options: players get fullscreen /
   windowed and the graphics card; no "no audio" option (a rhythm game); a short troubleshooting list; the rest
   developer-only.
+- 2026-11-15 options registry and game settings (hand-off item 1). `installer/options.py` sorts every `HM_*`
+  variable `runtime/` reads (`getenv` and the `ENV` macro of `runtime/hle.h`, which the first version of the test
+  missed: four variables) into player / troubleshooting / developer / internal; `docs/env-vars.md` is generated
+  from it and a test checks both ways. Owner's call after comparing the two: the installer's questions (fullscreen,
+  the graphics card when there are several, five troubleshooting settings) are written into the player's own
+  `hylian-melodies.ini`, not a `launch.env` turned into arguments and variables by the launcher, which pinned
+  fullscreen and frame pacing so a change in the in-game menu was undone at the next start (docs/DECISIONS.md).
+  New ini keys read by `runtime/settings.c`: `gpu`, `shader_cache`, `vk_validation`, `log_input`, `audio_stats`
+  (each `HM_*` variable still wins); the default ini lists them. The installer edits only its keys and keeps every
+  other line; "change the game settings" for an existing install needs no rebuild. The launcher reads no file of
+  the player's. Both targets build, 109 unit tests; `settings.c` checked alone against sample files. Not yet run in
+  the game (needs the owner's OK): `gpu = N` picking that card and `log_input = 1` logging, from the ini.
+  Next: the bootstrap (`install.sh` + `tools/release.py`, item 2 of the evening hand-off).

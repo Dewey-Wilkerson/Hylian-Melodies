@@ -139,7 +139,7 @@ static void *audout_thread(void *arg) {
             a->st_appends++;
             if (inflight > a->st_max_queued) a->st_max_queued = inflight;
             static double every = -1;
-            if (every < 0) every = getenv("HM_AUDIO_STATS") ? atof(getenv("HM_AUDIO_STATS")) : 0;
+            if (every < 0) every = getenv("HM_AUDIO_STATS") ? atof(getenv("HM_AUDIO_STATS")) : g_settings.audio_stats;
             double el = (now - a->st_t0) / 1e9;
             if (every > 0 && el >= every) {
                 double bpf = 2.0 * ch;

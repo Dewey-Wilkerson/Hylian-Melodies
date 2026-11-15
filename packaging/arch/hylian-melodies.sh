@@ -4,7 +4,8 @@
 # (/proc/self/exe), where it also writes settings, saves, logs and caches. So each player gets
 # $XDG_DATA_HOME/hylian-melodies (~/.local/share/hylian-melodies) with a copy of the executable (a symlink would
 # resolve back to /opt) and symlinks to everything else. HM_GAME_DIR / HM_SUPPORT_DIR override the system folders
-# (tests only). Arguments go to the game (--fullscreen, --windowed).
+# (tests only). Arguments go to the game (--fullscreen, --windowed). Settings, including the ones the installer
+# asks about, are the game's own hylian-melodies.ini in that folder (installer/options.py).
 set -eu
 
 game=${HM_GAME_DIR:-/opt/hylian-melodies}
