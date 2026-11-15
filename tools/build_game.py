@@ -2,7 +2,7 @@
 """Write a Ninja file that compiles the generated C (and the runtime) and run Ninja.
 
   python3 tools/build_game.py --gen DIR --out DIR [--target linkcheck|game] [--march v2|v3|native] [--imgui DIR]
-                              [--vma DIR] [-j N]
+                              [--vma DIR] [--sdl3 DIR] [--shaderc DIR] [-j N]
 
 linkcheck: every generated object + tests/c/linkcheck_stub.c linked as a shared object with --no-undefined
 (M3 acceptance: zero unresolved symbols). game: the runtime with the Vulkan backend and the SDL3 window + generated
@@ -10,6 +10,9 @@ code -> hylian-melodies. headless: the null backend, no window -> hylian-melodie
 The game target also compiles Dear ImGui (the overlay menu) from --imgui DIR, default toolchain/src/imgui, fetched
 there by tools/fetch_imgui.py when missing (offline once its stamp matches), and takes the Vulkan Memory Allocator
 header from --vma DIR, default toolchain/src/vma, fetched the same way by tools/fetch_vma.py.
+--sdl3 DIR links SDL3 statically from that folder (built by tools/build_sdl3.py) instead of the system's SDL3:
+for distro releases without an SDL3 package. --shaderc DIR does the same for shaderc (tools/build_shaderc.py):
+for releases whose shaderc package cannot be used.
 The -march level defaults to x86-64-v2 (generic: any x86-64 CPU from about 2009 on), so the result runs on other
 machines too. --march v3 (AVX2/FMA/BMI2, 2013+) or native is the opt-in "optimize for this computer's CPU"; v3 is
 refused when this CPU lacks it, since the game could not start here.
@@ -53,6 +56,8 @@ def main():
     ap.add_argument('--cc', default=os.environ.get('HM_CC', 'clang'))
     ap.add_argument('--imgui', default=os.path.join(ROOT, 'toolchain', 'src', 'imgui'))
     ap.add_argument('--vma', default=os.path.join(ROOT, 'toolchain', 'src', 'vma'))
+    ap.add_argument('--shaderc', help='folder of a static shaderc built by tools/build_shaderc.py (default: the system shaderc)')
+    ap.add_argument('--sdl3', help='folder of a static SDL3 built by tools/build_sdl3.py (default: the system SDL3)')
     ap.add_argument('-j', type=int, default=os.cpu_count() or 4)
     a = ap.parse_args()
     for t in (a.cc, 'ninja', 'ld.lld'):
@@ -101,14 +106,38 @@ def main():
         # game: Vulkan backend + SDL3 window (hylian-melodies); headless: the NVN front end with the null backend,
         # no window (hylian-melodies-headless, the M4 boot tests). Both share the generated objects.
         headless = a.target == 'headless'
-        pkgs = ['sdl3', 'libavformat', 'libavcodec', 'libavutil', 'libswscale'] + ([] if headless else ['vulkan', 'shaderc'])
+        pkgs = ['libavformat', 'libavcodec', 'libavutil', 'libswscale'] + ([] if headless else ['vulkan', 'shaderc'])
         if not shutil.which('pkg-config'):
             sys.exit('build_game: pkg-config not found')
-        missing = [p for p in pkgs if subprocess.run(['pkg-config', '--exists', p]).returncode]
+
+        def pc(*args, env=None):
+            return subprocess.run(['pkg-config', *args], capture_output=True, text=True, env=env)
+        if a.sdl3:  # our own static SDL3: the archive itself plus the system libraries its .pc file lists
+            sdl = os.path.abspath(a.sdl3)
+            sdl_pc = os.path.join(sdl, 'lib', 'pkgconfig', 'sdl3.pc')
+            if not os.path.isfile(sdl_pc):
+                sys.exit(f'build_game: no SDL3 in {a.sdl3} (run tools/build_sdl3.py --out there)')
+            # (read here, not through pkg-config: its output does not quote a folder name with a space in it)
+            private = [ln.split(':', 1)[1] for ln in open(sdl_pc) if ln.startswith('Libs.private:')]
+            sdl_cflags = f'-I{shlex.quote(os.path.join(sdl, "include"))}'
+            sdl_libs = ' '.join([shlex.quote(os.path.join(sdl, 'lib', 'libSDL3.a'))] +
+                                [x for x in ' '.join(private).split() if x.startswith('-l') or x == '-pthread'])
+        else:
+            pkgs.insert(0, 'sdl3')
+            sdl_cflags = sdl_libs = ''
+        if a.shaderc and not headless:  # our own static shaderc: one archive with glslang and SPIRV-Tools inside
+            sc = os.path.abspath(a.shaderc)
+            sc_lib = os.path.join(sc, 'lib', 'libshaderc_combined.a')
+            if not os.path.isfile(sc_lib):
+                sys.exit(f'build_game: no shaderc in {a.shaderc} (run tools/build_shaderc.py --out there)')
+            pkgs.remove('shaderc')
+            sdl_cflags += f' -I{shlex.quote(os.path.join(sc, "include"))}'
+            sdl_libs += f' {shlex.quote(sc_lib)}'
+        missing = [p for p in pkgs if pc('--exists', p).returncode]
         if missing:
             sys.exit('build_game: development files not found (pkg-config): ' + ' '.join(missing))
-        cflags = subprocess.run(['pkg-config', '--cflags', *pkgs], capture_output=True, text=True).stdout.strip()
-        libs = subprocess.run(['pkg-config', '--libs', *pkgs], capture_output=True, text=True).stdout.strip()
+        cflags = (sdl_cflags + ' ' + pc('--cflags', *pkgs).stdout.strip()).strip()
+        libs = (sdl_libs + ' ' + pc('--libs', *pkgs).stdout.strip()).strip()
         inc = ' '.join(f'-I{shlex.quote(os.path.join(rt, d))}' for d in ('', 'nvn', 'nvn/vulkan', 'nvn/maxwell'))
         version = open(os.path.join(ROOT, 'VERSION')).read().strip()
         common = (f'-O2 -g {pmap} -DHM_VERSION=\\"{version}\\" -D_GNU_SOURCE -fno-strict-aliasing -Wall -Wno-unused-function -Wno-format '

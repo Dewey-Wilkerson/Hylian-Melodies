@@ -23,11 +23,11 @@ needs the owner's approval first.
 |---|---|---|
 | hactool (SciresM) | fetched at a pinned commit and built by `tools/build_hactool.py` on the user's machine; never vendored | ISC |
 | Dear ImGui (ocornut/imgui) | fetched at `97428e8` (v1.91.9) by `tools/fetch_imgui.py`, never vendored; its Vulkan backend gets `tools/imgui/0001-dynamic-vertex-input.patch` (from LAS Recomp, MIT) | MIT |
-| SDL 3 | system library, dynamically linked | zlib |
+| SDL 3 | system library, dynamically linked; where a release has no package, fetched at `f00dc91` (release-3.4.20) by `tools/build_sdl3.py` and statically linked, never vendored | zlib |
 | Vulkan loader / headers | system | Apache-2.0 |
 | Capstone | lifter dependency (disassembly) | BSD-3-Clause |
 | Vulkan Memory Allocator | fetched at `0f1a757` (v3.5.0) by `tools/fetch_vma.py`, never vendored; compiled by `runtime/nvn/vulkan/vma.cpp` | MIT |
-| shaderc | system library (GLSL to SPIR-V for translated shaders) | Apache-2.0 |
+| shaderc | system library (GLSL to SPIR-V for translated shaders); where a release's package cannot be used, fetched at `b64fd42` (v2026.4, with glslang `e1b562a`, SPIRV-Tools `ef96ed7`, SPIRV-Headers `04fd3ca`) by `tools/build_shaderc.py` and statically linked, never vendored | Apache-2.0 (glslang: BSD-3-Clause and others, see its LICENSE.txt; SPIRV-Headers: MIT) |
 | FFmpeg (libavformat, libavcodec, libavutil, libswscale) | system libraries, dynamically linked, for the game's videos (`runtime/hle/movie.c`) | LGPL-2.1+ (Arch builds it with GPL parts enabled; see docs/OPEN-QUESTIONS.md) |
 
 ## License texts

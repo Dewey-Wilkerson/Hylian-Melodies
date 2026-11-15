@@ -223,18 +223,48 @@ distros' package databases, then **tried in containers** (podman, 2026-11-14): t
 image, then hactool and the game built from the same generated C, the unit tests, and each `DT_NEEDED` library
 traced back to its package. All five build, link with nothing missing and pass the tests.
 
-**Supported for the system package** (the release must ship SDL3 and Python >= 3.11):
+**Supported for the system package** (Python >= 3.11; clang >= 17 from the distro's repositories):
 
 | Distro | From | Built with (container) |
 |---|---|---|
 | Arch and derivatives | rolling | SDL3 3.4.20, FFmpeg 9.0, clang 23 (the dev machine) |
 | Debian | 13 "trixie" | SDL3 3.2.10, FFmpeg 7.1, clang 19, shaderc 2025.2, Python 3.13 |
 | Ubuntu | 26.04 | SDL3 3.4.2, FFmpeg 8.0, clang 21, Python 3.14 |
+| Ubuntu 24.04 (and what is built on it) | with our own SDL3 | SDL3 3.4.20 built from source and linked in, FFmpeg 6.1, clang 18, Python 3.12 |
+| Debian 12 "bookworm" | with our own SDL3 and shaderc | both built from source and linked in, FFmpeg 5.1, clang 19 (`clang-19`), Python 3.11 |
 | Fedora | 43 (tried: 43, 45) | SDL3 3.4.20, FFmpeg 7.1 / 9.0, clang 21 / 23, Python 3.14 / 3.15 |
 | openSUSE | Tumbleweed | SDL3 3.4.20, FFmpeg 9.0, clang 23, Python 3.13 |
 
-Debian 12 and Ubuntu 24.04 have no SDL3 package (also not in backports): the dependency screen says so and offers
-no command; they wait for the outputs that bundle SDL3 (AppImage).
+**Older releases: libraries built from source.** Two tools in the style of `tools/build_hactool.py` (pinned
+commits, nothing vendored), run by the UI when `installer/deps.py` reports `sdl3: own` or `shaderc: own`; the game
+is then linked against the result statically and the installed game needs no package for it:
+
+| Library | Tool, build option | When | Pinned | Time (dev machine) |
+|---|---|---|---|---|
+| SDL3 | `tools/build_sdl3.py`, `build_game.py --sdl3 DIR` | the release has no SDL3 package and `pkg-config sdl3` finds none (Ubuntu 24.04, Debian 12) | release-3.4.20 | under a minute |
+| shaderc | `tools/build_shaderc.py`, `build_game.py --shaderc DIR` | the release's shaderc package cannot be used (Debian 12) | v2026.4 with the glslang, SPIRV-Tools and SPIRV-Headers revisions it names | 23 s on 16 threads (about 5 CPU-minutes) |
+
+Tried end to end on bare Debian 12, Ubuntu 24.04 and Debian 13 images, with `installer/deps.py` itself choosing
+what to install: its command, a second check with nothing missing, the libraries, hactool, the game (links, no
+`libSDL3` / `libshaderc` among `DT_NEEDED` where they are our own), the unit tests. The container builds were not
+run; the same static build made on the dev machine was (20 s: window, audio, shader compiles, movies, title screen).
+
+- **SDL3** only supports what it finds headers for, so its build needs: `cmake libwayland-dev libxkbcommon-dev
+  libegl-dev libdecor-0-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev
+  libxtst-dev libpipewire-0.3-dev libpulse-dev libasound2-dev libudev-dev libdbus-1-dev`. The build stops unless a
+  window system and an audio system made it in; with these it has Wayland, X11, PipeWire, PulseAudio, ALSA, udev and
+  D-Bus. SDL loads those desktop libraries at run time by name, so they are not in the executable's `DT_NEEDED`:
+  the `.deb` lists them as recommendations. An SDL3 the player installed themself is used as it is.
+- **shaderc on Debian 12**: its `libshaderc1` has 36 undefined glslang symbols and names no library that provides
+  them, so nothing links against it. Our build needs only `cmake` on top of the compiler.
+- **clang on Debian 12**: the runtime needs clang 17 or newer (`__builtin_elementwise_fma`); Debian 12's `clang` is
+  14, but `clang-19` and `lld-19` are in its repositories. The command names those, and the setup puts
+  `/usr/lib/llvm-19/bin` first on its own PATH (`deps.use_newer_clang`) so `clang`, `clang++` and `ld.lld` are found.
+- Debian 12's Vulkan headers (1.3.239) predate one optional call; the runtime guards it.
+- ImageMagick 6 on both has `convert`, not `magick`: the icon step takes either.
+- The two tools' output folders may have spaces in their path (tried); `pkg-config` is not used for them.
+
+The same two builds are what the AppImage needs later.
 
 **The check asks for capabilities, never for package names**, so a wrong or renamed package cannot produce a false
 "missing": commands with `shutil.which`; libraries with `pkg-config --exists` per module; Python modules by import.
@@ -244,7 +274,7 @@ The names below are used only to print the one command for the player.
 |---|---|---|---|---|
 | `git` (pinned fetch of hactool, Dear ImGui, VMA) | `git` | `git ca-certificates` | `git` | `git` |
 | `python3` >= 3.11, `import curses` | `python` | `python3` | `python3` | `python3 python3-curses` |
-| `clang`, `clang++` | `clang` | `clang` | `clang` | `clang` |
+| `clang`, `clang++`, version 17+ | `clang` | `clang` | `clang` | `clang` |
 | `ld.lld` | `lld` | `lld` | `lld` | `lld` |
 | `ninja` | `ninja` | `ninja-build` | `ninja-build` | `ninja` |
 | `make`, `cc` (hactool) | `make gcc` | `make gcc` | `make gcc` | `make gcc` |
@@ -255,7 +285,7 @@ The names below are used only to print the one command for the player.
 | pc: `libavformat libavcodec libavutil libswscale` | `ffmpeg` | `libavformat-dev libavcodec-dev libavutil-dev libswscale-dev` | `libavformat-free-devel libavcodec-free-devel libavutil-free-devel libswscale-free-devel` | `'pkgconfig(libavformat)' 'pkgconfig(libavcodec)' 'pkgconfig(libavutil)' 'pkgconfig(libswscale)'` |
 | pc: `vulkan` (headers 1.3+, loader) | `vulkan-headers vulkan-icd-loader` | `libvulkan-dev` | `vulkan-headers vulkan-loader-devel` | `vulkan-devel` |
 | pc: `shaderc` | `shaderc` | `libshaderc-dev` | `libshaderc-devel` | `shaderc-devel` |
-| icon: `magick` | `imagemagick` | `imagemagick` | `ImageMagick` | `ImageMagick` |
+| icon: `magick` or `convert` | `imagemagick` | `imagemagick` | `ImageMagick` | `ImageMagick` |
 | packer | `base-devel` (`makepkg`, fakeroot) | `dpkg-deb` (always there) | `rpm-build` | `rpm-build` |
 
 Notes from the container runs:

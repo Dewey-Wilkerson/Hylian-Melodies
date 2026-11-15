@@ -30,7 +30,7 @@ class Ctx:
 # their hash changed since, e.g. makepkg -f after a code change resumes the extraction but compiles again.
 SOURCES = {
     'lift': ('recomp',),
-    'compile': ('recomp', 'runtime', 'tools/build_game.py', 'tools/fetch_imgui.py', 'tools/imgui', 'tools/fetch_vma.py', 'VERSION'),
+    'compile': ('recomp', 'runtime', 'tools/build_game.py', 'tools/fetch_imgui.py', 'tools/imgui', 'tools/fetch_vma.py', 'tools/build_sdl3.py', 'tools/build_shaderc.py', 'VERSION'),
 }
 
 
@@ -51,6 +51,8 @@ def source_hash(c, name):
                 h.update(hashlib.sha256(fh.read()).digest())
     if name == 'compile':  # (a different CPU level compiles again too)
         h.update(b'march=' + (getattr(c.a, 'march', None) or 'v2').encode())
+        h.update(b'sdl3=' + (b'own' if getattr(c.a, 'sdl3', None) else b'system'))
+        h.update(b'shaderc=' + (b'own' if getattr(c.a, 'shaderc', None) else b'system'))
     return h.hexdigest()
 
 
@@ -329,6 +331,10 @@ def compile_game(c):
            '--target', 'game', '--imgui', getattr(c.a, 'imgui', None) or os.path.join(c.a.root, 'toolchain', 'src', 'imgui'),
            '--vma', getattr(c.a, 'vma', None) or os.path.join(c.a.root, 'toolchain', 'src', 'vma'),
            '--march', getattr(c.a, 'march', None) or 'v2']
+    if getattr(c.a, 'sdl3', None):
+        cmd += ['--sdl3', os.path.abspath(c.a.sdl3)]
+    if getattr(c.a, 'shaderc', None):
+        cmd += ['--shaderc', os.path.abspath(c.a.shaderc)]
     c.log('compile: ' + ' '.join(cmd))
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                          env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))

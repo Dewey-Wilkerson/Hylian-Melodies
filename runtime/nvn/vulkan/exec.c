@@ -3671,13 +3671,13 @@ static const char *heap_map_placed(VkDeviceMemory mem) {
 // guest window until the window's reset.
 static void heap_unmap_placed(void) {
     if (!gmem_placed) return;
+#ifdef VK_EXT_map_memory_placed  // (older Vulkan headers, e.g. Debian 12's 1.3.239: never placed, nothing to undo)
     PFN_vkUnmapMemory2KHR unmap2 = (PFN_vkUnmapMemory2KHR)vkGetDeviceProcAddr(g_vk.dev, "vkUnmapMemory2KHR");
     VkMemoryUnmapInfoKHR ui = {.sType = VK_STRUCTURE_TYPE_MEMORY_UNMAP_INFO_KHR, .memory = gmem_mem,
                                .flags = 0};
-#ifdef VK_EXT_map_memory_placed
     if (g_vk.unmap_reserve) ui.flags = VK_MEMORY_UNMAP_RESERVE_BIT_EXT;
-#endif
     if (unmap2) unmap2(g_vk.dev, &ui);
+#endif
     gmem_placed = false;
 }
 

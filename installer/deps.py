@@ -10,6 +10,7 @@ was tried on bare images of each distro (docs/installer.md, section 9).
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -27,8 +28,24 @@ INSTALL = {
 # the distro's own packaging tool, for the system-package output
 PACKER = {'arch': 'makepkg', 'debian': 'dpkg-deb', 'fedora': 'rpmbuild', 'suse': 'rpmbuild'}
 
-# Releases whose repositories have no SDL3: (os-release ID, first VERSION_ID that has it, its name)
+# Releases whose repositories have no SDL3: (os-release ID, first VERSION_ID that has it, its name). On these
+# SDL3 is built from source and linked into the game (tools/build_sdl3.py), which needs the 'sdl3-own' group below.
 SDL3_SINCE = {'debian': ((13,), 'Debian 13'), 'ubuntu': ((26, 4), 'Ubuntu 26.04')}
+
+# Releases whose shaderc package cannot be used (Debian 12: the library lacks the GLSL compiler it calls, so nothing
+# links against it): shaderc is built from source and linked in (tools/build_shaderc.py). Same shape as SDL3_SINCE.
+SHADERC_SINCE = {'debian': ((13,), 'Debian 13')}
+
+# Releases where a need has another package name: os-release ID -> (first VERSION_ID with the usual name, {key: names})
+# (Debian 12's `clang` is 14; 19 is in its repositories under a versioned name, in /usr/lib/llvm-19/bin)
+OLD_PACKAGES = {'debian': ((13,), {'clang': ['clang-19'], 'lld': ['lld-19']})}
+
+CLANG_MIN = 17  # (runtime/simd_fp.h uses __builtin_elementwise_fma)
+
+# what SDL's own build looks for (pkg-config modules), so the built SDL3 has Wayland, X11, audio and gamepads
+SDL3_OWN_PC = ('wayland-client', 'wayland-cursor', 'wayland-egl', 'egl', 'xkbcommon', 'libdecor-0', 'x11', 'xext',
+               'xrandr', 'xcursor', 'xi', 'xfixes', 'xscrnsaver', 'xtst', 'libpipewire-0.3', 'libpulse', 'alsa',
+               'libudev', 'dbus-1')
 
 FFMPEG = ('libavformat', 'libavcodec', 'libavutil', 'libswscale')
 
@@ -39,13 +56,14 @@ def _need(key, what, check, arch, debian, fedora, suse, group='build'):
                          'suse': suse.split()}}
 
 
-# check: ('cmd', names...) | ('pc', modules...) | ('pcver', module, minimum) | ('py', module) | ('cxx',)
+# check: ('cmd', names...) | ('anycmd', names...) | ('pc', modules...) | ('pcver', module, minimum) | ('py', module)
+#        | ('cxx',) | ('clang', minimum major version) | ('packer',)
 NEEDS = [
     _need('git', 'git (fetches hactool, Dear ImGui and the VMA header at pinned commits)', ('cmd', 'git'),
           'git', 'git ca-certificates', 'git', 'git'),
     _need('curses', "Python's curses module (this installer's screens)", ('py', 'curses'),
           'python', 'python3', 'python3', 'python3-curses', group='ui'),
-    _need('clang', 'clang and clang++ (compile the game)', ('cmd', 'clang', 'clang++'),
+    _need('clang', f'clang and clang++, version {CLANG_MIN} or newer (compile the game)', ('clang', CLANG_MIN),
           'clang', 'clang', 'clang', 'clang'),
     _need('lld', 'the lld linker', ('cmd', 'ld.lld'), 'lld', 'lld', 'lld', 'lld'),
     _need('ninja', 'ninja', ('cmd', 'ninja'), 'ninja', 'ninja-build', 'ninja-build', 'ninja'),
@@ -63,7 +81,14 @@ NEEDS = [
           'vulkan-headers vulkan-icd-loader', 'libvulkan-dev', 'vulkan-headers vulkan-loader-devel', 'vulkan-devel'),
     _need('shaderc', 'shaderc development files', ('pc', 'shaderc'),
           'shaderc', 'libshaderc-dev', 'libshaderc-devel', 'shaderc-devel'),
-    _need('magick', 'ImageMagick (the menu icon)', ('cmd', 'magick'),
+    _need('cmake', 'cmake (builds the libraries this release lacks)', ('cmd', 'cmake'),
+          'cmake', 'cmake', 'cmake', 'cmake', group='own'),
+    _need('sdl3-headers', 'desktop development files SDL3 is built against (Wayland, X11, audio, udev, D-Bus)',
+          ('pc',) + SDL3_OWN_PC, '',
+          'libwayland-dev libxkbcommon-dev libegl-dev libdecor-0-dev libx11-dev libxext-dev libxrandr-dev '
+          'libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libpipewire-0.3-dev libpulse-dev '
+          'libasound2-dev libudev-dev libdbus-1-dev', '', '', group='sdl3-own'),
+    _need('magick', 'ImageMagick (the menu icon)', ('anycmd', 'magick', 'convert'),
           'imagemagick', 'imagemagick', 'ImageMagick', 'ImageMagick', group='package'),
     _need('packer', "the distro's packaging tool", ('packer',),
           'base-devel', 'dpkg', 'rpm-build', 'rpm-build', group='package'),
@@ -108,13 +133,47 @@ def _version(s):
     return tuple(out)
 
 
+def _older(table, osr):
+    entry = table.get(osr.get('ID', '').lower())
+    have = _version(osr.get('VERSION_ID', ''))
+    return entry[1] if entry and have and have < entry[0] else None
+
+
 def sdl3_since(osr):
     """The first release of this distro with an SDL3 package when this one is older, else None."""
-    since = SDL3_SINCE.get(osr.get('ID', '').lower())
-    have = _version(osr.get('VERSION_ID', ''))
-    if since and have and have < since[0]:
-        return since[1]
-    return None
+    return _older(SDL3_SINCE, osr)
+
+
+def shaderc_since(osr):
+    """The first release of this distro with a usable shaderc package when this one is older, else None."""
+    return _older(SHADERC_SINCE, osr)
+
+
+def newer_clang_dir(root='/usr/lib'):
+    """The bin folder of the newest versioned LLVM (Debian/Ubuntu: /usr/lib/llvm-N/bin) that is new enough."""
+    best = (0, None)
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return None
+    for name in names:
+        n = name[5:] if name.startswith('llvm-') else ''
+        d = os.path.join(root, name, 'bin')
+        if n.isdigit() and int(n) >= CLANG_MIN and int(n) > best[0] and os.path.isfile(os.path.join(d, 'clang')):
+            best = (int(n), d)
+    return best[1]
+
+
+def use_newer_clang(probe=None):
+    """When the clang on PATH is missing or too old and a newer versioned one is installed, put its folder first
+    on this process's PATH (clang, clang++ and ld.lld are then found by their plain names). -> that folder or None"""
+    probe = probe or Probe()
+    if probe.clang_major() >= CLANG_MIN:
+        return None
+    d = newer_clang_dir()
+    if d:
+        os.environ['PATH'] = d + os.pathsep + os.environ.get('PATH', '')
+    return d
 
 
 class Probe:
@@ -132,6 +191,14 @@ class Probe:
     def py(self, module):
         return subprocess.run([sys.executable, '-c', f'import {module}'], capture_output=True).returncode == 0
 
+    def clang_major(self):
+        """The major version of `clang` on PATH, 0 when there is none."""
+        if not (shutil.which('clang') and shutil.which('clang++')):
+            return 0
+        r = subprocess.run(['clang', '-dumpversion'], capture_output=True, text=True)
+        head = r.stdout.strip().split('.')[0]
+        return int(head) if head.isdigit() else 0
+
     def cxx(self):
         if not shutil.which('clang++'):
             return False
@@ -143,6 +210,10 @@ def _ok(need, fam, probe):
     kind, *args = need['check']
     if kind == 'cmd':
         return all(probe.cmd(a) for a in args)
+    if kind == 'anycmd':
+        return any(probe.cmd(a) for a in args)
+    if kind == 'clang':
+        return probe.clang_major() >= args[0]
     if kind == 'pc':
         return all(probe.pc(a) for a in args)
     if kind == 'pcver':
@@ -157,33 +228,50 @@ def _ok(need, fam, probe):
 
 
 def check(osr, probe=None, groups=('build', 'ui', 'package')):
-    """-> {'family', 'needs': [{key, what, group, ok, packages}], 'missing': [keys], 'command', 'notes': [text]}"""
+    """-> {'family', 'sdl3': 'system'|'own', 'shaderc': 'system'|'own', 'needs': [{key, what, group, ok, packages}],
+           'missing': [keys], 'command', 'notes': [text]}
+
+    sdl3 'own': this release has no SDL3 package and none is installed, so tools/build_sdl3.py builds it and
+    tools/build_game.py --sdl3 links it in; the 'sdl3-own' needs replace the 'sdl3' one. shaderc 'own': this
+    release's shaderc package cannot be used; tools/build_shaderc.py and --shaderc, the same way."""
     probe = probe or Probe()
     fam = family(osr)
     needs, pkgs, notes = [], [], []
+    own = sdl3_since(osr) is not None and not probe.pc('sdl3')
+    own_sc = shaderc_since(osr) is not None
+    renamed = _older(OLD_PACKAGES, osr) or {}
     for n in NEEDS:
-        if n['group'] not in groups:
+        if n['group'] == 'sdl3-own':
+            if not own:
+                continue
+        elif n['group'] == 'own':
+            if not (own or own_sc):
+                continue
+        elif n['group'] not in groups or (own and n['key'] == 'sdl3') or (own_sc and n['key'] == 'shaderc'):
             continue
         ok = _ok(n, fam, probe)
-        mine = n['packages'][fam] if fam else []
+        mine = renamed.get(n['key']) or (n['packages'][fam] if fam else [])
         needs.append({'key': n['key'], 'what': n['what'], 'group': n['group'], 'ok': ok, 'packages': mine})
         if not ok:
             pkgs += [p for p in mine if p not in pkgs]
     missing = [n['key'] for n in needs if not n['ok']]
-    since = sdl3_since(osr)
-    if 'sdl3' in missing and since:
-        notes.append(f'This release has no SDL3 package (it starts with {since}): the system package cannot be '
-                     'built here.')
-        pkgs = [p for p in pkgs if p not in NEEDS_BY_KEY['sdl3']['packages'][fam]]
+    if own:
+        notes.append(f'This release has no SDL3 package (it starts with {sdl3_since(osr)}): SDL3 is built from its '
+                     'source and linked into the game, which adds about a minute.')
+    if own_sc:
+        notes.append("This release's shaderc package cannot be used (it starts working with "
+                     f'{shaderc_since(osr)}): shaderc is built from its source and linked into the game, which '
+                     'adds a few minutes.')
+    if 'clang' in missing and probe.clang_major():
+        notes.append(f'The clang found is version {probe.clang_major()}; version {CLANG_MIN} or newer is needed.')
     if missing and not fam:
         notes.append('Unknown distribution: install the items marked missing with your package manager.')
     command = ''
     if fam and pkgs:
         command = INSTALL[fam] + ' ' + ' '.join(f"'{p}'" if '(' in p else p for p in pkgs)
-    return {'family': fam, 'needs': needs, 'missing': missing, 'command': command, 'notes': notes}
+    return {'family': fam, 'sdl3': 'own' if own else 'system', 'shaderc': 'own' if own_sc else 'system',
+            'needs': needs, 'missing': missing, 'command': command, 'notes': notes}
 
-
-NEEDS_BY_KEY = {n['key']: n for n in NEEDS}
 
 
 def main(argv=None):
@@ -196,6 +284,7 @@ def main(argv=None):
             osr = parse_os_release(f.read())
     except OSError:
         osr = {}
+    use_newer_clang()
     r = check(osr)
     if a.json:
         print(json.dumps(r))

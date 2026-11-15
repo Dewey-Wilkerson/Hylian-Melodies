@@ -323,3 +323,23 @@ Open questions 5 (AppImage tools) and minor leak items (mangled SDK names, code-
   `tests/test_deps.py`; own LZ4 block decoder `recomp/lz4block.py` (byte-identical to python-lz4 on all 15 segments
   of the five modules; `tests/test_lz4block.py`), `python-lz4` dropped from the PKGBUILD and the docs. The lift was
   not rerun end to end; makepkg not rerun. Next: the three packers on the staged tree (section 8, step 2).
+- 2026-11-14 old releases (owner: find a workaround for no SDL3 on Debian 12 / Ubuntu 24.04). `tools/build_sdl3.py`
+  (pinned release-3.4.20, static, CMake) + `build_game.py --sdl3` + `--sdl3` through the setup; `installer/deps.py`
+  switches to the "own SDL3" needs on such a release, checks clang >= 17, takes `convert` for ImageMagick 6, and
+  marks Debian 12 unsupported. Container results (bare images, generated C from the dev machine): Ubuntu 24.04
+  builds and links with the static SDL3 (not run). Debian 12: needed clang-19 (in its repos; clang 14 lacks
+  `__builtin_elementwise_fma`), a guard for Vulkan 1.3.239 headers (exec.c, done), then failed at link on its broken
+  `libshaderc1`: unsupported until shaderc is built from source (the AppImage's job). docs/installer.md section 9.
+  Not done: running a game linked with the static SDL3 (needs the owner's OK; buildable here with
+  `tools/build_sdl3.py` then `build_game.py --sdl3 toolchain/sdl3`).
+- 2026-11-14 Debian 12 supported (owner's call). `tools/build_shaderc.py` (shaderc v2026.4 + the glslang,
+  SPIRV-Tools, SPIRV-Headers revisions of its DEPS file; one static `libshaderc_combined.a`; 23 s here),
+  `build_game.py --shaderc`, `--shaderc` through the setup; `installer/deps.py`: `shaderc: own` on Debian 12,
+  `clang-19 lld-19` named there, `use_newer_clang()` (also called by `python -m installer`). build_game.py no longer
+  asks pkg-config about our own SDL3 folder (a space in the path broke the flags). End-to-end container run with
+  deps.py choosing the packages: Debian 12, Ubuntu 24.04 and Debian 13 all install, build and link; 78 unit tests
+  pass in each. Built here too with both own libraries: `~/.cache/hylian-melodies/build-own/hylian-melodies` (from
+  `toolchain/sdl3`, `toolchain/shaderc`). Run for 20 s (owner's OK; `bench-game` folder, `HM_VK_NO_SPIRV_CACHE=1`
+  so shaderc compiles): window, audio out, shader programs compiled, both splash movies (H.264, AAC) decoded, title
+  screen captured at frame 800 as PNG, 824 frames, clean exit, no error lines. Not checked by a person at the
+  screen or by ear. Next: the three packers (docs/installer.md section 8, step 2).
