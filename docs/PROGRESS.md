@@ -536,4 +536,7 @@ How the checks of this session were done (to repeat them):
   SHA-256 checked, unpacked 0.1.1 (packaging/ without arch/, no localhost), installer started. `v0.1.0` stays up.
   To make a later release: bump VERSION, commit, `git tag -a vX.Y.Z`, push both, `python3 tools/release.py
   --repo-url https://github.com/Dewey-Wilkerson/Hylian-Melodies --tag vX.Y.Z`, `gh release create` with its three
-  files, README line.
+  files (not a pre-release, or "latest" keeps pointing at the previous one).
+- 2026-11-19 `v0.1.1` is a full release, marked latest (owner). README's install line is now
+  `releases/latest/download/install.sh`: each release's install.sh pins its own tag and tarball SHA-256, so the
+  README needs no change per release. That exact line run anonymously: v0.1.1 downloaded, checked, installer started.
