@@ -519,4 +519,8 @@ How the checks of this session were done (to repeat them):
   (`installer/pack.py`, the tests and the docs follow); `docs/packaging.md` now describes the installer's packages;
   `HM_MARCH` (read only by the PKGBUILD) left the variable list; README points at the installer only. Untracked old
   build output stays in `packaging/arch/` (git-ignored, about 9.7 GiB, the owner's to delete). 129 unit tests pass.
-  The brief is then removed from every commit (history rewrite; backup bundle first).
+  Then the brief was removed from every commit (owner's OK): `git filter-branch --index-filter` over `main` and the
+  tags, final tree unchanged, 48 commits, all "Bagu"; force-pushed `main` and `v0.1.0` (now `d763009`). The release
+  tarball rebuilt from the moved tag is byte-identical (SHA-256 7a3907f1...), so the uploaded assets stay valid.
+  Backup of the old history: `~/.local/share/hylian-melodies/history-backup/hylian-melodies-pre-brief-removal-b95efc1.bundle`.
+  `base-functionality` was rewritten too and stays local. Commit IDs quoted above this entry refer to the old history.
