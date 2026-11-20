@@ -23,7 +23,7 @@
 //                       waiters for a submission, a present count, a drain or ring room sleep on it (timed, so a late
 //                       broadcast costs at most a tick)
 //   command buffers     allocated once, before R starts (exec.c vk_exec_init); from then on only R records, begins,
-//   and the pool        ends and submits them. T calls into one directly only after rec_drain (ImGui, device.c)
+//   and the pool        ends and submits them. T calls into one directly only after rec_drain
 //   descriptor pools    `pools[VK_SUBS]` and the batch tables: R's alone while the recorder is on (allocations and
 //                       resets are packets); T's alone when off. The slot to use travels in the packet
 //   stand-in sets       `rset[]` is written by R (the real set, at the alloc packet) and read by R (bind / update

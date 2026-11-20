@@ -182,7 +182,7 @@ def change_settings(io, plan, repo, gpus):
     values = ask_settings(io, O.current(plan.settings_file), gpus)
     O.write_settings(plan.settings_file, values, F.default_settings(repo))
     io.say('Saved in ' + plan.settings_file + ': the game starts ' + settings_summary(values)
-           + '. Nothing needs rebuilding; the in-game menu (F1) changes the same file.')
+           + ". Nothing needs rebuilding; the game's Options menu changes the same file.")
 
 
 def existing(io, plan, repo, gpus):

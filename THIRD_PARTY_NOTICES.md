@@ -14,7 +14,6 @@ needs the owner's approval first.
 | LAS Recomp NVN front end | https://github.com/peiikai/LASRecomp | `579fdad` | MIT | `runtime/nvn/{astc,cmdbuf,formats,objects,rqueue,tegra}.c`, `runtime/nvn/{astc,nvn,renderer,rqueue,tegra,tex_hash}.h` | copied (header added); `null_backend.c` is ours |
 | LAS Recomp Vulkan backend and Maxwell translator | https://github.com/peiikai/LASRecomp | `579fdad` | MIT | `runtime/nvn/vulkan/*`, `runtime/nvn/maxwell/*`, `runtime/nvn/{output_scale,pace,slowframe,shader_prep,shader_seen}.c` and their headers, `runtime/nvn/screen_filter.h` | copied (header added), then adapted: Link's Awakening hooks (recolouring, texture patches, widescreen, mirror mode) and the unbuilt SMAA pass removed, its shader list and its shader-signature fix removed, TLD4 (texture gather) added to the translator (ours), window title/app id renamed |
 | LAS Recomp fs service | same | `579fdad` | MIT | `runtime/services/fs.c` | host file system with crash-safe save commits kept; RomFS/DLC part rewritten |
-| LAS Recomp overlay menu | https://github.com/peiikai/LASRecomp | `579fdad` | MIT | `runtime/ui/imgui_glue.cpp`, `runtime/ui/menu.cpp` | glue adapted from `runtime/nvn/vulkan/imgui_glue.cpp`; the menu follows the shape of `runtime/ui/menu.mm` (event queue, overlay hand-off, style), pages ours |
 | LAS Recomp boot sequence | same | `579fdad` | MIT | `runtime/main.c` | rewritten after its `main.c` (no start screen, reboot, randomizer) |
 
 ## External tools and libraries used at build or run time (not copied)
@@ -22,7 +21,6 @@ needs the owner's approval first.
 | Component | How it is used | License |
 |---|---|---|
 | hactool (SciresM) | fetched at a pinned commit and built by `tools/build_hactool.py` on the user's machine; never vendored | ISC |
-| Dear ImGui (ocornut/imgui) | fetched at `97428e8` (v1.91.9) by `tools/fetch_imgui.py`, never vendored; its Vulkan backend gets `tools/imgui/0001-dynamic-vertex-input.patch` (from LAS Recomp, MIT) | MIT |
 | SDL 3 | system library, dynamically linked; where a release has no package, fetched at `f00dc91` (release-3.4.20) by `tools/build_sdl3.py` and statically linked, never vendored | zlib |
 | Vulkan loader / headers | system | Apache-2.0 |
 | AppImage type-2 runtime (AppImage/type2-runtime) | `runtime-x86_64` of release `20251108`, fetched and checked against its SHA-256 by `installer/appimage.py` at the front of the generic AppImage; never vendored | MIT |

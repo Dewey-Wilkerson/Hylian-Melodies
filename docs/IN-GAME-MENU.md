@@ -1,13 +1,15 @@
-# The port's settings in the game's own Options menu (prototype)
+# The port's settings in the game's own Options menu
 
-Branch `in-game-gui`, 2026-11-19. Goal: replace the Dear ImGui overlay (F1, `runtime/ui/menu.cpp`) with rows in the
-game's own Options menu. Status (2026-11-19): the Graphics page has the port's **Fullscreen** and **Frame pacing** rows (Yes/No, saved to
+Built on branch `in-game-gui` 2026-11-19, on `main` since v0.2.0. Goal: replace the Dear ImGui overlay (F1) with rows
+in the game's own Options menu. Status (2026-11-19): the Graphics page has the port's **Fullscreen** and **Frame pacing** rows (Yes/No, saved to
 `hylian-melodies.ini`, applied at once) and a **Scaling filter** choice row (Sharp / Smooth / Nearest, saved, used
 from the next start); a **Controls** page (button in the main list, after Language) rebinds every Switch button
 to a key or a gamepad button, with Reset to defaults, in all 11 of the game's languages; the Fullscreen row follows F11 / Alt+Enter;
 pages longer than the game's 8 rows get a tighter layout so the panel stays clear of the title and the description
 box. Checked by scripted input and captures (English, German, Japanese, French; F11 sent with xdotool under XWayland). The
-FPS-in-title and master-volume settings are gone. The overlay is still there, now redundant.
+FPS-in-title and master-volume settings are gone, and so is the overlay: Dear ImGui, its fetch and patch, the
+renderer's overlay command buffers and the game-font reader were removed (`runtime/ui/menu.c` only applies the
+Fullscreen row's request on the window thread).
 
 ## How it works
 
@@ -81,7 +83,7 @@ FPS-in-title and master-volume settings are gone. The overlay is still there, no
 
 ## Plan (owner's decisions, 2026-11-19)
 
-Rows go by topic, beside the game's own. Done when every item below is in and Dear ImGui is gone.
+Rows go by topic, beside the game's own.
 
 | Overlay setting | Decision | Work |
 |---|---|---|
@@ -91,16 +93,21 @@ Rows go by topic, beside the game's own. Done when every item below is in and De
 | Frame pacing | Yes/No row, Graphics | done |
 | Master volume | removed | done (old ini lines are ignored; `HM_AUDIO_GAIN` stays for tests) |
 | Rebinding (16 buttons, keyboard and gamepad, reset) | new Controls page | done: a main-list button opens our page; one choice row per Switch button (its single choice is the bindings text, made at lookup time); A (or left/right) starts a capture in `input.c`, the next key or gamepad button binds that side, Esc / Home cancel; Reset row; the page scrolls (9 rows shown) |
-| About (version, folder, keys) | version on the title screen | the port's version beside the game's own version text |
-| F1 / Minus+Plus | freed | remove the shortcut; Minus+Plus reach the game like on a Switch |
+| About (version, folder, keys) | version on the title screen | **open** (parked by the owner, see below) |
+| F1 / Minus+Plus | freed | done (the overlay is gone) |
 
 Also:
 - Our text in all 11 of the game's languages (en, ja, de, fr, cafr, es, uses, it, kr, sc, tc): done for the rows so
   far, drafted by the agent; a native check is wanted. New rows add their text to the table in `game_menu.c`
   (`tests/test_recomp.py` checks every text has every language).
-- Check the pause menu's Options (same builder or another one?).
-- Then drop Dear ImGui: `runtime/ui/menu.cpp`, `imgui_glue.cpp`, `tools/fetch_imgui.py` and its patch, and the build
-  and packaging steps that fetch it. Keep the input-capture and window-request parts the hooks use.
+- **Open**: check the pause menu's Options (same builder or another one?). Parked by the owner.
+- **Open**: the version on the title screen. Where the game's "v1.4.0" comes from is not found yet. It is not a text
+  of `localization.xml` and not a "1.4.0" string or immediate in `main`, and the system's display version (am, cmd
+  23) answers "1.0.0". It doesn't go through the UTF-8 to UTF-32 conversion the text lookup uses either: a probe on
+  that function saw nothing on the title screen. The save's `worldGenVersion="1.4.0"` shows the game assembles it
+  itself, probably from numbers. Next: profile the title screen's construction, or search the running game's memory
+  for the UTF-32 text and walk back to whoever wrote it.
+- Dear ImGui is gone: done.
 - Addresses stay in the repository (open question 10, answered).
 
 ## Reproducing

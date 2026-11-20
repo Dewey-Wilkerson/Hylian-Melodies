@@ -1,7 +1,7 @@
 // From LAS Recomp (https://github.com/peiikai/LASRecomp, 579fdad, runtime/nvn/vulkan/vk.h), MIT, Copyright (c) 2026 Peiikai.
 // See THIRD_PARTY_NOTICES.md.
 // Vulkan backend for the NVN layer (Windows; macOS uses runtime/nvn/metal.m + renderer.m).
-// Files: device.c (instance, window, swapchain, present, screenshots, ImGui hooks), textures.c (images, uploads,
+// Files: device.c (instance, window, swapchain, present, screenshots), textures.c (images, uploads,
 // views), exec.c (command execution: passes, draws, clears, copies, compute), shaders.c (GLSL -> SPIR-V, programs,
 // pipelines). Mirrors the Metal backend's behaviour; differences are noted where they happen.
 //

@@ -30,7 +30,7 @@ class Ctx:
 # their hash changed since, e.g. a rebuild after a code change resumes the extraction but compiles again.
 SOURCES = {
     'lift': ('recomp',),
-    'compile': ('recomp', 'runtime', 'tools/build_game.py', 'tools/fetch_imgui.py', 'tools/imgui', 'tools/fetch_vma.py', 'tools/build_sdl3.py', 'tools/build_shaderc.py', 'VERSION'),
+    'compile': ('recomp', 'runtime', 'tools/build_game.py', 'tools/fetch_vma.py', 'tools/build_sdl3.py', 'tools/build_shaderc.py', 'VERSION'),
 }
 
 
@@ -323,7 +323,7 @@ def compile_game(c):
         c.log('compile: the generated C is gone (cleaned up after an earlier setup): lifting again first')
         lift(c)
     cmd = [sys.executable, os.path.join(c.a.root, 'tools', 'build_game.py'), '--gen', gen_dir, '--out', build_dir,
-           '--target', 'game', '--imgui', getattr(c.a, 'imgui', None) or os.path.join(c.a.root, 'toolchain', 'src', 'imgui'),
+           '--target', 'game',
            '--vma', getattr(c.a, 'vma', None) or os.path.join(c.a.root, 'toolchain', 'src', 'vma'),
            '--march', getattr(c.a, 'march', None) or 'v2']
     if getattr(c.a, 'sdl3', None):

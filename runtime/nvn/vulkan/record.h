@@ -50,7 +50,7 @@ void rec_wait_submitted(uint64_t seq); // until the driver has submission seq (s
 void rec_wait_presents(uint64_t n);    // until the recorder made n presents (rec_presents_queued() counts them)
 uint64_t rec_presents_queued(void);
 // Everything queued so far is recorded and submitted (the translating thread): before vkDeviceWaitIdle, before
-// recording into a command buffer directly (ImGui), before using the queue outside the ring.
+// recording into a command buffer directly, before using the queue outside the ring.
 void rec_drain(void);
 void rec_drain_published(void);  // (any thread, exit) what the translating thread had published so far
 // Quitting (device.c backend_quit, after rq_stop; any thread): from now on the recorder makes no driver call - the

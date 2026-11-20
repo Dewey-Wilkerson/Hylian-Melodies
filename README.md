@@ -33,8 +33,8 @@ an ordinary distro, not yet tried on those systems.)
 From a checkout instead: `git clone https://github.com/Dewey-Wilkerson/Hylian-Melodies && cd Hylian-Melodies &&
 sh install.sh --source .` What the package puts where: [docs/packaging.md](docs/packaging.md).
 
-Playing: the overlay menu is F1 (or Minus and Plus together on a gamepad); keys and buttons are in
-[docs/controls.md](docs/controls.md). Saves and settings live in `~/.local/share/hylian-melodies/`.
+Playing: the port's settings (fullscreen, frame pacing, scaling, rebinding the controls) are in the game's own
+Options menu; keys and buttons are in [docs/controls.md](docs/controls.md). Saves and settings live in `~/.local/share/hylian-melodies/`.
 
 ## More
 

@@ -1,5 +1,5 @@
 """python -m installer --base FILE [--update FILE] --keys FILE --dest DIR [--temp DIR] [--root DIR]
-                      [--hactool EXE] [--imgui DIR] [--vma DIR] [--sdl3 DIR] [--shaderc DIR] [--march v2|v3|native] [--until STEP]
+                      [--hactool EXE] [--vma DIR] [--sdl3 DIR] [--shaderc DIR] [--march v2|v3|native] [--until STEP]
 
 Prints one JSON event per line on stdout (installer/events.py); the full log goes to <temp>/run-*/logs/install.log.
 Exit status 0 only when the final result is ok."""
@@ -25,7 +25,6 @@ def main(argv=None):
     ap.add_argument('--root', default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     help='repository root')
     ap.add_argument('--hactool', help='hactool built by tools/build_hactool.py (default: <root>/toolchain/hactool/hactool)')
-    ap.add_argument('--imgui', help='Dear ImGui source fetched by tools/fetch_imgui.py (default: <root>/toolchain/src/imgui)')
     ap.add_argument('--vma', help='Vulkan Memory Allocator source fetched by tools/fetch_vma.py (default: <root>/toolchain/src/vma)')
     ap.add_argument('--sdl3', help='static SDL3 built by tools/build_sdl3.py, for systems without an SDL3 package (default: the system SDL3)')
     ap.add_argument('--shaderc', help='static shaderc built by tools/build_shaderc.py, for systems whose shaderc package cannot be used (default: the system shaderc)')
@@ -37,7 +36,6 @@ def main(argv=None):
     deps.use_newer_clang()  # (Debian 12: the usable clang is a versioned one outside PATH)
     a.dest = os.path.abspath(a.dest)
     a.temp = os.path.abspath(a.temp or os.path.join(os.path.dirname(a.dest), 'install-temp'))
-    a.imgui = os.path.abspath(a.imgui) if a.imgui else os.path.join(a.root, 'toolchain', 'src', 'imgui')
     a.vma = os.path.abspath(a.vma) if a.vma else os.path.join(a.root, 'toolchain', 'src', 'vma')
     a.hactool = a.hactool or os.path.join(a.root, 'toolchain', 'hactool', 'hactool')
     run = os.path.join(a.temp, time.strftime('run-%Y%m%d-%H%M%S'))

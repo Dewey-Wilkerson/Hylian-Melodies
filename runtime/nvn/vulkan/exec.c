@@ -1144,7 +1144,7 @@ const char *renderer_stats(void) {
             prof_slot_wait = 0;
             n = strlen(stats_text);
             // the recorder thread (record.c): packets queued, the translating thread's time queuing them, the recorder's
-            // time making the calls, and the waits on it (drain: ImGui / idle waits; seq: GPU waits that had to wait for a
+            // time making the calls, and the waits on it (drain: idle waits; seq: GPU waits that had to wait for a
             // submission to be handed to the driver first; present: the next frame's acquire waiting for the last present;
             // full: the ring full)
             snprintf(stats_text + n, sizeof stats_text - n, " | recorder %s: %llu packets (%.1f MB) enqueue %.1f ms, busy %.1f ms (%llu wakes), waits:"
@@ -1262,7 +1262,7 @@ typedef struct {
 // Redundant-state filter: what draw() last set in the current command buffer, so unchanged pipeline binds, dynamic
 // state and vertex / index buffer binds are not recorded again (a draw used to issue ~20 vkCmd* calls; most repeat the
 // previous draw's). Forgotten (ss_forget) whenever something else may have recorded state: a new command buffer, a new
-// render pass (present, ImGui, post-processing and copies all run between game passes) and the clear pipeline.
+// render pass (present, post-processing and copies all run between game passes) and the clear pipeline.
 // Descriptor sets are always bound (sharing identical sets within a submission was tried: a third matched, but
 // comparing them cost more than allocating and writing them on NVIDIA; with dynamic uniform buffers most sets repeat
 // their program's previous one, which stage_set keeps: "set reuse").

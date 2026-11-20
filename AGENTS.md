@@ -35,7 +35,7 @@ installer/       setup stages (check, extract, lift, compile, shaders, cleanup);
                  (its curses screens), picker.py (desktop file dialogs), options.py (game settings, HM_* registry)
 recomp/          lifter (ARM64 -> C) and install-time patch location (no game bytes)
 runtime/         C runtime: loader, kernel, IPC services, NVN-on-Vulkan, audio, input, saves
-tools/           build_game.py, build_hactool.py, fetch_imgui.py, fetch_vma.py, build_sdl3.py, build_shaderc.py
+tools/           build_game.py, build_hactool.py, fetch_vma.py, build_sdl3.py, build_shaderc.py
                  (pinned fetches and builds), fetch_refs.sh, check_content.py, release.py (tarball + filled install.sh)
 install.sh       the curl | sh bootstrap (POSIX sh; docs/installer.md section 1)
 packaging/       launcher, install/remove hooks, desktop entry, default ini, icon (docs/packaging.md)

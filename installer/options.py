@@ -2,7 +2,7 @@
 
 The player's choices go into the game's own settings file, hylian-melodies.ini: the package's default copy (which
 the launcher copies at a player's first start) and the player's own in ${XDG_DATA_HOME:-~/.local/share}/
-hylian-melodies/ when it exists, the same file the in-game menu (F1) reads and saves, so the two never disagree. The installer edits only the keys it asks about and keeps every other line (docs/DECISIONS.md:
+hylian-melodies/ when it exists, the same file the game's Options menu saves (runtime/hle/game_menu.c), so the two never disagree. The installer edits only the keys it asks about and keeps every other line (docs/DECISIONS.md:
 the ini, not a launch.env). No rebuild is needed when they change.
 
 Every `getenv("HM_...")` / `ENV("HM_...")` in runtime/ is in exactly one group here (tests/test_options.py checks
@@ -65,8 +65,8 @@ class Setting:
 
 SETTINGS = [
     Setting('fullscreen', 'player', 'Start in fullscreen',
-            "Borderless, at the desktop's resolution. F11 or Alt+Enter switches while playing, and the in-game menu "
-            '(F1) has the same setting.'),
+            "Borderless, at the desktop's resolution. F11 or Alt+Enter switches while playing, and the game's "
+            'Options > Graphics has the same setting.'),
     Setting('gpu', 'player', 'Graphics card',
             'Which graphics card draws the game, on a computer with more than one. Left on auto, the game takes the '
             'separate (faster) card when there is one. The number is the one in the log lines "[vk] gpu N: ...".',
@@ -74,7 +74,7 @@ SETTINGS = [
     Setting('frame_pacing', 'troubleshooting', 'Turn off frame pacing',
             "Lets the game run on its own limiter (about 61 pictures a second) instead of the console's steady 60. "
             'Try it if the picture stutters evenly; the beat may then drift against the picture. Also in the '
-            'in-game menu.', default=True, trouble=False, env='HM_FRAME_PACING'),
+            "game's Options > Graphics.", default=True, trouble=False, env='HM_FRAME_PACING'),
     Setting('shader_cache', 'troubleshooting', 'Rebuild the shaders at every start',
             'Ignores the saved shader cache. Try it once if the picture is wrong after a graphics driver update; '
             'starting takes longer.', default=True, trouble=False, env='HM_VK_NO_SPIRV_CACHE'),
@@ -100,7 +100,7 @@ DEVELOPER = {
         HM_SOFT_WRITE_TRACKING HM_TICK_SCALE HM_TRACE_SVC HM_UNIT_HEAP_SCALE HM_VSYNC_BT HM_WRITE_TRACKING''',
     'movies': 'HM_LOG_MOVIE HM_MOVIE_CPU_CONVERT HM_MOVIE_EOS_CODE HM_MOVIE_NO_FORMAT_EVENT HM_NO_MOVIE_AUDIO',
     'audio': 'HM_AUDIO_GAIN HM_AUDIO_LOG HM_AUDIO_PERIOD HM_AUDIO_QUEUE_MS HM_AUDOUT_WAV HM_NO_AUDIO',
-    'input and menu': 'HM_DEBUG_KEYS HM_GAME_MENU HM_INPUT_SCRIPT HM_MENU_FONT HM_MENU_TAB',
+    'input and menu': 'HM_DEBUG_KEYS HM_GAME_MENU HM_INPUT_SCRIPT',
     'NVN front end, pacing, shader preparation': '''
         HM_DYN_NO_GPU HM_DYN_START HM_DYN_TEST HM_KEEP_DISCARD HM_LOG_BINDS HM_LOG_DYNRES HM_LOG_INTERVAL
         HM_LOG_PACE HM_LOG_PACKAGED HM_LOG_SYNC HM_LOG_TEXELS HM_PACE HM_RECORD_KEYS HM_RENDER_THREAD
@@ -112,7 +112,7 @@ DEVELOPER = {
         HM_DEBUG_FRAMES HM_DEPTH_UP_NEAREST HM_DUMP_3D HM_DYNRES_COUNT_PRESENT HM_EXIT_AFTER_SHOT HM_FENCE_FLUSH
         HM_FPS_INTERVAL HM_GPUPROF_AT HM_GPU_OVERLAP HM_HIDDEN HM_KEEP_TARGETS HM_LOD_MIN HM_LOG_CLEARS
         HM_LOG_COUNTER HM_LOG_CS_SBUF HM_LOG_FSHASH HM_LOG_GFAST HM_LOG_GMEM_SBUF HM_LOG_HITCH_MS HM_LOG_SKIPS
-        HM_MENU_AT HM_NEW_TARGET_FILL HM_NO_DEPTH_BIAS HM_NO_DEPTH_TEST HM_NO_DISCARD HM_NO_FEEDBACK
+        HM_NEW_TARGET_FILL HM_NO_DEPTH_BIAS HM_NO_DEPTH_TEST HM_NO_DISCARD HM_NO_FEEDBACK
         HM_NO_FRAME_CLEAR HM_NO_SCALE HM_NO_SHADOW HM_NO_SNAPSHOT_REUSE HM_NO_USER_INPUT HM_OVERLAP_SNAP
         HM_OVERLAP_WATCH HM_PREP_CHECK HM_SAMPLER_TEST HM_SAVE_MSL HM_SCREENSHOT_EVERY HM_SCREENSHOT_FROM
         HM_SHADOW_SLOT_LOG HM_SHOT_AT HM_SIM_SLOW_FRAME_MS HM_SKIP_CS HM_SKIP_FSHASH HM_SLOW_FRAME_UNTIL
@@ -122,7 +122,7 @@ DEVELOPER = {
         HM_VK_GMEM_FS_MISS HM_VK_GMEM_LAZY HM_VK_GPL_PROBE HM_VK_GPU_TIMER HM_VK_HEAP_DMABUF HM_VK_HEAP_PLACED
         HM_VK_LEAN_USAGE HM_VK_LOG_PASSES HM_VK_NO_CBUF_LEAN HM_VK_NO_GMEM HM_VK_NO_KEY_MEMO HM_VK_NO_SCAN_ONCE
         HM_VK_NO_SET_BATCH HM_VK_NO_SET_RECYCLE HM_VK_NO_SET_REUSE HM_VK_NO_TEX_MEMO HM_VK_OPT
-        HM_VK_OVERLAY_DIRECT HM_VK_PASS_RESTART HM_VK_PLACEHOLDER_COLOR HM_VK_PRESENT HM_VK_PROF HM_VK_RECORDER
+        HM_VK_PASS_RESTART HM_VK_PLACEHOLDER_COLOR HM_VK_PRESENT HM_VK_PROF HM_VK_RECORDER
         HM_VK_RECORDER_MB HM_VK_RECORDER_WAIT_PIPES HM_VK_RING_BAR HM_VK_RING_SYSMEM HM_VK_SIM_HEAP_OOM
         HM_VK_STATE_FILTER HM_VK_TEX_WATCH HM_VK_TRACE HM_VK_VALIDATION_STOP HM_VK_VCACHE HM_WINDOW
         HM_WINDOW_SHOT''',

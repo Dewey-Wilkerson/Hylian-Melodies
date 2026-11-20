@@ -1,5 +1,9 @@
 # Known issues
 
+- The port's settings live in the game's own Options menu (docs/IN-GAME-MENU.md). Not yet checked: binding a gamepad
+  button on the Controls page (only keyboard binding was tried), the pause menu's Options (whether our rows appear
+  there too), and the translations of our rows other than English (drafted, not checked by native speakers). The
+  port's version is not on the title screen yet. Key names on the Controls page are SDL's (English).
 - Input: gamepad (8BitDo Ultimate 2 Wireless), + / - and the keyboard confirmed by the owner; rumble not yet tested.
 - Black around small rooms (castle interiors) is the game's own framing, not a fault.
 - Occasional hitches during loads: the 833 ms one was the game's own work loading an area (827 ms of game CPU);

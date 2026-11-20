@@ -12,8 +12,8 @@ Two layers:
 
 Hard rules for both: never upload anything; no telemetry; never run `sudo`/`pkexec` from a script (the UI prints the
 package manager command for the player to run); the keys and the dump are read in place and never copied, printed
-or logged; the only network access is fetching this project's source and its pinned build inputs (Dear ImGui,
-the VMA header, hactool source), each checked against a SHA-256 or a commit ID.
+or logged; the only network access is fetching this project's source and its pinned build inputs (the VMA
+header, hactool source), each checked against a SHA-256 or a commit ID.
 
 ## Part 1: player-facing installer (design, 2026-11-14)
 
@@ -206,8 +206,8 @@ also generates the env-var list in the docs; a test checks the registry against 
 | Build folder | default `~/.cache/hylian-melodies` | Where extraction, compilation and the package go (`temp/`, `packages/`); another folder gets a `hylian-melodies/` folder inside it. Free space shown for each choice and checked at once (about 12 GiB while building, 2 GiB for the package); a refused folder is not kept. |
 | Parallel jobs | default: all cores | Fewer keeps the computer usable during the compile. |
 
-**Game settings** (no rebuild; written into the player's own `hylian-melodies.ini`, the file the in-game menu (F1)
-reads and saves; `installer/options.py`):
+**Game settings** (no rebuild; written into the player's own `hylian-melodies.ini`, the file the game's Options menu
+saves; `installer/options.py`):
 
 - *Start in fullscreen* (`fullscreen`) and, on a computer with more than one, the *graphics card* (`gpu`). The
   menu entry's "Play fullscreen" action stays.
@@ -333,7 +333,7 @@ The names below are used only to print the one command for the player.
 
 | Need (how it is checked) | Arch | Debian / Ubuntu | Fedora | openSUSE |
 |---|---|---|---|---|
-| `git` (pinned fetch of hactool, Dear ImGui, VMA) | `git` | `git ca-certificates` | `git` | `git` |
+| `git` (pinned fetch of hactool, VMA) | `git` | `git ca-certificates` | `git` | `git` |
 | `python3` >= 3.11, `import curses` | `python` | `python3` | `python3` | `python3 python3-curses` |
 | `clang`, `clang++`, version 17+ | `clang` | `clang` | `clang` | `clang` |
 | `ld.lld` | `lld` | `lld` | `lld` | `lld` |
@@ -373,7 +373,7 @@ portal file picker (`glib2` / `libglib2.0-bin` / `glib2`), optional because of t
 
 1. *VMA header: settled.* The `vulkan-memory-allocator` package is AUR only on Arch (it was installed on the dev
    machine, which hid this) and missing on Debian 12, and the packaged versions run from 3.2 to 3.5. The header is
-   now fetched at a pinned commit (v3.5.0, MIT) by `tools/fetch_vma.py`, like Dear ImGui: no package on any distro.
+   now fetched at a pinned commit (v3.5.0, MIT) by `tools/fetch_vma.py`: no package on any distro.
 2. *Movies on Fedora and openSUSE.* The game's movies are H.264 + AAC (docs/RECON.md). Debian, Ubuntu and Arch
    have FFmpeg's own `h264` decoder. Fedora's and openSUSE's FFmpeg decode H.264 through `libopenh264` (AAC, VP9 and
    Vorbis are built in); on Fedora 45 the real `openh264` library comes along by default from the Cisco repository.
@@ -445,7 +445,7 @@ result is `ok`.
 
 ```
 python3 -m installer --base cadence-base.xci [--update cadence-update.nsp] --keys prod.keys --dest DIR
-                     [--temp DIR] [--root DIR] [--hactool EXE] [--imgui DIR] [--march v2|v3|native] [--until STEP]
+                     [--temp DIR] [--root DIR] [--hactool EXE] [--march v2|v3|native] [--until STEP]
 ```
 
 ### Steps

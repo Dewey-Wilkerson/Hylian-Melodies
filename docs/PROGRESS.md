@@ -16,7 +16,7 @@ Newest entry last. "Built" = compiled, "boots" = ran to a stated point, "plays" 
 | M7 Input and saves | done: real gamepad verified by the owner, scripted input, saves survive kill -9; keyboard and rumble not yet tried by hand |
 | M8 Playable | done: a 7-minute owner session (title, crypt, castle, a dungeon area) at 61 fps with saves and a clean window close; DLC served |
 | M9 Packaging | done: `makepkg` builds the package from a clean directory and resumes after interruption; contents and build-path checks pass (docs/packaging.md) |
-| M10 Polish | in progress: 60 Hz frame pacing, native-scale sharp scaling, FPS display, overlay settings menu in the game's own fonts |
+| M10 Polish | in progress: 60 Hz frame pacing, native-scale sharp scaling, the port's settings in the game's own Options menu (the overlay and Dear ImGui removed) |
 | Installer | in progress: system packages (pacman / `.deb` / `.rpm`) through `python3 -m installer.tui`; see the last hand-off |
 
 ## Log
@@ -562,3 +562,25 @@ How the checks of this session were done (to repeat them):
   generic AppImage and immutable systems. The README's line run anonymously (no token, scratch XDG folders):
   v0.1.2 downloaded, SHA-256 checked, installer started (with an answers file asking for `appimage`: stopped at
   "no cartridge dump given").
+
+- 2026-11-19 the port's settings moved into the game's own Options menu (branch `in-game-gui`, merged; owner's
+  decisions per setting in docs/DECISIONS.md, findings and layouts in docs/IN-GAME-MENU.md).
+  - `recomp/gen.py` takes function hooks from `recomp/hooks.txt` (loaded by default, so the installer is unchanged).
+    `runtime/hle/game_menu.c` holds six hooks: the Options builder, the text lookup, the page layout, and three row
+    methods.
+  - Graphics gains Fullscreen, Frame pacing (Yes/No) and Scaling filter (Sharp / Smooth / Nearest) rows.
+  - A Controls page (main-list button after Language) has one row per Switch button. A, then a key or gamepad
+    button, rebinds that side (Esc / Home cancel); Reset to defaults; the page scrolls.
+  - Our text is in the game's 11 languages, following the game's language setting.
+  - Pages over 8 rows get a tighter layout so the panel stays clear of the title and the description box.
+  - The Fullscreen row follows F11 / Alt+Enter.
+  - Removed: the FPS-in-title and master-volume settings, the overlay menu, Dear ImGui (fetch, patch, build), the
+    renderer's overlay command buffers, the game-font reader. `runtime/ui/menu.c` only applies the Fullscreen row's
+    request on the window thread.
+  - Checked with scripted input, `xdotool` (under XWayland) and captures: English, German, Japanese, French; the
+    owner flipped Fullscreen by hand.
+  - Not checked: binding a gamepad button, the pause menu's Options, native checks of the translations.
+  - Parked by the owner: the port's version on the title screen (not found yet; notes in docs/IN-GAME-MENU.md), the
+    pause-menu check.
+  - 149 unit tests pass.
+

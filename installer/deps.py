@@ -59,7 +59,7 @@ def _need(key, what, check, arch, debian, fedora, suse, group='build'):
 # check: ('cmd', names...) | ('anycmd', names...) | ('pc', modules...) | ('pcver', module, minimum) | ('py', module)
 #        | ('cxx',) | ('clang', minimum major version) | ('packer',)
 NEEDS = [
-    _need('git', 'git (fetches hactool, Dear ImGui and the VMA header at pinned commits)', ('cmd', 'git'),
+    _need('git', 'git (fetches hactool and the VMA header at pinned commits)', ('cmd', 'git'),
           'git', 'git ca-certificates', 'git', 'git'),
     _need('curses', "Python's curses module (this installer's screens)", ('py', 'curses'),
           'python', 'python3', 'python3', 'python3-curses', group='ui'),

@@ -33,25 +33,19 @@ the ini if you prefer the labels: `pad.a = south` and `pad.b = east`.
 F11 or Alt+Enter switches between a window and fullscreen (borderless, the desktop's resolution).
 `hylian-melodies --fullscreen` starts in fullscreen.
 
-## Settings menu
+## Settings
 
-The game's own Options > Graphics page also has the port's Fullscreen, Frame pacing and Scaling filter rows, and Options > Controls rebinds
-the buttons: A on a row, then the new key or gamepad button (Esc or Home cancels), saved at once (branch `in-game-gui`,
-docs/IN-GAME-MENU.md); the overlay below is on its way out.
+The port's settings are rows of the game's own Options menu (title screen: the gear, then Options; docs/IN-GAME-MENU.md):
 
-**F1**, or **Minus + Plus** held together on a gamepad (or its Home button), opens and closes the settings menu over
-the game; Esc, B, Z or Backspace also close it. While it is open the game gets no input. Arrows / W A S D or the d-pad
-move, Enter / X or the right face button choose, L / R or Q / E change page; the mouse works too. (Esc alone doesn't
-open it: Esc is the game's +.)
+- **Graphics**: *Fullscreen*, *Frame pacing* (a steady 60 Hz, like the Switch's display) and *Scaling filter* (Sharp,
+  Smooth or Nearest; used from the next start), after the game's own rows.
+- **Controls** (after Language): one row per Switch button with its keys and gamepad buttons. Press A (or left /
+  right) on a row, then the key or gamepad button to use: a key replaces the keyboard binding, a gamepad button or
+  trigger the gamepad one. Esc or Home cancels. *Reset to defaults* is the last row.
 
-Pages: Video (fullscreen, scaling filter, frame pacing), Audio (a pointer to the game's own volumes), Controls (rebinding: choose
-a binding, then press the new key or gamepad button; Esc or Home cancels; "Reset all to defaults"), About (version,
-the settings and saves folder). Changes apply at once, except the scaling filter (next start), and are written to
-`hylian-melodies.ini` when the menu closes: only the changed lines, the rest of the file stays as it is.
-
-The menu uses the game's own fonts, read from your copy's files at start (`runtime/ui/game_font.c`); the system's
-sans-serif font if they can't be read, or with `HM_MENU_FONT=system`. `HM_MENU_AT=<frame>` opens it at a frame and
-`HM_MENU_TAB=<0-3>` picks the page (screenshot tests).
+Every change is written to `hylian-melodies.ini` at once: only the changed lines, the rest of the file stays as it
+is. Sound and music volume are the game's own (Options > Audio). There is no overlay menu any more: F1 and Minus +
+Plus reach the game like any other key.
 
 ## Rebinding (`hylian-melodies.ini`)
 

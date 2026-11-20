@@ -127,7 +127,7 @@ class Flow:
         p = self.plan
         cmd = [sys.executable, '-m', 'installer', '--base', p.base, '--keys', p.keys, '--dest', p.stage,
                '--temp', os.path.join(p.work, 'install-temp'), '--root', self.repo,
-               '--hactool', self.tc('hactool', 'hactool'), '--imgui', self.tc('src', 'imgui'),
+               '--hactool', self.tc('hactool', 'hactool'),
                '--vma', self.tc('src', 'vma'), '--march', p.march, *self.extra]
         if p.update:
             cmd += ['--update', p.update]
