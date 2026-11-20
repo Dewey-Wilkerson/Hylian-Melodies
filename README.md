@@ -17,7 +17,7 @@ computer with a Vulkan 1.3 graphics driver, and about 15 GiB of free space while
 CachyOS, Manjaro...), Debian 12 and 13, Ubuntu 24.04 and 26.04, Fedora 43 and newer, openSUSE Tumbleweed.
 
 ```sh
-curl -fsSL https://github.com/Dewey-Wilkerson/Hylian-Melodies/releases/download/v0.1.0/install.sh | sh
+curl -fsSL https://github.com/Dewey-Wilkerson/Hylian-Melodies/releases/download/v0.1.1/install.sh | sh
 ```
 
 The script downloads this release's source, checks its SHA-256 and starts the installer, which asks for your dump
