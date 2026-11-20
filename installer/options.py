@@ -131,7 +131,6 @@ DEVELOPER = {
 OUTSIDE = {
     'HM_GAME_DIR': 'the launcher too: the installed game instead of /opt/hylian-melodies (tests)',
     'HM_SUPPORT_DIR': 'the launcher: the support files instead of /usr/share/hylian-melodies-recomp (tests)',
-    'HM_MARCH': 'packaging/arch/PKGBUILD: the CPU level to build for',
 }
 
 

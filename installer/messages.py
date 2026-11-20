@@ -1,4 +1,4 @@
-"""Message catalog: event message IDs -> English text. The PKGBUILD's events.py prints these."""
+"""Message catalog: event message IDs -> English text, for the setup's events (installer/events.py)."""
 
 STEPS = {
     'check': 'Checking files',

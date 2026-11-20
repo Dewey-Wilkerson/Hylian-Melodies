@@ -32,8 +32,7 @@ class Bootstrap(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.t)
         self.repo = os.path.join(self.t, 'repo')
         os.makedirs(os.path.join(self.repo, 'installer'))
-        files = {'VERSION': '9.8.7\n', 'installer/__init__.py': '', 'installer/tui.py': STUB_TUI,
-                 'hylian-melodies-prompt.md': 'the brief\n'}
+        files = {'VERSION': '9.8.7\n', 'installer/__init__.py': '', 'installer/tui.py': STUB_TUI}
         with open(os.path.join(ROOT, 'install.sh')) as f:
             files['install.sh'] = f.read()
         for name, text in files.items():
@@ -79,7 +78,6 @@ class Bootstrap(unittest.TestCase):
             self.assertEqual(hashlib.sha256(f.read()).hexdigest(), r['sha256'])
         names = subprocess.run(['tar', '-tzf', r['tarball']], capture_output=True, text=True, check=True).stdout.split()
         self.assertIn(f'hylian-melodies-{self.TAG}/installer/tui.py', names)
-        self.assertFalse([n for n in names if 'prompt' in n])  # (the brief stays out)
         with open(r['install']) as f:
             script = f.read()
         self.assertNotIn('@HM_', script)

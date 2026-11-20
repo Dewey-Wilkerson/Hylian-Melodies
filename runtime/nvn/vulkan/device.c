@@ -1228,7 +1228,7 @@ void ui_window_init(void) {
     atexit(quick_exit_handler);
     settings_load();
     input_apply_background();  // controllers in the background: "Allow background inputs" (Controls tab)
-    // the window's class / app id: the desktop entry's StartupWMClass (packaging/arch)
+    // the window's class / app id: the desktop entry's StartupWMClass (packaging/hylian-melodies.desktop)
     SDL_SetHint(SDL_HINT_APP_ID, "hylian-melodies");
     SDL_SetHint(SDL_HINT_APP_NAME, "Hylian Melodies");
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) FATAL("SDL_Init: %s\n", SDL_GetError());

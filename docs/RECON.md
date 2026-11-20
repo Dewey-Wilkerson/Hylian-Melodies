@@ -150,7 +150,7 @@ extracted + ~2 GiB generated/objects; the 40 GiB gate is not an issue (2.2 TiB f
   preparation, Linux platform layer. Strip everything specific to Link's Awakening (randomizer, cosmetics, hooks,
   address tables). Replace its audio renderer path with an AudioOut -> SDL3 path, since this game uses `audout`.
 - Installer and packaging: totk-pc-recomp's shape (Python stdlib `installer/` with JSON events and resume,
-  `tools/build_hactool.py`), and the Arch package from the brief.
+  `tools/build_hactool.py`), and an Arch package (since replaced by the installer's packages).
 - Kernel write tracking: **not used**. CoH is a light 2D/2.5D game; LASRecomp's Vulkan path works without it. No
   kernel minimum beyond what glibc/Vulkan need (decision in `DECISIONS.md`).
 

@@ -8,7 +8,7 @@ Two layers:
    AppImage, later Flatpak) and with which options, runs the setup and records what it did, so running it again
    offers update / change options / uninstall.
 2. **The setup engine** `python3 -m installer` (exists): check, extract, lift, compile, cleanup into an install
-   folder, with JSON events on stdout. The UI drives it; the PKGBUILD drives it today. See the second half.
+   folder, with JSON events on stdout. The UI drives it. See the second half.
 
 Hard rules for both: never upload anything; no telemetry; never run `sudo`/`pkexec` from a script (the UI prints the
 package manager command for the player to run); the keys and the dump are read in place and never copied, printed
@@ -51,8 +51,7 @@ curl -fsSL <url>/install.sh | sh               bootstrap (POSIX sh, ~200 lines)
   makes itself (`git archive` of the tag, gzip without a timestamp: the same bytes every run), not GitHub's
   generated tag archive, whose bytes GitHub does not promise to keep (docs/DECISIONS.md). It checks the SHA-256 with
   `sha256sum` (or `shasum -a 256`) and refuses on mismatch, keeping nothing. A matching tarball already in the
-  cache is reused (offline rerun). The release tool runs the content guard over every file of the tarball first
-  and leaves the brief (`hylian-melodies-prompt.md`) out until its publication is decided.
+  cache is reused (offline rerun). The release tool runs the content guard over every file of the tarball first.
 - **Where.** `~/.cache/hylian-melodies/src/$HM_TAG/` (`$XDG_CACHE_HOME` honoured). Nothing else is written by the
   bootstrap.
 - **Overrides.**
@@ -133,8 +132,8 @@ share it**.
   package tree from it (game data hard-linked, the executable copied and stripped of debug data, launcher, menu
   entry, icon, default settings, license; nothing of a player's or the setup's own) and the distro's tool wraps it.
   It prints a JSON line with the package file and the command to install it; it never installs and never needs root.
-  The bootstrap's source is a tarball without `.git`, so the developer PKGBUILD (`git+file://` source, `git
-  describe` version, its own setup run in `$srcdir`) is not what the UI calls; it stays for building from a checkout.
+  The bootstrap's source is a tarball without `.git`, so the old developer PKGBUILD (`git+file://` source, `git
+  describe` version) was not what the UI calls; it was removed 2026-11-19, the installer covers Arch too.
   - Arch: a generated minimal PKGBUILD whose `package()` hard-links the tree (`makepkg -d` gives the pacman
     metadata and fakeroot); the same `.install` hooks, `PKGEXT=.pkg.tar`.
   - Debian family: `dpkg-deb --root-owner-group -Znone --build` (no fakeroot, no `dpkg-dev`; the data is already

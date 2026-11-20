@@ -11,8 +11,7 @@ Needs an existing tag (default: v + the VERSION file) whose VERSION file matches
 The bootstrap downloads <repo-url>/releases/download/vX.Y.Z/hylian-melodies-vX.Y.Z.tar.gz, so the tarball is
 uploaded as that release's asset (not GitHub's generated "Source code" archive, whose bytes are not promised to
 stay the same; docs/DECISIONS.md). Nothing is pushed or uploaded from here: that is the owner's step.
-The tagged tree goes through tools/check_content.py first. The brief (hylian-melodies-prompt.md) is left out of the
-tarball until the owner decides whether it is published (docs/OPEN-QUESTIONS.md).
+The tagged tree goes through tools/check_content.py first.
 """
 
 import argparse
@@ -26,7 +25,7 @@ import sys
 import tarfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LEFT_OUT = {'hylian-melodies-prompt.md'}
+LEFT_OUT = set()  # (paths of the tag's tree kept out of the tarball; none now)
 PLACEHOLDERS = ('@HM_TAG@', '@HM_SHA256@', '@HM_REPO_URL@')
 
 

@@ -1,4 +1,4 @@
-"""installer/pack.py: the package tree, the generated control file / spec / PKGBUILD, derived dependencies."""
+"""installer/pack.py: the package tree, the generated control file / spec / pacman PKGBUILD, derived dependencies."""
 import os
 import shutil
 import subprocess

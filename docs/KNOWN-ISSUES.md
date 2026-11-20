@@ -16,10 +16,9 @@
   (docs/PROGRESS.md). Removing the rest changes shader text or behaviour and needs a run of the game each time.
 - Audio is measured (docs/audio.md) but not yet checked by ear against the beat; end-to-end latency to the speakers
   is not measured (use the game's calibration).
-- The game is built for x86-64-v2 by default, so a build runs on other x86-64 machines; `HM_MARCH=v3 makepkg` (or
-  `--march v3|native`) optimizes for the building computer, and that copy refuses to start on an older CPU.
-- Packages built before r25 (`0.1.0.r25.g089a5d2`) may hold an older executable than their version says (the setup
-  resumed "compile already done"; fixed). Rebuild with `makepkg -f`.
+- The game is built for x86-64-v2 by default, so a build runs on other x86-64 machines; the installer's CPU level
+  question (or `--march v3|native`) optimizes for the building computer, and that copy refuses to start on an older
+  CPU.
 - The menu's scaling-filter change takes effect at the next start (the filter is built into the present shader).
 - After a load the game sometimes picks its own 30 fps mode and stays in it (frames 33 ms apart, ~32 ms of that in
   its own waits, ~1 ms of work): in one of two scripted runs 2026-11-14 for most of the run, in the other for ~260

@@ -27,7 +27,7 @@ class Ctx:
 
 
 # The project's own sources each step's output depends on (besides the game): a step recorded as done is redone when
-# their hash changed since, e.g. makepkg -f after a code change resumes the extraction but compiles again.
+# their hash changed since, e.g. a rebuild after a code change resumes the extraction but compiles again.
 SOURCES = {
     'lift': ('recomp',),
     'compile': ('recomp', 'runtime', 'tools/build_game.py', 'tools/fetch_imgui.py', 'tools/imgui', 'tools/fetch_vma.py', 'tools/build_sdl3.py', 'tools/build_shaderc.py', 'VERSION'),
@@ -266,7 +266,7 @@ def extract(c):
             _sub_mark(c, 'aoc')
 
         # e. the game's own menu icon (control archive, a 256x256 JPEG per language) for the desktop entry; the
-        # package converts it (packaging/arch/PKGBUILD). Optional: without it the project's own icon is used.
+        # package converts it (installer/pack.py). Optional: without it the project's own icon is used.
         if not _sub_done(c, 'icon'):
             r = nca_of(patch, 'Control') or nca_of(app, 'Control')
             ctl = os.path.join(c.work, 'control')

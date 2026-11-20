@@ -8,7 +8,7 @@ import time
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LAUNCHER = os.path.join(ROOT, 'packaging', 'arch', 'hylian-melodies.sh')
+LAUNCHER = os.path.join(ROOT, 'packaging', 'hylian-melodies.sh')
 FAKE_EXE = '#!/bin/sh\necho "ran $(pwd) $*" > "$HOME/ran.txt"\n# v%d\n'
 
 

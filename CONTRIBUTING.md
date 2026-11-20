@@ -27,7 +27,7 @@ Mechanical guards:
 - `tools/check_content.py` refuses forbidden types, files over 512 KiB, binaries, high-entropy blobs, key-looking hex
   strings, game-data paths and the generator's marker. The pre-commit hook runs it on every commit; enable it once
   per clone with `git config core.hooksPath .githooks`. `tests/test_check_content.py` proves the hook works.
-- Game data lives outside the tree (`~/.cache/hylian-melodies/`, the PKGBUILD's `$srcdir`).
+- Game data lives outside the tree (`~/.cache/hylian-melodies/`, the installer's build folder).
 - Never print, log or paste the contents of a keys file or a title key. Logs may say "keys file found, N entries".
   hactool prints key values in its warnings, so its output is always filtered (`installer/hactool.py`).
 

@@ -26,8 +26,7 @@ minutes and makes a package for your package manager (pacman, apt, dnf or zypper
 the end it offers to install the package with sudo. Run it again later to rebuild, change settings or remove it.
 
 From a checkout instead: `git clone https://github.com/Dewey-Wilkerson/Hylian-Melodies && cd Hylian-Melodies &&
-sh install.sh --source .` On Arch the developer route also works: put the dump and keys next to
-`packaging/arch/PKGBUILD` and run `makepkg -si` there ([docs/packaging.md](docs/packaging.md)).
+sh install.sh --source .` What the package puts where: [docs/packaging.md](docs/packaging.md).
 
 Playing: the overlay menu is F1 (or Minus and Plus together on a gamepad); keys and buttons are in
 [docs/controls.md](docs/controls.md). Saves and settings live in `~/.local/share/hylian-melodies/`.

@@ -513,3 +513,10 @@ How the checks of this session were done (to repeat them):
   licence field says `MIT` plus `LicenseRef-Personal-Copy-Of-The-Game` (the game inside) in all three formats, the
   `.deb` maintainer no longer claims root@localhost. README: an Installing section (the release's `curl | sh`
   line, a checkout, the Arch route). `releases/latest` skips pre-releases, so the README names `v0.1.0`.
+- 2026-11-19 owner: remove the brief and the Arch-only install route before going public. `hylian-melodies-prompt.md`
+  deleted (its rules and hard gates folded into AGENTS.md; `tools/release.py` no longer has anything to leave out);
+  `packaging/arch/PKGBUILD` and its test deleted, the launcher, hooks and desktop entry moved to `packaging/`
+  (`installer/pack.py`, the tests and the docs follow); `docs/packaging.md` now describes the installer's packages;
+  `HM_MARCH` (read only by the PKGBUILD) left the variable list; README points at the installer only. Untracked old
+  build output stays in `packaging/arch/` (git-ignored, about 9.7 GiB, the owner's to delete). 129 unit tests pass.
+  The brief is then removed from every commit (history rewrite; backup bundle first).

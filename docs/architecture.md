@@ -40,7 +40,8 @@ Based on LAS Recomp's runtime, stripped of everything specific to Link's Awakeni
 - NVN recorded and replayed on Vulkan, Maxwell shader translator, SDL3 window;
 - audio: FMOD's AudioOut buffers -> SDL3 audio stream, paced like the console (the rhythm clock).
 
-## Packaging (`packaging/arch/`, M9)
+## Packaging (`installer/pack.py`, `packaging/`)
 
-Brief section 8: the game read-only in `/usr/share/hylian-melodies/`, a launcher that gives each user a writable
-copy-and-symlink folder in `~/.local/share/hylian-melodies/`, pacman hooks for desktop entry and cleanup.
+The installer builds a pacman, `.deb` or `.rpm` package: the game read-only in `/opt/hylian-melodies/`, a launcher
+that gives each user a writable copy-and-symlink folder in `~/.local/share/hylian-melodies/`, install and remove
+hooks for the desktop entry and cleanup (docs/packaging.md).

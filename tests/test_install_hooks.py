@@ -8,8 +8,8 @@ import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INSTALL = os.path.join(ROOT, 'packaging', 'arch', 'hylian-melodies-recomp.install')
-LAUNCHER = os.path.join(ROOT, 'packaging', 'arch', 'hylian-melodies.sh')
+INSTALL = os.path.join(ROOT, 'packaging', 'hylian-melodies-recomp.install')
+LAUNCHER = os.path.join(ROOT, 'packaging', 'hylian-melodies.sh')
 
 
 class PreRemove(unittest.TestCase):

@@ -30,7 +30,7 @@ GAME = 'opt/hylian-melodies'
 SUPPORT = 'usr/share/' + NAME
 HOMEPAGE = 'https://github.com/Dewey-Wilkerson/Hylian-Melodies'
 KEEP = ('exefs', 'romfs', 'aoc', 'hylian-melodies')  # of the setup folder; the rest is the setup's or a player's own
-HOOKS = 'packaging/arch/hylian-melodies-recomp.install'
+HOOKS = 'packaging/hylian-melodies-recomp.install'
 FORMATS = {'arch': 'arch', 'debian': 'deb', 'fedora': 'rpm', 'suse': 'rpm'}
 INSTALL = {'arch': 'sudo pacman -U {}', 'debian': 'sudo apt install {}', 'fedora': 'sudo dnf install {}',
            'suse': 'sudo zypper install --allow-unsigned-rpm {}'}
@@ -127,8 +127,8 @@ def build_root(stage, repo, root, settings=None):
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy(os.path.join(repo, src), dst)
         os.chmod(dst, mode)
-    put('packaging/arch/hylian-melodies.sh', 'usr/bin/hylian-melodies', 0o755)
-    put('packaging/arch/hylian-melodies.desktop', 'usr/share/applications/hylian-melodies.desktop')
+    put('packaging/hylian-melodies.sh', 'usr/bin/hylian-melodies', 0o755)
+    put('packaging/hylian-melodies.desktop', 'usr/share/applications/hylian-melodies.desktop')
     put('packaging/hylian-melodies.ini', SUPPORT + '/hylian-melodies.ini')
     if settings:  # the installer's choices in the default a player's first start copies (installer/options.py)
         options.write_settings(os.path.join(root, SUPPORT, options.INI), settings)

@@ -24,11 +24,8 @@ toolchain/
 install-temp/
 romfs/
 exefs/
-# Arch packaging outputs (makepkg runs in packaging/arch/)
-packaging/arch/src/
-packaging/arch/pkg/
-packaging/arch/*.pkg.tar*
-packaging/arch/hylian-melodies/
+# the old developer PKGBUILD's build folder (removed 2026-11-19; the installer makes the packages now)
+packaging/arch/
 # Caches, logs
 *.log
 logs/
