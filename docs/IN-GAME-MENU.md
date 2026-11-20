@@ -47,22 +47,28 @@ Not checked by hand with real presses. The overlay is still there, unchanged.
 - Labels need the text lookup hook. The row's draw code calls the lookup by id, and an unknown id aborts in the
   game's text formatting.
 
-## What's left before the overlay can go
+## Plan (owner's decisions, 2026-11-19)
 
-1. More rows on the same pattern:
-   - FPS in the title and frame pacing are toggles (easy);
-   - volume: the game already has Sound/Music sliders, so maybe nothing;
-   - scaling filter: needs a choice row (the Language page's list row is a candidate) or one toggle per filter.
-2. Text in other languages (the hook gets the language string; today English only).
-3. F11 / Alt+Enter while the Options screen is open leaves the row showing the old value until the screen is rebuilt.
-4. **Rebinding** has no game widget (the game's "Change Controllers" is the console's controller screen). Options:
-   - a "press a key" row built through hooks (hardest);
-   - keep rebinding in the ini and installer only;
-   - keep a small overlay just for it.
-5. Check the pause menu's Options (same builder or another one?).
-6. Then drop Dear ImGui: `runtime/ui/menu.cpp`, `imgui_glue.cpp`, `tools/fetch_imgui.py` and its patch, and the build
-   and packaging steps that fetch it. Keep the input-capture and window-request parts the hooks use.
-7. Owner's call: these addresses now live in the repository (see `docs/OPEN-QUESTIONS.md`).
+Rows go by topic, beside the game's own. Done when every item below is in and Dear ImGui is gone.
+
+| Overlay setting | Decision | Work |
+|---|---|---|
+| Fullscreen | Yes/No row, Graphics | done; keep it in step when F11 / Alt+Enter switch (remember the row, set +0x88, refresh) |
+| Scaling filter (3 choices, next start) | three-way row, Graphics | find a multiple-choice row type (the Language page's list row first); description says "next start" |
+| FPS in the window title | removed | drop the row, `show_fps` in settings and the ini, the title code |
+| Frame pacing | Yes/No row, Graphics | same toggle pattern as Fullscreen |
+| Master volume | removed | drop `volume` (the game's Sound and Music sliders stay); ignore old ini lines |
+| Rebinding (16 buttons, keyboard and gamepad, reset) | new Controls page | a button row in the main Options list opening a page (button rows: label = the current keys through the text hook; A starts a "press a key" capture in host code, as `input.c` does for the overlay; a Reset row) |
+| About (version, folder, keys) | version on the title screen | the port's version beside the game's own version text |
+| F1 / Minus+Plus | freed | remove the shortcut; Minus+Plus reach the game like on a Switch |
+
+Also:
+- Our text in all 11 of the game's languages (en, ja, de, fr, cafr, es, uses, it, kr, sc, tc). The hook gets the
+  language string. The agent drafts the translations; a native check is wanted.
+- Check the pause menu's Options (same builder or another one?).
+- Then drop Dear ImGui: `runtime/ui/menu.cpp`, `imgui_glue.cpp`, `tools/fetch_imgui.py` and its patch, and the build
+  and packaging steps that fetch it. Keep the input-capture and window-request parts the hooks use.
+- Addresses stay in the repository (open question 10, answered).
 
 ## Reproducing
 
