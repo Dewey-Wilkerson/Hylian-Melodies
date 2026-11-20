@@ -28,6 +28,7 @@ LONG = ('Built on this computer from its owner\'s cartridge dump. The package co
         'personal use only and must never be shared.')
 GAME = 'opt/hylian-melodies'
 SUPPORT = 'usr/share/' + NAME
+HOMEPAGE = 'https://github.com/Dewey-Wilkerson/Hylian-Melodies'
 KEEP = ('exefs', 'romfs', 'aoc', 'hylian-melodies')  # of the setup folder; the rest is the setup's or a player's own
 HOOKS = 'packaging/arch/hylian-melodies-recomp.install'
 FORMATS = {'arch': 'arch', 'debian': 'deb', 'fedora': 'rpm', 'suse': 'rpm'}
@@ -233,8 +234,8 @@ def runtime_packages(exe, query):
 # ------------------------------------------------------------------ deb
 
 def deb_control(ver, depends, recommends, kib):
-    return (f'Package: {NAME}\nVersion: {ver}\nArchitecture: amd64\nMaintainer: local build <root@localhost>\n'
-            f'Installed-Size: {kib}\nDepends: {", ".join(depends)}\n'
+    return (f'Package: {NAME}\nVersion: {ver}\nArchitecture: amd64\nMaintainer: built on this computer by its owner <nobody@invalid>\n'
+            f'Homepage: {HOMEPAGE}\nInstalled-Size: {kib}\nDepends: {", ".join(depends)}\n'
             + (f'Recommends: {", ".join(recommends)}\n' if recommends else '')
             + f'Section: games\nPriority: optional\nDescription: {SUMMARY}\n {LONG}\n')
 
@@ -283,6 +284,7 @@ Version: {ver}
 Release: 1
 Summary: {SUMMARY}
 License: MIT AND LicenseRef-Personal-Copy-Of-The-Game
+URL: {HOMEPAGE}
 AutoProv: no
 Recommends: {" ".join(OPTIONAL)}
 
@@ -337,8 +339,8 @@ pkgver={ver.replace("-", ".")}
 pkgrel=1
 pkgdesc='{SUMMARY}'
 arch=(x86_64)
-url='https://localhost/hylian-melodies'
-license=(MIT)
+url='{HOMEPAGE}'
+license=('MIT' 'LicenseRef-Personal-Copy-Of-The-Game')
 depends=({" ".join(depends)} vulkan-driver)
 optdepends=({opt})
 options=(!strip !debug)

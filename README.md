@@ -7,8 +7,32 @@ x86-64 program running on a small C runtime (Horizon OS services, NVN on Vulkan,
 **Personal use only.** This repository contains no game code, assets or keys. The game is built on your machine from
 your own cartridge dump and your own console's keys, and the resulting package must never be shared.
 
-Status: playable; an Arch package builds from a checkout ([docs/packaging.md](docs/packaging.md)); the installer
-for other distros is being designed ([docs/installer.md](docs/installer.md)). See [docs/PROGRESS.md](docs/PROGRESS.md).
+Status: playable from the title through the first dungeons at a steady 60 fps; early test release. See
+[docs/PROGRESS.md](docs/PROGRESS.md) and [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
+
+## Installing
+
+You need your own cartridge dump (`.xci`, carrying the 1.4.0 update) and your own console's `prod.keys`, an x86-64
+computer with a Vulkan 1.3 graphics driver, and about 15 GiB of free space while it builds. Supported: Arch (and
+CachyOS, Manjaro...), Debian 12 and 13, Ubuntu 24.04 and 26.04, Fedora 43 and newer, openSUSE Tumbleweed.
+
+```sh
+curl -fsSL https://github.com/Dewey-Wilkerson/Hylian-Melodies/releases/download/v0.1.0/install.sh | sh
+```
+
+The script downloads this release's source, checks its SHA-256 and starts the installer, which asks for your dump
+and keys (both are only read where they are), tells you which packages your system lacks, builds the game in a few
+minutes and makes a package for your package manager (pacman, apt, dnf or zypper). It never needs root itself; at
+the end it offers to install the package with sudo. Run it again later to rebuild, change settings or remove it.
+
+From a checkout instead: `git clone https://github.com/Dewey-Wilkerson/Hylian-Melodies && cd Hylian-Melodies &&
+sh install.sh --source .` On Arch the developer route also works: put the dump and keys next to
+`packaging/arch/PKGBUILD` and run `makepkg -si` there ([docs/packaging.md](docs/packaging.md)).
+
+Playing: the overlay menu is F1 (or Minus and Plus together on a gamepad); keys and buttons are in
+[docs/controls.md](docs/controls.md). Saves and settings live in `~/.local/share/hylian-melodies/`.
+
+## More
 
 - Findings about the game: [docs/RECON.md](docs/RECON.md)
 - Contributing and content rules: [CONTRIBUTING.md](CONTRIBUTING.md)

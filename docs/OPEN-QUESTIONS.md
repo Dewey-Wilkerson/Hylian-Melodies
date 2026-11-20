@@ -16,7 +16,7 @@ Things that need the owner's answer, or that were parked instead of guessed. New
 5. **AppImage build tools** (docs/installer.md, section 4). The portable AppImage needs zig (old-glibc target) and
    the AppImage type-2 runtime, neither packaged everywhere: fetch them at pinned versions with SHA-256 checks (as
    hactool and ImGui are), or require them installed? Also: the runtime's license (MIT) and zig's (MIT) are fine.
-6. **History rewrite author** (publication step 1). Which name and e-mail the rewritten history and future commits
+6. **History rewrite author**: answered 2026-11-14 (owner: the pseudonym "Bagu" <bagu@hylian-melodies.invalid>). (publication step 1) Which name and e-mail the rewritten history and future commits
    carry: a GitHub noreply address (`<id>+<user>@users.noreply.github.com`) or a pseudonym.
 7. **VMA header**: answered 2026-11-14 (owner: pin it). `tools/fetch_vma.py`, docs/installer.md section 9.
 8. **Movies on Fedora/openSUSE.** Their FFmpeg decodes H.264 through `libopenh264` instead of its own decoder
