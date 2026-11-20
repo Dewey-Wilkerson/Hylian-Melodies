@@ -27,9 +27,19 @@
 #define SCREEN_PAGES     0x68             // vector<vector<unique_ptr<Row>>> in the Options screen object
 #define LABEL_DISCO      70               // first row of the Graphics page
 
-// ---- our text: even ids are labels, odd ids their descriptions (the lookup hook borrows a game label or description
-// of the same kind for the style field)
-enum { HM_TEXT_BASE = 0x484d0000, T_FULLSCREEN = HM_TEXT_BASE, T_FULLSCREEN_DESC, T_PACING, T_PACING_DESC, T_COUNT };
+// ---- our text (the lookup hook borrows a game text of the same kind for the style field: text_style below)
+enum {
+    HM_TEXT_BASE = 0x484d0000,
+    T_FULLSCREEN = HM_TEXT_BASE, T_FULLSCREEN_DESC, T_PACING, T_PACING_DESC, T_FILTER, T_FILTER_DESC,
+    T_SHARP, T_SMOOTH, T_NEAREST,
+    T_COUNT
+};
+#define TEXT_LABEL  LABEL_DISCO        // a row label of the game's
+#define TEXT_DESC   (LABEL_DISCO + 1)  // a row description
+#define TEXT_CHOICE 0x88               // a choice name (the Language row's first)
+static const uint32_t text_style[T_COUNT - HM_TEXT_BASE] = {
+    TEXT_LABEL, TEXT_DESC, TEXT_LABEL, TEXT_DESC, TEXT_LABEL, TEXT_DESC, TEXT_CHOICE, TEXT_CHOICE, TEXT_CHOICE,
+};
 
 // The game's language codes (localization.xml), in this order in every row below. Translations other than English
 // were drafted by the agent; a native check is wanted.
@@ -63,6 +73,22 @@ static const char *const texts[T_COUNT - HM_TEXT_BASE][NLANG] = {
      "Switch 화면처럼 안정적인 60Hz로 표시합니다. 화면이 일정하게 끊길 때만 끄세요.",
      "像 Switch 屏幕一样稳定的 60 Hz。仅在画面规律性卡顿时关闭。",
      "像 Switch 螢幕一樣穩定的 60 Hz。僅在畫面規律性卡頓時關閉。"},
+    {"SCALING FILTER", "スケーリングフィルター", "SKALIERUNGSFILTER", "MISE À L'ÉCHELLE", "MISE À L'ÉCHELLE",
+     "FILTRO DE ESCALADO", "FILTRO DE ESCALADO", "FILTRO DI SCALATURA", "스케일링 필터", "缩放滤镜", "縮放濾鏡"},
+    {"How the picture is scaled to fit the window: Sharp (crisp pixels), Smooth or Nearest. Takes effect at the next start.",
+     "画面をウィンドウに合わせて拡大する方法：シャープ（くっきりしたドット）、スムーズ、ニアレスト。次回の起動時に反映されます。",
+     "Wie das Bild an das Fenster angepasst wird: Scharf (klare Pixel), Weich oder Blockig. Wirkt ab dem nächsten Start.",
+     "Comment l'image est adaptée à la fenêtre : Net (pixels francs), Lisse ou Pixelisé. Prend effet au prochain démarrage.",
+     "Comment l'image est adaptée à la fenêtre : Net (pixels francs), Lisse ou Pixelisé. Prend effet au prochain démarrage.",
+     "Cómo se ajusta la imagen a la ventana: Nítido (píxeles definidos), Suave o Pixelado. Se aplica en el próximo inicio.",
+     "Cómo se ajusta la imagen a la ventana: Nítido (píxeles definidos), Suave o Pixelado. Se aplica la próxima vez que inicies.",
+     "Come l'immagine viene adattata alla finestra: Nitido (pixel definiti), Morbido o Pixelato. Ha effetto dal prossimo avvio.",
+     "화면을 창에 맞게 늘리는 방식: 선명하게(또렷한 픽셀), 부드럽게, 최근접. 다음 실행부터 적용됩니다.",
+     "画面缩放到窗口的方式：清晰（像素分明）、平滑或最近邻。下次启动时生效。",
+     "畫面縮放到視窗的方式：清晰（像素分明）、平滑或最近鄰。下次啟動時生效。"},
+    {"Sharp", "シャープ", "Scharf", "Net", "Net", "Nítido", "Nítido", "Nitido", "선명하게", "清晰", "清晰"},
+    {"Smooth", "スムーズ", "Weich", "Lisse", "Lisse", "Suave", "Suave", "Morbido", "부드럽게", "平滑", "平滑"},
+    {"Nearest", "ニアレスト", "Blockig", "Pixelisé", "Pixelisé", "Pixelado", "Pixelado", "Pixelato", "최근접", "最近邻", "最近鄰"},
 };
 
 const char *game_menu_text(uint32_t id, const char *lang) {  // (tests: tests/c via the same table)
@@ -145,6 +171,64 @@ static uint64_t add_toggle(Cpu *c, uint64_t page, uint32_t label, bool value, co
     return row;
 }
 
+#define G_CHOICE_CTOR    0x7000068410ull  // (row, label id, desc id, const std::string *key, const vector<Choice> *, std::function<void(std::string)> *, 0, 0)
+#define G_STRFN_VT_GOT   0x7000a35010ull  // GOT slot: vtable of the bound member function the choice rows take
+#define CHOICE_ROW_SIZE  0xc0
+#define CHOICE_INDEX     0x88             // i32 current choice
+// Choice (32 bytes): std::string value, i32 name text id, i32 description text id (-1: the row's own)
+
+static void on_filter(Cpu *c) {  // x1 = the chosen value (std::string *, "0".."2")
+    uint64_t s = c->x[1];
+    const char *p = (const char *)(LD8(s) & 1 ? LD64(s + 16) : s + 1);
+    int v = p[0] - '0';
+    if (v < 0 || v > 2) return;
+    g_settings.upscale_filter = v;  // (used from the next start: the renderer reads it once)
+    settings_changed(SET_UPSCALE_FILTER);
+    save();
+    LOG("[game-menu] scaling filter %d (next start)\n", v);
+}
+
+static uint64_t add_choice(Cpu *c, uint64_t page, uint32_t label, const uint32_t *names, int n, int value,
+                           const char *cb_name, HostFn cb) {
+    uint64_t cb_addr = hle_register(cb_name, cb);
+    uint64_t sp0 = c->sp;
+    c->sp -= 0x100;
+    uint64_t key = c->sp, fn = c->sp + 0x20, vec = c->sp + 0x50, slot = c->sp + 0x68, arr = c->sp + 0x70;
+    memset((void *)key, 0, 0x100);
+    if (n > 4) n = 4;
+    for (int i = 0; i < n; i++) {  // value "i" (short string), its name
+        ST8(arr + 32 * i, 1 << 1);
+        ST8(arr + 32 * i + 1, '0' + i);
+        ST32(arr + 32 * i + 0x18, names[i]);
+        ST32(arr + 32 * i + 0x1c, 0xffffffffu);
+    }
+    ST64(vec, arr); ST64(vec + 8, arr + 32 * n); ST64(vec + 16, arr + 32 * n);
+    ST64(fn + 0x00, LD64(G_STRFN_VT_GOT) + 0x10);
+    ST64(fn + 0x08, cb_addr);
+    ST64(fn + 0x20, fn);
+
+    uint64_t row = call1(c, G_NEW, CHOICE_ROW_SIZE);
+    c->x[0] = row; c->x[1] = label; c->x[2] = label + 1; c->x[3] = key; c->x[4] = vec; c->x[5] = fn;
+    c->x[6] = 0; c->x[7] = 0;
+    guest_call(c, G_CHOICE_CTOR);
+    call1(c, LD64(LD64(fn) + 0x20), fn);  // the local std::function's destroy() (the row holds a copy)
+
+    ST32(row + CHOICE_INDEX, value >= 0 && value < n ? value : 0);
+    row_refresh(c, row);
+
+    uint64_t end = LD64(page + 8), cap = LD64(page + 16);
+    if (end < cap) {
+        ST64(end, row);
+        ST64(page + 8, end + 8);
+    } else {
+        ST64(slot, row);
+        c->x[1] = slot;
+        call1(c, G_VEC_PUSH_SLOW, page);
+    }
+    c->sp = sp0;
+    return row;
+}
+
 static bool disabled(void) {
     const char *e = getenv("HM_GAME_MENU");
     return e && !strcmp(e, "0");
@@ -164,6 +248,8 @@ void hm_hook_options_build(Cpu *c, GuestFn orig) {
         if (rb == re || LD32(LD64(rb) + ROW_LABEL) != LABEL_DISCO) continue;
         fullscreen_row = add_toggle(c, page, T_FULLSCREEN, g_settings.fullscreen, "hm_game_menu_fullscreen", on_fullscreen);
         add_toggle(c, page, T_PACING, g_settings.frame_pacing, "hm_game_menu_pacing", on_pacing);
+        static const uint32_t filters[] = {T_SHARP, T_SMOOTH, T_NEAREST};  // (upscale_filter 0, 1, 2)
+        add_choice(c, page, T_FILTER, filters, 3, g_settings.upscale_filter, "hm_game_menu_filter", on_filter);
         added = 1;
         break;
     }
@@ -281,8 +367,8 @@ void hm_hook_text_lookup(Cpu *c, GuestFn orig) {  // w0 = id, x1 = language (std
     uint32_t id = (uint32_t)c->x[0];
     if (id < HM_TEXT_BASE || id >= T_COUNT) { orig(c); return; }
     uint64_t res = c->x[8], lang_s = c->x[1];
-    c->x[0] = (id - HM_TEXT_BASE) & 1 ? LABEL_DISCO + 1 : LABEL_DISCO;  // a label or a description of the game's,
-    orig(c);                                                           // for the style field; the text is replaced
+    c->x[0] = text_style[id - HM_TEXT_BASE];  // a game text of the same kind, for the style field;
+    orig(c);                                  // the text is replaced
     char lang[16];
     read_string(lang_s, lang, sizeof lang);  // (the lookup fills in the game's current language when it was empty)
     uint64_t saved[13];

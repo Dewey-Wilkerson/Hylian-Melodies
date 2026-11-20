@@ -2,9 +2,10 @@
 
 Branch `in-game-gui`, 2026-11-19. Goal: replace the Dear ImGui overlay (F1, `runtime/ui/menu.cpp`) with rows in the
 game's own Options menu. Status (2026-11-19): the Graphics page has the port's **Fullscreen** and **Frame pacing** rows (Yes/No, saved to
-`hylian-melodies.ini`, applied at once), in all 11 of the game's languages; the Fullscreen row follows F11 / Alt+Enter;
+`hylian-melodies.ini`, applied at once) and a **Scaling filter** choice row (Sharp / Smooth / Nearest, saved, used
+from the next start), in all 11 of the game's languages; the Fullscreen row follows F11 / Alt+Enter;
 pages longer than the game's 8 rows get a tighter layout so the panel stays clear of the title and the description
-box. Checked by scripted input and captures (English, German, Japanese; F11 sent with xdotool under XWayland). The
+box. Checked by scripted input and captures (English, German, Japanese, French; F11 sent with xdotool under XWayland). The
 FPS-in-title and master-volume settings are gone. The overlay is still there for the rest.
 
 ## How it works
@@ -52,6 +53,17 @@ FPS-in-title and master-volume settings are gone. The overlay is still there for
   free space between the title and the description box is about y 35..303: 8 rows fit, 9 at the game's pitch don't.
 - **Language**: the text lookup's language argument is in/out; after the call it holds the game's current code
   (`en`, `de`, `ja`, ...), so our text follows the game's own language setting.
+- **Choice row** (the Language page's type): constructor `(row (0xC0 bytes), label id, desc id, const std::string
+  *key, const vector<Choice> *, std::function<void(std::string)> *, 0, 0)`.
+  - A Choice is 32 bytes: `std::string` value, i32 name text id, i32 description id (-1).
+  - The choices are copied to +0x90; the current index is the i32 at +0x88. With description id 0, each choice's own
+    description is shown instead.
+  - Left/right move the index (wrapping at the ends) and call the function with the chosen value. With an empty key,
+    nothing is written to the game's config.
+  - The callback wrapper's vtable comes through its own GOT slot. Its layout is the same bound member function as the
+    toggles'.
+- Our text borrows a game text of the same kind (row label, description, choice name) for the lookup result's style
+  field (`text_style` in `game_menu.c`).
 - Labels need the text lookup hook. The row's draw code calls the lookup by id, and an unknown id aborts in the
   game's text formatting.
 
@@ -62,7 +74,7 @@ Rows go by topic, beside the game's own. Done when every item below is in and De
 | Overlay setting | Decision | Work |
 |---|---|---|
 | Fullscreen | Yes/No row, Graphics | done, follows F11 / Alt+Enter |
-| Scaling filter (3 choices, next start) | three-way row, Graphics | find a multiple-choice row type (the Language page's list row first); description says "next start" |
+| Scaling filter (3 choices, next start) | three-way row, Graphics | done (the game's choice row type) |
 | FPS in the window title | removed | done (old ini lines are ignored) |
 | Frame pacing | Yes/No row, Graphics | done |
 | Master volume | removed | done (old ini lines are ignored; `HM_AUDIO_GAIN` stays for tests) |

@@ -151,7 +151,9 @@ class GameMenuText(unittest.TestCase):
         self.assertEqual(len(langs), 11)
         body = re.search(r'texts\[[^]]*\]\[NLANG\] = \{(.*?)\n\};', src, re.S).group(1)
         rows = re.findall(r'\{((?:\s*"(?:[^"\\]|\\.)*",?)+)\s*\}', body)
-        self.assertTrue(rows and len(rows) % 2 == 0, len(rows))  # (labels and their descriptions)
+        self.assertTrue(rows)
+        style = re.search(r'text_style\[[^]]*\] = \{([^}]*)\}', src).group(1)
+        self.assertEqual(len(re.findall(r'TEXT_[A-Z]+', style)), len(rows), 'one style per text')
         for r in rows:
             strings = re.findall(r'"((?:[^"\\]|\\.)*)"', r)
             self.assertEqual(len(strings), len(langs), strings[0])
