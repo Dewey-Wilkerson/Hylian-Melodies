@@ -524,3 +524,9 @@ How the checks of this session were done (to repeat them):
   tarball rebuilt from the moved tag is byte-identical (SHA-256 7a3907f1...), so the uploaded assets stay valid.
   Backup of the old history: `~/.local/share/hylian-melodies/history-backup/hylian-melodies-pre-brief-removal-b95efc1.bundle`.
   `base-functionality` was rewritten too and stays local. Commit IDs quoted above this entry refer to the old history.
+- 2026-11-19 the repository is public (owner). Checked as a stranger: the release's three files download without a
+  login (HTTP 200); the README's `curl ... | sh` line, run with scratch XDG folders and no GitHub token, downloaded
+  the tarball, checked its SHA-256, unpacked it and started the installer (stopped at "no cartridge dump given").
+  Not checked through this route: a full build (needs the dump). The `v0.1.0` release is the source as of 2026-11-15:
+  it still carries the old PKGBUILD and the localhost package addresses; a `v0.1.1` would bring the release up to
+  `main`.
