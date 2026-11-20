@@ -120,6 +120,27 @@ class Marker(unittest.TestCase):
         self.assertIn(check_content.GENERATED_MARKER, gen.MARKER)
 
 
+class Hooks(unittest.TestCase):
+    def test_load_filters_module_and_comments(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
+            f.write('# comment\nmain 0x1000 hook_a  # trailing\nsdk 0x2000 hook_b\nmain 0x3000\n')
+        try:
+            self.assertEqual(gen.load_hooks(f.name, 'main'), {0x1000: 'hook_a'})
+            self.assertEqual(gen.load_hooks(f.name, 'sdk'), {0x2000: 'hook_b'})
+            self.assertEqual(gen.load_hooks('', 'main'), {})
+        finally:
+            os.unlink(f.name)
+
+    def test_every_listed_hook_is_defined_in_the_runtime(self):
+        src = ''
+        for d, _, files in os.walk(os.path.join(ROOT, 'runtime')):
+            src += ''.join(open(os.path.join(d, n), errors='replace').read() for n in files if n.endswith('.c'))
+        for mod in ('main', 'sdk'):
+            for name in gen.load_hooks(os.path.join(ROOT, 'recomp', 'hooks.txt'), mod).values():
+                self.assertIn(f'void {name}(Cpu *c, GuestFn orig)', src)
+
+
 if __name__ == '__main__':
     unittest.main()
 

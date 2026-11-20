@@ -25,3 +25,7 @@ Things that need the owner's answer, or that were parked instead of guessed. New
    (docs/installer.md, section 9). The decoder is there; whether the game's movies play needs a run on such a system.
 9. **Container check**: done 2026-11-14 (owner's OK): Debian 13, Ubuntu 26.04, Fedora 43/45, openSUSE Tumbleweed all
    build. Images and outputs removed afterwards.
+10. **Game code addresses in the repository** (branch `in-game-gui`). `recomp/hooks.txt` and `runtime/hle/game_menu.c`
+    name 1.4.0 code addresses, struct offsets and text ids (facts, like the ~10 address comments already in
+    `runtime/`; no bytes, names or strings of the game). Fine to keep, or should they be located at install time
+    (e.g. by a hash of each function's bytes)?

@@ -1,0 +1,4 @@
+# Function hooks for recomp/gen.py: <module> <guest address> <host function> (runtime/hle/game_menu.c).
+# Addresses are those of the supported game version (1.4.0, installer/known.py).
+main 0x7000061770 hm_hook_options_build
+main 0x700053cdf0 hm_hook_text_lookup

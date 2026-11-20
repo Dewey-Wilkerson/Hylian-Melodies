@@ -231,6 +231,8 @@ bool menu_handle_event(const SDL_Event *e) {
 
 void menu_apply_window_requests(SDL_Window *w) {
     g_pixel_density = SDL_GetWindowPixelDensity(w);
+    extern volatile int g_game_menu_fullscreen_req;  // (the game's own Options menu: runtime/hle/game_menu.c)
+    if (g_game_menu_fullscreen_req) { g_game_menu_fullscreen_req = 0; g_want_fullscreen = true; }
     if (g_want_fullscreen.exchange(false)) SDL_SetWindowFullscreen(w, g_settings.fullscreen);
     static bool fps_was;
     if (fps_was && !g_settings.show_fps) SDL_SetWindowTitle(w, "Hylian Melodies");  // (the FPS left in the title)

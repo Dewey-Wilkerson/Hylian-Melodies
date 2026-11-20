@@ -1,6 +1,10 @@
 """Generate C for a whole NSO module (ARM64 -> C), one C function per guest function.
 
-  python3 recomp/gen.py <name> <nso> <base> <outdir> [--hle FILE] [--simd c|asm] [--chunk N] [--jobs N]
+  python3 recomp/gen.py <name> <nso> <base> <outdir> [--hle FILE] [--hooks FILE] [--simd c|asm] [--chunk N] [--jobs N]
+
+Function hooks (recomp/hooks.txt by default, `<module> <guest address> <host function>` per line): the guest function
+at that address becomes f_<addr>_orig and f_<addr> calls `<host function>(Cpu *c, GuestFn orig)` instead, which runs
+the original through orig when it wants to (runtime/hle/game_menu.c). Addresses are for the supported game version only.
 
 Adapted from LAS Recomp's tools/gen.py (MIT, see THIRD_PARTY_NOTICES.md): function partitioning, scanning and the C
 emitter follow it. Changes: jump tables are resolved by recomp/jumptables.py (no Unicorn), the Link's Awakening
@@ -241,9 +245,13 @@ class Module:
             ext.add(end)
         return labels, ext, tables
 
-    def emit_function(self, entry, end, labels, tables, hle):
+    def emit_function(self, entry, end, labels, tables, hle, hooks=None):
         out = [f'void {fname(entry)}(Cpu *c) {{']
         refs = set()
+        if hooks and entry in hooks:
+            f, h = fname(entry), hooks[entry]
+            out = [f'void {h}(Cpu *c, GuestFn orig);', f'static void {f}_orig(Cpu *c);',
+                   f'void {f}(Cpu *c) {{ {h}(c, {f}_orig); }}', f'static void {f}_orig(Cpu *c) {{']
         if entry in hle:
             out += [f'    {sanitize(hle[entry])}(c);', '}']
             return out, refs
@@ -349,17 +357,27 @@ def write_if_changed(path, text):
 _W = {}
 
 
+def load_hooks(path, module):
+    hooks = {}
+    if path and os.path.exists(path):
+        for line in open(path):
+            line = line.split('#', 1)[0].split()
+            if len(line) == 3 and line[0] == module:
+                hooks[int(line[1], 16)] = line[2]
+    return hooks
+
+
 def _worker_init():
     pass  # (fork: the workers inherit _W, including the module's warm lift cache)
 
 
 def _emit_chunk(job):
     idx, addrs = job
-    m, entries, hle, args = _W['m'], _W['entries'], _W['hle'], _W['args']
+    m, entries, hle, args, hooks = _W['m'], _W['entries'], _W['hle'], _W['args'], _W['hooks']
     body, refs = [], set()
     for a in addrs:
         end, labels, tables = entries[a]
-        lines, r = m.emit_function(a, end, labels, tables, hle)
+        lines, r = m.emit_function(a, end, labels, tables, hle, hooks)
         body += lines
         refs |= r
     path = os.path.join(args.outdir, f'{args.name}_{idx:04d}.c')
@@ -378,6 +396,8 @@ def main():
     ap.add_argument('base', type=lambda s: int(s, 0))
     ap.add_argument('outdir')
     ap.add_argument('--hle', help='file of symbol names whose guest bodies are replaced by host functions')
+    ap.add_argument('--hooks', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hooks.txt'),
+                    help='function hooks: <module> <address> <host function> per line ("" = none)')
     ap.add_argument('--chunk-insns', type=int, default=60000, help='guest instructions per C file (about)')
     ap.add_argument('--jobs', type=int, default=os.cpu_count() or 4)
     ap.add_argument('--simd', choices=('asm', 'c'),
@@ -451,7 +471,13 @@ def main():
         jobs.append((len(jobs), cur))
     total = Counter(m.stats)
     unsup = Counter(m.unsupported)
-    _W.update(m=m, entries=entries, hle=hle, args=args)
+    hooks = load_hooks(args.hooks, args.name)
+    missing = [a for a in hooks if a not in entries]
+    if missing:
+        sys.exit(f'{args.name}: hooked address(es) not a function start: {", ".join(hx(a) for a in missing)}')
+    if hooks:
+        print(f'{args.name}: {len(hooks)} function hook(s)', file=sys.stderr, flush=True)
+    _W.update(m=m, entries=entries, hle=hle, args=args, hooks=hooks)
     with mp.get_context('fork').Pool(args.jobs, _worker_init) as pool:
         for k, (idx, st, us) in enumerate(pool.imap_unordered(_emit_chunk, jobs)):
             print(f'{args.name}: progress {k + 1}/{len(jobs)}', file=sys.stderr, flush=True)
