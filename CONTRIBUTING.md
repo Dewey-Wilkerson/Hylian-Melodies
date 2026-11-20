@@ -40,7 +40,8 @@ owner's approval. The project's own code is MIT.
 
 ## Publishing
 
-Nothing is pushed, released or published without the owner's explicit approval. No remote is configured.
+Nothing is pushed, released or published without the owner's explicit approval. The remote is the owner's private
+GitHub repository (`origin`); pushes of `main` go there with their OK.
 
 ## Style
 

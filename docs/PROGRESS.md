@@ -484,3 +484,19 @@ How the checks of this session were done (to repeat them):
   in the dialogs (portal `directory`, zenity `--directory`, kdialog `--getexistingdirectory`) and in the in-terminal
   list ("Use this folder"). 130 unit tests; the screens captured at 80x24 and read. Bootstrap, screens and these
   are not committed yet (owner: commit after trying the screens).
+- 2026-11-15 tester hand-out (owner: a few testers before the release). Leak check before it: the content guard
+  over all 168 tracked files; no personal details (name, e-mail, home paths, the dump's location), no secrets, no
+  Link's Awakening data, no game files; the dump's own SHA-256 is nowhere (`installer/known.py` holds only the
+  extracted files' hashes, the same for everyone). `dist/hylian-melodies-0.1.0-test.zip` (git-ignored) is
+  `git archive HEAD` (no history) minus the brief, every file through the guard, plus `dist/TESTING.md` (unpack,
+  `sh install.sh --source .`, what it asks, removing it, what to report). Unpacked under a path with a space: tests
+  pass (the tracked-files test now skips outside a git checkout), the installer starts. Left for the owner:
+  `docs/DEV-ENVIRONMENT.md` describes the development machine's hardware (decide before the public release).
+- 2026-11-19 GitHub (owner pushed the project and OK'd pushing updates from now on): `origin` =
+  github.com/Dewey-Wilkerson/Hylian-Melodies, private. Checked: `origin/main` is this `main` (`9d9fc9d`, all 44
+  commits, all 168 files, one author "Bagu"), tag `v0.1.0` on the same commit. Not on GitHub: the local revert tag
+  `base-functionality` (owner's call whether to push it). The `v0.1.0` pre-release holds only `install.sh` with its
+  placeholders unfilled (`@HM_TAG@` ...): no tarball, no `SHA256SUMS`, so the `curl | sh` path cannot work yet; the
+  fix is `python3 tools/release.py --repo-url https://github.com/Dewey-Wilkerson/Hylian-Melodies --tag v0.1.0`
+  and uploading its three files to the release (owner's OK). While the repository is private, testers need access
+  to it (and a signed-in download) or the zip. The PKGBUILD's and pack.py's `url` still say localhost.
