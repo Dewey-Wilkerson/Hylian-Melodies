@@ -500,3 +500,9 @@ How the checks of this session were done (to repeat them):
   fix is `python3 tools/release.py --repo-url https://github.com/Dewey-Wilkerson/Hylian-Melodies --tag v0.1.0`
   and uploading its three files to the release (owner's OK). While the repository is private, testers need access
   to it (and a signed-in download) or the zip. The PKGBUILD's and pack.py's `url` still say localhost.
+- 2026-11-19 `v0.1.0` release fixed (owner's OK): `tools/release.py --tag v0.1.0` (tarball SHA-256 7a3907f1...,
+  186 files, no brief) and its three files uploaded with `gh release upload --clobber`, replacing the unfilled
+  install.sh; downloaded back, `sha256sum -c SHA256SUMS` OK. The bootstrap was run with that tarball pre-cached
+  (checksum checked, unpacked, installer started). While the repository is private an anonymous download is a
+  404, so `curl | sh` works only once it is public; until then testers with access use the zip (`--source .`) or
+  `sh install.sh --source https://github.com/Dewey-Wilkerson/Hylian-Melodies.git --ref v0.1.0` (unverified).
