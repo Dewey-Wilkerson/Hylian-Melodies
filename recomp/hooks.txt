@@ -4,3 +4,5 @@ main 0x7000061770 hm_hook_options_build
 main 0x700053cdf0 hm_hook_text_lookup
 main 0x7000067470 hm_hook_toggle_update
 main 0x7000065550 hm_hook_options_layout
+main 0x7000068be0 hm_hook_choice_input
+main 0x7000068df0 hm_hook_choice_update

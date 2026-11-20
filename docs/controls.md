@@ -35,7 +35,8 @@ F11 or Alt+Enter switches between a window and fullscreen (borderless, the deskt
 
 ## Settings menu
 
-The game's own Options > Graphics page also has the port's Fullscreen, Frame pacing and Scaling filter rows (branch `in-game-gui`,
+The game's own Options > Graphics page also has the port's Fullscreen, Frame pacing and Scaling filter rows, and Options > Controls rebinds
+the buttons: A on a row, then the new key or gamepad button (Esc or Home cancels), saved at once (branch `in-game-gui`,
 docs/IN-GAME-MENU.md); the overlay below is on its way out.
 
 **F1**, or **Minus + Plus** held together on a gamepad (or its Home button), opens and closes the settings menu over

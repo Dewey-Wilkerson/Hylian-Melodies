@@ -3,10 +3,11 @@
 Branch `in-game-gui`, 2026-11-19. Goal: replace the Dear ImGui overlay (F1, `runtime/ui/menu.cpp`) with rows in the
 game's own Options menu. Status (2026-11-19): the Graphics page has the port's **Fullscreen** and **Frame pacing** rows (Yes/No, saved to
 `hylian-melodies.ini`, applied at once) and a **Scaling filter** choice row (Sharp / Smooth / Nearest, saved, used
-from the next start), in all 11 of the game's languages; the Fullscreen row follows F11 / Alt+Enter;
+from the next start); a **Controls** page (button in the main list, after Language) rebinds every Switch button
+to a key or a gamepad button, with Reset to defaults, in all 11 of the game's languages; the Fullscreen row follows F11 / Alt+Enter;
 pages longer than the game's 8 rows get a tighter layout so the panel stays clear of the title and the description
 box. Checked by scripted input and captures (English, German, Japanese, French; F11 sent with xdotool under XWayland). The
-FPS-in-title and master-volume settings are gone. The overlay is still there for the rest.
+FPS-in-title and master-volume settings are gone. The overlay is still there, now redundant.
 
 ## How it works
 
@@ -64,6 +65,17 @@ FPS-in-title and master-volume settings are gone. The overlay is still there for
     toggles'.
 - Our text borrows a game text of the same kind (row label, description, choice name) for the lookup result's style
   field (`text_style` in `game_menu.c`).
+- **Button row** (the main list's): constructor `(row (0x60 bytes), label id, desc id, std::function<void()> *, 0,
+  0)`. The function is the game's bound member function with an int, heap-held (0x28 bytes: vtable, function, adjust,
+  object, int). The main list binds the screen's "open page <int>" this way; through its own GOT slot we do the same
+  for our page.
+- **Pages**: a new row vector appended to the screen's page list is a working page. The game's open-page code selects
+  its first row. Back returns to main row = page number (except page 1), so the Controls button sits at main row 5,
+  the page's number.
+- **Per-frame calls**: layout calls each row's "set y" (vtable +0x20) every frame; the selected row's input method
+  (+0x18) runs every frame too. The hooks use these to refresh rows (F11, bindings) and to see A on a binding row.
+- **Scrolling**: pages of more than 10 rows show 9 at a time, following the selection; the rest get y = 1000 (off the
+  screen).
 - Labels need the text lookup hook. The row's draw code calls the lookup by id, and an unknown id aborts in the
   game's text formatting.
 
@@ -78,7 +90,7 @@ Rows go by topic, beside the game's own. Done when every item below is in and De
 | FPS in the window title | removed | done (old ini lines are ignored) |
 | Frame pacing | Yes/No row, Graphics | done |
 | Master volume | removed | done (old ini lines are ignored; `HM_AUDIO_GAIN` stays for tests) |
-| Rebinding (16 buttons, keyboard and gamepad, reset) | new Controls page | a button row in the main Options list opening a page (button rows: label = the current keys through the text hook; A starts a "press a key" capture in host code, as `input.c` does for the overlay; a Reset row) |
+| Rebinding (16 buttons, keyboard and gamepad, reset) | new Controls page | done: a main-list button opens our page; one choice row per Switch button (its single choice is the bindings text, made at lookup time); A (or left/right) starts a capture in `input.c`, the next key or gamepad button binds that side, Esc / Home cancel; Reset row; the page scrolls (9 rows shown) |
 | About (version, folder, keys) | version on the title screen | the port's version beside the game's own version text |
 | F1 / Minus+Plus | freed | remove the shortcut; Minus+Plus reach the game like on a Switch |
 

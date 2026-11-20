@@ -128,13 +128,23 @@ static void load_bindings(void) {
 
 // ------------------------------------------------------------------ state
 static _Atomic uint64_t key_bits, pad_bits, script_bits;
+// The game's own Options > Controls page (runtime/hle/game_menu.c): the button waiting for a press (-1: none), a
+// counter that moves whenever a binding or that wait changes (the page redraws its rows), and the wait for everything
+// to be released after a capture (so the press that was bound doesn't also reach the game).
+static _Atomic int capture_b = -1;
+static _Atomic unsigned bind_gen;
+static _Atomic bool wait_release;
 static _Atomic int32_t pad_axes[4];
 static SDL_Gamepad *pad;
 static SDL_JoystickID pad_id;
 
 static void publish(void) {
     uint64_t b = atomic_load(&key_bits) | atomic_load(&pad_bits) | atomic_load(&script_bits);
-    bool captured = menu_input_captured();  // (the overlay menu is open: the game sees nothing held)
+    bool captured = menu_input_captured() || atomic_load(&capture_b) >= 0;  // (the game sees nothing held)
+    if (atomic_load(&wait_release)) {
+        if (b) captured = true;
+        else atomic_store(&wait_release, false);
+    }
     if (captured) b = 0;
     static int log = -1;
     if (log < 0) log = getenv("HM_LOG_INPUT") != NULL || g_settings.log_input;
@@ -209,6 +219,50 @@ static void ensure_init(void) {
     load_bindings();
 }
 
+void input_bind_set(int b, bool padside, int code);
+int input_bind_code(const SDL_Event *e, bool padside);
+
+static void capture_end(void) {
+    atomic_store(&capture_b, -1);
+    atomic_store(&wait_release, true);
+    atomic_fetch_add(&bind_gen, 1);
+    recompute_keys();
+    recompute_pad();
+    publish();
+}
+
+// While the Controls page waits for a press: a key binds the keyboard side, a gamepad button or trigger the gamepad
+// side; Esc / Home cancel. Every key and gamepad event is taken meanwhile. True when e was taken.
+static bool capture_event(const SDL_Event *e) {
+    int b = atomic_load(&capture_b), code;
+    switch (e->type) {
+    case SDL_EVENT_KEY_DOWN:
+        if (e->key.repeat) return true;
+        if (e->key.scancode == SDL_SCANCODE_ESCAPE) LOG("[input] binding %s cancelled\n", bnames[b]);
+        else input_bind_set(b, false, e->key.scancode);
+        capture_end();
+        if (!settings_save()) LOG("[input] saving hylian-melodies.ini failed\n");
+        return true;
+    case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+        if (e->gbutton.button == SDL_GAMEPAD_BUTTON_GUIDE) LOG("[input] binding %s cancelled\n", bnames[b]);
+        else input_bind_set(b, true, e->gbutton.button);
+        capture_end();
+        if (!settings_save()) LOG("[input] saving hylian-melodies.ini failed\n");
+        return true;
+    case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+        if ((code = input_bind_code(e, true)) >= 0) {
+            input_bind_set(b, true, code);
+            capture_end();
+            if (!settings_save()) LOG("[input] saving hylian-melodies.ini failed\n");
+        }
+        return true;
+    case SDL_EVENT_KEY_UP: case SDL_EVENT_GAMEPAD_BUTTON_UP:
+        return true;
+    default:
+        return false;
+    }
+}
+
 void input_handle_event(const SDL_Event *e) {
     ensure_init();
     if (getenv("HM_LOG_INPUT") || g_settings.log_input) {  // (diagnostics: what the window receives)
@@ -243,6 +297,7 @@ void input_handle_event(const SDL_Event *e) {
         }
         return;
     }
+    if (atomic_load(&capture_b) >= 0 && capture_event(e)) return;
     switch (e->type) {
     case SDL_EVENT_KEY_DOWN: case SDL_EVENT_KEY_UP: recompute_keys(); break;
     case SDL_EVENT_WINDOW_FOCUS_LOST: atomic_store(&key_bits, 0); break;  // (keys released while away)
@@ -347,6 +402,7 @@ static void bindings_to_settings(void) {
 }
 
 static void bindings_changed(void) {
+    atomic_fetch_add(&bind_gen, 1);
     recompute_keys();
     recompute_pad();
     publish();
@@ -392,6 +448,36 @@ int input_bind_code(const SDL_Event *e, bool padside) {
         (e->gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || e->gaxis.axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER))
         return 100 + e->gaxis.axis;
     return -1;
+}
+
+// ------------------------------------------------------------------ the game's own Controls page (runtime/hle/game_menu.c)
+void input_capture_begin(int b) {
+    if (b < 0 || b >= NB) return;
+    ensure_init();
+    atomic_store(&capture_b, b);
+    atomic_fetch_add(&bind_gen, 1);
+    LOG("[input] waiting for a key or gamepad button for %s\n", bnames[b]);
+    publish();
+}
+int input_capture_state(void) { return atomic_load(&capture_b); }
+unsigned input_bindings_generation(void) { return atomic_load(&bind_gen); }
+
+// Button b's bindings on one side: keyboard scancodes, or gamepad codes (SDL_GamepadButton, 100 + axis for a trigger).
+int input_binding_codes(int b, bool padside, int *out, int max) {
+    ensure_init();
+    int n = 0;
+    if (b < 0 || b >= NB) return 0;
+    pthread_mutex_lock(&map_lock);
+    for (int j = 0; j < MAXB && n < max; j++) {
+        if (padside ? padmap[b][j] < 0 : !keymap[b][j]) continue;
+        out[n++] = padside ? padmap[b][j] : (int)keymap[b][j];
+    }
+    pthread_mutex_unlock(&map_lock);
+    return n;
+}
+const char *input_key_name(int scancode) {
+    const char *n = SDL_GetScancodeName((SDL_Scancode)scancode);
+    return n && *n ? n : "?";
 }
 
 // ------------------------------------------------------------------ scripted input (test runs)

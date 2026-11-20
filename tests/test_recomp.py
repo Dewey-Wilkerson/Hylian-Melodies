@@ -152,8 +152,14 @@ class GameMenuText(unittest.TestCase):
         body = re.search(r'texts\[[^]]*\]\[NLANG\] = \{(.*?)\n\};', src, re.S).group(1)
         rows = re.findall(r'\{((?:\s*"(?:[^"\\]|\\.)*",?)+)\s*\}', body)
         self.assertTrue(rows)
+        same = len(re.findall(r'\bSAME\("', body))  # (the same text in every language)
         style = re.search(r'text_style\[[^]]*\] = \{([^}]*)\}', src).group(1)
-        self.assertEqual(len(re.findall(r'TEXT_[A-Z]+', style)), len(rows), 'one style per text')
+        self.assertEqual(len(re.findall(r'TEXT_[A-Z]+', style)), len(rows) + same, 'one style per text')
+        pads = re.search(r'pad_names\[NPADNAME\]\[NLANG\] = \{(.*?)\n\};', src, re.S).group(1)
+        prow = re.findall(r'\{((?:\s*"(?:[^"\\]|\\.)*",?)+)\s*\}', pads)
+        self.assertEqual(len(prow) + len(re.findall(r'\bSAME\("', pads)), 17)
+        for r in prow:
+            self.assertEqual(len(re.findall(r'"((?:[^"\\]|\\.)*)"', r)), len(langs), r[:40])
         for r in rows:
             strings = re.findall(r'"((?:[^"\\]|\\.)*)"', r)
             self.assertEqual(len(strings), len(langs), strings[0])

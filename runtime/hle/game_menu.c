@@ -8,6 +8,7 @@
 //    in the game's languages), every other id goes to the game.
 // Everything below is how this game version lays out its objects, found by reading the lifted code (facts only:
 // addresses, offsets, sizes). Guest memory is host memory, so the game's objects are read and written in place.
+#include <stdio.h>
 #include <string.h>
 
 #include "../hle.h"
@@ -32,13 +33,22 @@ enum {
     HM_TEXT_BASE = 0x484d0000,
     T_FULLSCREEN = HM_TEXT_BASE, T_FULLSCREEN_DESC, T_PACING, T_PACING_DESC, T_FILTER, T_FILTER_DESC,
     T_SHARP, T_SMOOTH, T_NEAREST,
-    T_COUNT
+    T_CONTROLS, T_CONTROLS_DESC, T_RESET, T_RESET_DESC, T_BIND_DESC, T_CAPTURE,
+    T_BIND_LABEL,                  // 16: the Switch buttons, in runtime/ui/input.c's order
+    T_COUNT = T_BIND_LABEL + 16,   // (the fixed texts end here)
+    T_BIND_VALUE = T_COUNT,        // 16 made at lookup time: each button's bindings
+    T_END = T_BIND_VALUE + 16
 };
 #define TEXT_LABEL  LABEL_DISCO        // a row label of the game's
 #define TEXT_DESC   (LABEL_DISCO + 1)  // a row description
 #define TEXT_CHOICE 0x88               // a choice name (the Language row's first)
+#define TEXT_BUTTON 48                 // a main-list button and its description
+#define TEXT_BUTTON_DESC 49
 static const uint32_t text_style[T_COUNT - HM_TEXT_BASE] = {
     TEXT_LABEL, TEXT_DESC, TEXT_LABEL, TEXT_DESC, TEXT_LABEL, TEXT_DESC, TEXT_CHOICE, TEXT_CHOICE, TEXT_CHOICE,
+    TEXT_BUTTON, TEXT_BUTTON_DESC, TEXT_BUTTON, TEXT_BUTTON_DESC, TEXT_DESC, TEXT_CHOICE,
+    TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL,
+    TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL,
 };
 
 // The game's language codes (localization.xml), in this order in every row below. Translations other than English
@@ -46,6 +56,7 @@ static const uint32_t text_style[T_COUNT - HM_TEXT_BASE] = {
 static const char *const langs[] = {"en", "ja", "de", "fr", "cafr", "es", "uses", "it", "kr", "sc", "tc"};
 enum { NLANG = sizeof langs / sizeof *langs };
 
+#define SAME(t) {t, t, t, t, t, t, t, t, t, t, t}
 static const char *const texts[T_COUNT - HM_TEXT_BASE][NLANG] = {
     {"FULLSCREEN", "フルスクリーン", "VOLLBILD", "PLEIN ÉCRAN", "PLEIN ÉCRAN", "PANTALLA COMPLETA", "PANTALLA COMPLETA",
      "SCHERMO INTERO", "전체 화면", "全屏", "全螢幕"},
@@ -89,14 +100,138 @@ static const char *const texts[T_COUNT - HM_TEXT_BASE][NLANG] = {
     {"Sharp", "シャープ", "Scharf", "Net", "Net", "Nítido", "Nítido", "Nitido", "선명하게", "清晰", "清晰"},
     {"Smooth", "スムーズ", "Weich", "Lisse", "Lisse", "Suave", "Suave", "Morbido", "부드럽게", "平滑", "平滑"},
     {"Nearest", "ニアレスト", "Blockig", "Pixelisé", "Pixelisé", "Pixelado", "Pixelado", "Pixelato", "최근접", "最近邻", "最近鄰"},
+    {"CONTROLS", "操作設定", "STEUERUNG", "COMMANDES", "COMMANDES", "CONTROLES", "CONTROLES", "COMANDI", "조작 설정",
+     "操作设置", "操作設定"},
+    {"Change which keys and gamepad buttons do what", "キーボードとゲームパッドのボタン割り当てを変更します",
+     "Tasten der Tastatur und des Gamepads neu belegen", "Changer les touches du clavier et les boutons de la manette",
+     "Changer les touches du clavier et les boutons de la manette", "Cambia las teclas y los botones del mando",
+     "Cambia las teclas y los botones del control", "Cambia i tasti della tastiera e del controller",
+     "키보드와 게임패드 버튼 배치를 변경합니다", "更改键盘按键和手柄按钮的分配", "變更鍵盤按鍵和手把按鈕的配置"},
+    {"RESET TO DEFAULTS", "初期設定に戻す", "STANDARD WIEDERHERSTELLEN", "RÉTABLIR PAR DÉFAUT", "RÉTABLIR PAR DÉFAUT",
+     "RESTABLECER", "RESTABLECER", "RIPRISTINA PREDEFINITI", "기본값으로 되돌리기", "恢复默认设置", "恢復預設設定"},
+    {"Put every key and gamepad button back to how they were at first", "すべてのキーとボタンを初期の割り当てに戻します",
+     "Alle Tasten und Gamepad-Tasten auf die Standardbelegung zurücksetzen",
+     "Remet toutes les touches et tous les boutons à leur réglage d'origine",
+     "Remet toutes les touches et tous les boutons à leur réglage d'origine",
+     "Devuelve todas las teclas y botones a su configuración original",
+     "Devuelve todas las teclas y botones a su configuración original",
+     "Riporta tutti i tasti e i pulsanti alle impostazioni originali", "모든 키와 버튼을 기본 배치로 되돌립니다",
+     "将所有按键和按钮恢复为默认分配", "將所有按鍵和按鈕恢復為預設配置"},
+    {"Press A, then the key or gamepad button to use. Esc or Home cancels.",
+     "A を押してから、使うキーまたはゲームパッドのボタンを押してください。Esc か Home でキャンセル。",
+     "A drücken, dann die gewünschte Taste oder Gamepad-Taste. Esc oder Home bricht ab.",
+     "Appuyez sur A, puis sur la touche ou le bouton de manette voulu. Échap ou Home pour annuler.",
+     "Appuyez sur A, puis sur la touche ou le bouton de manette voulu. Échap ou Home pour annuler.",
+     "Pulsa A y luego la tecla o el botón del mando que quieras usar. Esc o Home cancela.",
+     "Presiona A y luego la tecla o el botón del control que quieras usar. Esc o Home cancela.",
+     "Premi A, poi il tasto o il pulsante del controller da usare. Esc o Home annulla.",
+     "A를 누른 다음 사용할 키나 게임패드 버튼을 누르세요. Esc나 Home으로 취소합니다.",
+     "按 A，然后按要使用的键盘按键或手柄按钮。按 Esc 或 Home 取消。",
+     "按 A，然後按要使用的鍵盤按鍵或手把按鈕。按 Esc 或 Home 取消。"},
+    {"Press a key or button...", "キーかボタンを押してください...", "Taste drücken...", "Appuyez sur une touche...",
+     "Appuyez sur une touche...", "Pulsa una tecla o botón...", "Presiona una tecla o botón...",
+     "Premi un tasto o pulsante...", "키나 버튼을 누르세요...", "请按键...", "請按鍵..."},
+    // the Switch buttons (runtime/ui/input.c: a b x y lstick rstick l r zl zr plus minus left up right down)
+    SAME("A"), SAME("B"), SAME("X"), SAME("Y"),
+    {"LEFT STICK (PRESS)", "Lスティック押し込み", "LINKER STICK (DRÜCKEN)", "STICK GAUCHE (APPUI)", "STICK GAUCHE (APPUI)",
+     "STICK IZQUIERDO (PULSAR)", "STICK IZQUIERDO (PRESIONAR)", "LEVETTA SINISTRA (PREMI)", "L 스틱 누르기", "按下左摇杆",
+     "按下左搖桿"},
+    {"RIGHT STICK (PRESS)", "Rスティック押し込み", "RECHTER STICK (DRÜCKEN)", "STICK DROIT (APPUI)", "STICK DROIT (APPUI)",
+     "STICK DERECHO (PULSAR)", "STICK DERECHO (PRESIONAR)", "LEVETTA DESTRA (PREMI)", "R 스틱 누르기", "按下右摇杆",
+     "按下右搖桿"},
+    SAME("L"), SAME("R"), SAME("ZL"), SAME("ZR"), SAME("+"), SAME("-"),
+    {"D-PAD LEFT", "十字ボタン左", "STEUERKREUZ LINKS", "CROIX GAUCHE", "CROIX GAUCHE", "CRUCETA IZQUIERDA",
+     "CRUCETA IZQUIERDA", "CROCE SINISTRA", "방향 버튼 왼쪽", "十字键左", "十字鍵左"},
+    {"D-PAD UP", "十字ボタン上", "STEUERKREUZ OBEN", "CROIX HAUT", "CROIX HAUT", "CRUCETA ARRIBA", "CRUCETA ARRIBA",
+     "CROCE SU", "방향 버튼 위", "十字键上", "十字鍵上"},
+    {"D-PAD RIGHT", "十字ボタン右", "STEUERKREUZ RECHTS", "CROIX DROITE", "CROIX DROITE", "CRUCETA DERECHA",
+     "CRUCETA DERECHA", "CROCE DESTRA", "방향 버튼 오른쪽", "十字键右", "十字鍵右"},
+    {"D-PAD DOWN", "十字ボタン下", "STEUERKREUZ UNTEN", "CROIX BAS", "CROIX BAS", "CRUCETA ABAJO", "CRUCETA ABAJO",
+     "CROCE GIÙ", "방향 버튼 아래", "十字键下", "十字鍵下"},
 };
 
-const char *game_menu_text(uint32_t id, const char *lang) {  // (tests: tests/c via the same table)
-    if (id < HM_TEXT_BASE || id >= T_COUNT) return NULL;
+// Gamepad buttons as the Controls page names them (by position, not the maker's letters), by SDL3 gamepad code
+// (SDL_GAMEPAD_BUTTON_SOUTH = 0 .. DPAD_RIGHT = 14), then the left and right triggers (100 + 4, 100 + 5).
+enum { NPADNAME = 17 };
+static const char *const pad_names[NPADNAME][NLANG] = {
+    {"Bottom face", "フェイス下", "Taste unten", "Bouton bas", "Bouton bas", "Botón abajo", "Botón abajo", "Tasto giù",
+     "아래 버튼", "下方按键", "下方按鍵"},
+    {"Right face", "フェイス右", "Taste rechts", "Bouton droit", "Bouton droit", "Botón derecha", "Botón derecha",
+     "Tasto destro", "오른쪽 버튼", "右方按键", "右方按鍵"},
+    {"Left face", "フェイス左", "Taste links", "Bouton gauche", "Bouton gauche", "Botón izquierda", "Botón izquierda",
+     "Tasto sinistro", "왼쪽 버튼", "左方按键", "左方按鍵"},
+    {"Top face", "フェイス上", "Taste oben", "Bouton haut", "Bouton haut", "Botón arriba", "Botón arriba", "Tasto su",
+     "위 버튼", "上方按键", "上方按鍵"},
+    {"Back", "バック", "Zurück", "Retour", "Retour", "Atrás", "Atrás", "Indietro", "뒤로", "返回", "返回"},
+    SAME("Home"),
+    {"Start", "スタート", "Start", "Start", "Start", "Start", "Start", "Start", "시작", "开始", "開始"},
+    {"Left stick", "左スティック", "Linker Stick", "Stick gauche", "Stick gauche", "Stick izquierdo", "Stick izquierdo",
+     "Levetta sinistra", "왼쪽 스틱", "左摇杆", "左搖桿"},
+    {"Right stick", "右スティック", "Rechter Stick", "Stick droit", "Stick droit", "Stick derecho", "Stick derecho",
+     "Levetta destra", "오른쪽 스틱", "右摇杆", "右搖桿"},
+    {"Left shoulder", "左ショルダー", "Linke Schultertaste", "Bouton épaule G", "Bouton épaule G", "Botón superior izq.",
+     "Botón superior izq.", "Dorsale sinistro", "왼쪽 숄더", "左肩键", "左肩鍵"},
+    {"Right shoulder", "右ショルダー", "Rechte Schultertaste", "Bouton épaule D", "Bouton épaule D",
+     "Botón superior der.", "Botón superior der.", "Dorsale destro", "오른쪽 숄더", "右肩键", "右肩鍵"},
+    {"D-pad up", "十字キー上", "Steuerkreuz oben", "Croix haut", "Croix haut", "Cruceta arriba", "Cruceta arriba",
+     "Croce su", "방향키 위", "十字键上", "十字鍵上"},
+    {"D-pad down", "十字キー下", "Steuerkreuz unten", "Croix bas", "Croix bas", "Cruceta abajo", "Cruceta abajo",
+     "Croce giù", "방향키 아래", "十字键下", "十字鍵下"},
+    {"D-pad left", "十字キー左", "Steuerkreuz links", "Croix gauche", "Croix gauche", "Cruceta izquierda",
+     "Cruceta izquierda", "Croce sinistra", "방향키 왼쪽", "十字键左", "十字鍵左"},
+    {"D-pad right", "十字キー右", "Steuerkreuz rechts", "Croix droite", "Croix droite", "Cruceta derecha",
+     "Cruceta derecha", "Croce destra", "방향키 오른쪽", "十字键右", "十字鍵右"},
+    {"Left trigger", "左トリガー", "Linker Trigger", "Gâchette G", "Gâchette G", "Gatillo izq.", "Gatillo izq.",
+     "Grilletto sinistro", "왼쪽 트리거", "左扳机", "左扳機"},
+    {"Right trigger", "右トリガー", "Rechter Trigger", "Gâchette D", "Gâchette D", "Gatillo der.", "Gatillo der.",
+     "Grilletto destro", "오른쪽 트리거", "右扳机", "右扳機"},
+};
+
+// runtime/ui/input.c (the game target; the headless one has none of it: the Controls page is then left out)
+extern void input_capture_begin(int b) __attribute__((weak));
+extern int input_capture_state(void) __attribute__((weak));
+extern unsigned input_bindings_generation(void) __attribute__((weak));
+extern int input_binding_codes(int b, bool padside, int *out, int max) __attribute__((weak));
+extern const char *input_key_name(int scancode) __attribute__((weak));
+extern void input_bindings_reset(void) __attribute__((weak));
+static bool have_input(void) { return input_capture_begin && input_binding_codes; }
+
+static const char *pad_name(int code, int l, char *tmp, size_t cap) {
+    int i = code >= 0 && code <= 14 ? code : code == 104 ? 15 : code == 105 ? 16 : -1;
+    if (i >= 0) return pad_names[i][l];
+    snprintf(tmp, cap, "#%d", code);
+    return tmp;
+}
+
+// "J, Return / Bottom face": button b's keys, then its gamepad buttons ("-" for a side with none)
+static void binding_text(int b, int l, char *out, size_t cap) {
+    int codes[4], n;
+    size_t k = 0;
+    out[0] = 0;
+    for (int side = 0; side < 2; side++) {
+        if (side) k += (size_t)snprintf(out + k, k < cap ? cap - k : 0, " / ");
+        n = input_binding_codes(b, side, codes, 4);
+        if (!n) k += (size_t)snprintf(out + k, k < cap ? cap - k : 0, "-");
+        for (int i = 0; i < n; i++) {
+            char tmp[16];
+            const char *name = side ? pad_name(codes[i], l, tmp, sizeof tmp) : input_key_name(codes[i]);
+            k += (size_t)snprintf(out + k, k < cap ? cap - k : 0, "%s%s", i ? ", " : "", name);
+        }
+    }
+}
+
+const char *game_menu_text(uint32_t id, const char *lang) {
+    if (id < HM_TEXT_BASE || id >= T_END) return NULL;
     int l = 0;
     for (int i = 0; i < NLANG; i++)
         if (lang && !strcmp(lang, langs[i])) l = i;
-    return texts[id - HM_TEXT_BASE][l];
+    if (id < T_COUNT) return texts[id - HM_TEXT_BASE][l];
+    int b = (int)(id - T_BIND_VALUE);
+    if (!have_input()) return "-";
+    if (input_capture_state() == b) return texts[T_CAPTURE - HM_TEXT_BASE][l];
+    static __thread char buf[160];
+    binding_text(b, l, buf, sizeof buf);
+    return buf;
 }
 
 // ---- guest helpers
@@ -188,8 +323,20 @@ static void on_filter(Cpu *c) {  // x1 = the chosen value (std::string *, "0".."
     LOG("[game-menu] scaling filter %d (next start)\n", v);
 }
 
-static uint64_t add_choice(Cpu *c, uint64_t page, uint32_t label, const uint32_t *names, int n, int value,
-                           const char *cb_name, HostFn cb) {
+static void push_row(Cpu *c, uint64_t page, uint64_t row, uint64_t slot) {  // (slot: 8 bytes of guest scratch)
+    uint64_t end = LD64(page + 8), cap = LD64(page + 16);
+    if (end < cap) {
+        ST64(end, row);
+        ST64(page + 8, end + 8);
+    } else {
+        ST64(slot, row);
+        c->x[1] = slot;
+        call1(c, G_VEC_PUSH_SLOW, page);
+    }
+}
+
+static uint64_t add_choice(Cpu *c, uint64_t page, uint32_t label, uint32_t desc, const uint32_t *names, int n,
+                           int value, const char *cb_name, HostFn cb, uint64_t obj) {
     uint64_t cb_addr = hle_register(cb_name, cb);
     uint64_t sp0 = c->sp;
     c->sp -= 0x100;
@@ -205,28 +352,141 @@ static uint64_t add_choice(Cpu *c, uint64_t page, uint32_t label, const uint32_t
     ST64(vec, arr); ST64(vec + 8, arr + 32 * n); ST64(vec + 16, arr + 32 * n);
     ST64(fn + 0x00, LD64(G_STRFN_VT_GOT) + 0x10);
     ST64(fn + 0x08, cb_addr);
+    ST64(fn + 0x18, obj);  // (our callback's x0)
     ST64(fn + 0x20, fn);
 
     uint64_t row = call1(c, G_NEW, CHOICE_ROW_SIZE);
-    c->x[0] = row; c->x[1] = label; c->x[2] = label + 1; c->x[3] = key; c->x[4] = vec; c->x[5] = fn;
+    c->x[0] = row; c->x[1] = label; c->x[2] = desc; c->x[3] = key; c->x[4] = vec; c->x[5] = fn;
     c->x[6] = 0; c->x[7] = 0;
     guest_call(c, G_CHOICE_CTOR);
     call1(c, LD64(LD64(fn) + 0x20), fn);  // the local std::function's destroy() (the row holds a copy)
 
     ST32(row + CHOICE_INDEX, value >= 0 && value < n ? value : 0);
     row_refresh(c, row);
+    push_row(c, page, row, slot);
+    c->sp = sp0;
+    return row;
+}
 
-    uint64_t end = LD64(page + 8), cap = LD64(page + 16);
-    if (end < cap) {
-        ST64(end, row);
-        ST64(page + 8, end + 8);
-    } else {
-        ST64(slot, row);
-        c->x[1] = slot;
-        call1(c, G_VEC_PUSH_SLOW, page);
+// A button row (the main list's kind): A calls fn(obj, arg), a member function bound the way the game binds its own
+// buttons (heap-held: it doesn't fit std::function's buffer). insert_at < 0: at the end.
+#define G_BUTTON_CTOR    0x7000065f20ull  // (row, label id, desc id, std::function<void()> *, 0, 0)
+#define G_BUTTONFN_VT_GOT 0x7000a34f70ull // GOT slot: vtable of the bound member function (with an int) buttons take
+#define G_OPEN_PAGE_GOT  0x7000a34f78ull  // GOT slot: the Options screen's "open page <int>" member function
+#define BUTTON_ROW_SIZE  0x60
+static uint64_t add_button(Cpu *c, uint64_t page, uint32_t label, uint32_t desc, uint64_t fnaddr, uint64_t obj,
+                           uint32_t arg, int insert_at) {
+    uint64_t sp0 = c->sp;
+    c->sp -= 0x40;
+    uint64_t fn = c->sp, slot = c->sp + 0x30;
+    memset((void *)fn, 0, 0x40);
+    uint64_t f = call1(c, G_NEW, 0x28);
+    ST64(f + 0x00, LD64(G_BUTTONFN_VT_GOT) + 0x10);
+    ST64(f + 0x08, fnaddr);
+    ST64(f + 0x10, 0);
+    ST64(f + 0x18, obj);
+    ST32(f + 0x20, arg);
+    ST64(fn + 0x20, f);
+
+    uint64_t row = call1(c, G_NEW, BUTTON_ROW_SIZE);
+    c->x[0] = row; c->x[1] = label; c->x[2] = desc; c->x[3] = fn; c->x[4] = 0; c->x[5] = 0;
+    guest_call(c, G_BUTTON_CTOR);
+    call1(c, LD64(LD64(f) + 0x28), f);  // the local function's destroy_deallocate() (the row holds a copy)
+    push_row(c, page, row, slot);
+    uint64_t b = LD64(page), e = LD64(page + 8);
+    if (insert_at >= 0 && b + 8 * (uint64_t)insert_at < e - 8) {  // move it up to insert_at
+        for (uint64_t q = e - 8; q > b + 8 * (uint64_t)insert_at; q -= 8) ST64(q, LD64(q - 8));
+        ST64(b + 8 * (uint64_t)insert_at, row);
     }
     c->sp = sp0;
     return row;
+}
+
+// ---- the Controls page
+#define G_PAGES_PUSH_SLOW 0x7000014260ull  // vector<vector<unique_ptr<Row>>>::push_back slow path (pages, vector *)
+#define SCREEN_SELECTED   0xc0             // i32: the selected row of the open page
+#define MAIN_CONTROLS_AT  5                // after Language: the game's Back from page 5 selects main row 5
+enum { NBUTTONS = 16 };
+static uint64_t bind_rows[NBUTTONS];
+static unsigned bind_row_gen[NBUTTONS];
+static int controls_page = -1;
+
+static void on_bind_choice(Cpu *c) {  // left / right on a binding row: x0 = the button
+    if (input_capture_state() < 0) input_capture_begin((int)c->x[0]);
+}
+
+static void on_reset(Cpu *c) {
+    (void)c;
+    input_bindings_reset();
+    save();
+}
+
+static void add_controls_page(Cpu *c, uint64_t self) {
+    uint64_t sp0 = c->sp;
+    c->sp -= 0x40;
+    uint64_t vec = c->sp, slot = c->sp + 0x20;
+    memset((void *)vec, 0, 0x40);  // the new page's row vector (moved into the screen's page list below)
+    unsigned gen = input_bindings_generation();
+    for (int b = 0; b < NBUTTONS; b++) {
+        uint32_t name = T_BIND_VALUE + b;
+        bind_rows[b] = add_choice(c, vec, T_BIND_LABEL + b, T_BIND_DESC, &name, 1, 0, "hm_game_menu_bind", on_bind_choice, b);
+        bind_row_gen[b] = gen;
+    }
+    add_button(c, vec, T_RESET, T_RESET_DESC, hle_register("hm_game_menu_reset", on_reset), 0, 0, -1);
+    uint64_t pages = self + SCREEN_PAGES;
+    uint64_t end = LD64(pages + 8), cap = LD64(pages + 16);
+    controls_page = (int)((end - LD64(pages)) / 24);
+    if (end < cap) {
+        memcpy((void *)end, (void *)vec, 24);
+        ST64(pages + 8, end + 24);
+    } else {
+        c->x[1] = vec;
+        call1(c, G_PAGES_PUSH_SLOW, pages);
+        if (LD64(vec)) call1(c, G_DELETE, LD64(vec));  // (what a moved-from vector still holds: nothing, normally)
+    }
+    add_button(c, LD64(pages), T_CONTROLS, T_CONTROLS_DESC, LD64(G_OPEN_PAGE_GOT), self, (uint32_t)controls_page,
+               MAIN_CONTROLS_AT);
+    (void)slot;
+    c->sp = sp0;
+}
+
+// Selected binding row, every frame (the choice row's input method): A starts waiting for the new key or button.
+void hm_hook_choice_input(Cpu *c, GuestFn orig) {
+    extern volatile uint64_t g_input_buttons;  // (what the game sees: runtime/hle/input.c)
+    extern uint64_t renderer_present_count(void);
+    static uint64_t was, last_row, last_frame;
+    uint64_t row = c->x[0], now = g_input_buttons, frame = renderer_present_count();
+    // (a press only counts on a row that was already selected the frame before: the A that opened the page, or
+    // that's still held after a capture, doesn't start one)
+    bool fresh = row != last_row || frame > last_frame + 2;
+    bool a_pressed = !fresh && (now & 1) && !(was & 1);
+    was = now, last_row = row, last_frame = frame;
+    if (have_input() && a_pressed && input_capture_state() < 0)
+        for (int b = 0; b < NBUTTONS; b++)
+            if (bind_rows[b] == row && LD32(row + ROW_LABEL) == (uint32_t)(T_BIND_LABEL + b)) {
+                input_capture_begin(b);
+                return;  // (the press is ours)
+            }
+    orig(c);
+}
+
+// Every choice row on the open page, every frame (its "set y"): binding rows redraw after a change.
+void hm_hook_choice_update(Cpu *c, GuestFn orig) {
+    uint64_t row = c->x[0];
+    if (have_input()) {
+        unsigned gen = input_bindings_generation();
+        for (int b = 0; b < NBUTTONS; b++)
+            if (bind_rows[b] == row && bind_row_gen[b] != gen && LD32(row + ROW_LABEL) == (uint32_t)(T_BIND_LABEL + b)) {
+                uint64_t saved[13], regs[8];
+                memcpy(saved, &c->x[19], sizeof saved);
+                memcpy(regs, &c->x[0], sizeof regs);
+                bind_row_gen[b] = gen;
+                row_refresh(c, row);
+                memcpy(&c->x[19], saved, sizeof saved);
+                memcpy(&c->x[0], regs, sizeof regs);
+            }
+    }
+    orig(c);
 }
 
 static bool disabled(void) {
@@ -249,12 +509,14 @@ void hm_hook_options_build(Cpu *c, GuestFn orig) {
         fullscreen_row = add_toggle(c, page, T_FULLSCREEN, g_settings.fullscreen, "hm_game_menu_fullscreen", on_fullscreen);
         add_toggle(c, page, T_PACING, g_settings.frame_pacing, "hm_game_menu_pacing", on_pacing);
         static const uint32_t filters[] = {T_SHARP, T_SMOOTH, T_NEAREST};  // (upscale_filter 0, 1, 2)
-        add_choice(c, page, T_FILTER, filters, 3, g_settings.upscale_filter, "hm_game_menu_filter", on_filter);
+        add_choice(c, page, T_FILTER, T_FILTER_DESC, filters, 3, g_settings.upscale_filter, "hm_game_menu_filter",
+                   on_filter, 0);
         added = 1;
         break;
     }
-    LOG("[game-menu] options screen %llx: %s\n", (unsigned long long)self,
-        added ? "rows added to Graphics" : "Graphics page not found");
+    if (added && have_input()) add_controls_page(c, self);
+    LOG("[game-menu] options screen %llx: %s; Controls page %d\n", (unsigned long long)self,
+        added ? "rows added to Graphics" : "Graphics page not found", controls_page);
     memcpy(&c->x[19], saved, sizeof saved);
     c->x[0] = r0;
 }
@@ -289,6 +551,8 @@ void hm_hook_toggle_update(Cpu *c, GuestFn orig) {  // x0 = row, every frame for
 #define G_PANEL_SET       0x700024ad90ull  // (panel, x, y, w, h, 0, 0, 1)
 #define FREE_TOP          35
 #define FREE_BOTTOM       303
+#define SCROLL_ROWS       9
+#define OFF_SCREEN_Y      1000
 
 void hm_hook_options_layout(Cpu *c, GuestFn orig) {  // x0 = the Options screen
     uint64_t self = c->x[0];
@@ -299,9 +563,19 @@ void hm_hook_options_layout(Cpu *c, GuestFn orig) {  // x0 = the Options screen
     if (n <= 8) { orig(c); return; }
     uint64_t saved[13];
     memcpy(saved, &c->x[19], sizeof saved);
-    int pitch = (FREE_BOTTOM - FREE_TOP - 18) / n;
+    // up to 10 rows: all shown, closer together; more: a window of SCROLL_ROWS that follows the selected row (the
+    // rest are moved off the screen)
+    int shown = n > 10 ? SCROLL_ROWS : n;
+    static int first, page_was = -1;
+    int page_i = (int32_t)LD32(self + SCREEN_PAGE_INDEX), sel = (int32_t)LD32(self + 0xc0);
+    if (page_i != page_was) first = 0, page_was = page_i;
+    if (sel < first) first = sel;
+    if (sel >= first + shown) first = sel - shown + 1;
+    if (first > n - shown) first = n - shown;
+    if (first < 0) first = 0;
+    int pitch = (FREE_BOTTOM - FREE_TOP - 18) / shown;
     if (pitch > 30) pitch = 30;
-    int h = n * pitch;
+    int h = shown * pitch;
     int top = (FREE_TOP + FREE_BOTTOM) / 2 + 17 - (h + 18) / 2;  // (panel centred in the free space)
     call1(c, G_LAYOUT_PRE1, LD64(self + 0x10));
     call1(c, G_LAYOUT_PRE2, LD64(self + 0x18));
@@ -309,7 +583,8 @@ void hm_hook_options_layout(Cpu *c, GuestFn orig) {  // x0 = the Options screen
     for (uint64_t r = rb; r < re; r += 8) {
         uint64_t row = LD64(r);
         if (!LD8(row + ROW_VISIBLE)) continue;
-        c->x[1] = (uint32_t)(top - 5 + i++ * pitch);
+        int k = i++ - first;
+        c->x[1] = (uint32_t)(k >= 0 && k < shown ? top - 5 + k * pitch : OFF_SCREEN_Y);
         call1(c, LD64(LD64(row) + ROW_VT_SET_Y), row);
     }
     int w = LD8(self + SCREEN_WIDE) ? 408 : 328;
@@ -365,9 +640,9 @@ static void read_string(uint64_t s, char *out, size_t cap) {  // libc++ std::str
 
 void hm_hook_text_lookup(Cpu *c, GuestFn orig) {  // w0 = id, x1 = language (std::string *, in/out), x8 = result
     uint32_t id = (uint32_t)c->x[0];
-    if (id < HM_TEXT_BASE || id >= T_COUNT) { orig(c); return; }
+    if (id < HM_TEXT_BASE || id >= T_END) { orig(c); return; }
     uint64_t res = c->x[8], lang_s = c->x[1];
-    c->x[0] = text_style[id - HM_TEXT_BASE];  // a game text of the same kind, for the style field;
+    c->x[0] = id >= T_COUNT ? TEXT_CHOICE : text_style[id - HM_TEXT_BASE];  // a game text of the same kind, for the style field;
     orig(c);                                  // the text is replaced
     char lang[16];
     read_string(lang_s, lang, sizeof lang);  // (the lookup fills in the game's current language when it was empty)
