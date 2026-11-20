@@ -33,11 +33,11 @@ typedef struct AudioOut {
     int st_max_queued, st_min_sdl, st_max_sdl;
 } AudioOut;
 
-// Output gain: menu volume times HM_AUDIO_GAIN (applied live).
+// Output gain: HM_AUDIO_GAIN (the game's own Sound and Music volumes are in its Options).
 static void apply_gain(SDL_AudioStream *st) {
     static double env = -1;
     if (env < 0) env = getenv("HM_AUDIO_GAIN") ? atof(getenv("HM_AUDIO_GAIN")) : 1.0;
-    float g = (float)(env * g_settings.volume);
+    float g = (float)env;
     if (st && SDL_GetAudioStreamGain(st) != g) SDL_SetAudioStreamGain(st, g);
 }
 

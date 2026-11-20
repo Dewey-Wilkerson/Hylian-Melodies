@@ -141,6 +141,23 @@ class Hooks(unittest.TestCase):
                 self.assertIn(f'void {name}(Cpu *c, GuestFn orig)', src)
 
 
+class GameMenuText(unittest.TestCase):
+    """runtime/hle/game_menu.c: every text has all of the game's languages, none empty."""
+
+    def test_every_text_in_every_language(self):
+        import re
+        src = open(os.path.join(ROOT, 'runtime', 'hle', 'game_menu.c'), encoding='utf-8').read()
+        langs = re.findall(r'"([a-z]+)"', re.search(r'langs\[\] = \{([^}]*)\}', src).group(1))
+        self.assertEqual(len(langs), 11)
+        body = re.search(r'texts\[[^]]*\]\[NLANG\] = \{(.*?)\n\};', src, re.S).group(1)
+        rows = re.findall(r'\{((?:\s*"(?:[^"\\]|\\.)*",?)+)\s*\}', body)
+        self.assertTrue(rows and len(rows) % 2 == 0, len(rows))  # (labels and their descriptions)
+        for r in rows:
+            strings = re.findall(r'"((?:[^"\\]|\\.)*)"', r)
+            self.assertEqual(len(strings), len(langs), strings[0])
+            self.assertTrue(all(strings), strings[0])
+
+
 if __name__ == '__main__':
     unittest.main()
 

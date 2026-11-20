@@ -4,7 +4,7 @@
 
 #include "settings.h"
 
-Settings g_settings = {.res_mode = 1, .upscaler = UPSCALE_BILINEAR, .frame_pacing = true, .volume = 1.0,
+Settings g_settings = {.res_mode = 1, .upscaler = UPSCALE_BILINEAR, .frame_pacing = true,
                        .audio_period = 256, .audio_queue_ms = 0, .gpu = -1, .shader_cache = true};
 int g_default_upscaler = UPSCALE_BILINEAR, g_default_res_mode = 1;  // (1: native, 1280x720 pixel art at 1:1)
 bool g_gpu_integrated;
@@ -24,11 +24,9 @@ void settings_load(void) {
         char str[16];
         if (sscanf(line, " language = %15s", str) == 1) { snprintf(g_settings.language, sizeof g_settings.language, "%s", str); continue; }
         if (sscanf(line, " %63[a-z_] = %lf", key, &v) != 2) continue;
-        if (!strcmp(key, "volume")) g_settings.volume = v;
-        else if (!strcmp(key, "fullscreen")) g_settings.fullscreen = v != 0;
+        if (!strcmp(key, "fullscreen")) g_settings.fullscreen = v != 0;
         else if (!strcmp(key, "resolution")) g_settings.res_mode = (int)v;
         else if (!strcmp(key, "upscaler")) g_settings.upscaler = (int)v;
-        else if (!strcmp(key, "show_fps")) g_settings.show_fps = v != 0;
         else if (!strcmp(key, "frame_pacing")) g_settings.frame_pacing = v != 0;
         else if (!strcmp(key, "upscale_filter")) g_settings.upscale_filter = (int)v;
         else if (!strcmp(key, "audio_period")) g_settings.audio_period = (int)v;
@@ -75,8 +73,7 @@ void settings_set_binding_lines(const char *lines) {
 }
 
 static const struct { unsigned bit; const char *key; } managed[] = {
-    {SET_FULLSCREEN, "fullscreen"}, {SET_UPSCALE_FILTER, "upscale_filter"}, {SET_SHOW_FPS, "show_fps"},
-    {SET_FRAME_PACING, "frame_pacing"}, {SET_VOLUME, "volume"},
+    {SET_FULLSCREEN, "fullscreen"}, {SET_UPSCALE_FILTER, "upscale_filter"}, {SET_FRAME_PACING, "frame_pacing"},
 };
 #define NMANAGED (sizeof managed / sizeof managed[0])
 
@@ -84,9 +81,7 @@ static void value_text(unsigned bit, char *out, size_t cap) {
     switch (bit) {
     case SET_FULLSCREEN: snprintf(out, cap, "%d", g_settings.fullscreen); break;
     case SET_UPSCALE_FILTER: snprintf(out, cap, "%d", g_settings.upscale_filter); break;
-    case SET_SHOW_FPS: snprintf(out, cap, "%d", g_settings.show_fps); break;
     case SET_FRAME_PACING: snprintf(out, cap, "%d", g_settings.frame_pacing); break;
-    case SET_VOLUME: snprintf(out, cap, "%.2f", g_settings.volume); break;
     }
 }
 

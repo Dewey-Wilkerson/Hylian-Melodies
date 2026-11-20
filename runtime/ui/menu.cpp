@@ -234,9 +234,6 @@ void menu_apply_window_requests(SDL_Window *w) {
     extern volatile int g_game_menu_fullscreen_req;  // (the game's own Options menu: runtime/hle/game_menu.c)
     if (g_game_menu_fullscreen_req) { g_game_menu_fullscreen_req = 0; g_want_fullscreen = true; }
     if (g_want_fullscreen.exchange(false)) SDL_SetWindowFullscreen(w, g_settings.fullscreen);
-    static bool fps_was;
-    if (fps_was && !g_settings.show_fps) SDL_SetWindowTitle(w, "Hylian Melodies");  // (the FPS left in the title)
-    fps_was = g_settings.show_fps;
     if (g_open.load()) SDL_ShowCursor();
 }
 
@@ -429,11 +426,6 @@ static void page_video(void) {
                                                    : "How the game's 1280x720 image is scaled to the window.");
     ImGui::Spacing();
 
-    bool fps = g_settings.show_fps;
-    if (ImGui::Checkbox("Show frames per second in the window title", &fps)) {
-        g_settings.show_fps = fps;
-        settings_changed(SET_SHOW_FPS);
-    }
     bool pace = g_settings.frame_pacing;
     if (ImGui::Checkbox("Frame pacing", &pace)) {
         g_settings.frame_pacing = pace;
@@ -443,13 +435,7 @@ static void page_video(void) {
 }
 
 static void page_audio(void) {
-    float v = (float)(g_settings.volume * 100.0);
-    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 14);
-    if (ImGui::SliderFloat("Volume", &v, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
-        g_settings.volume = roundf(v) / 100.0;
-        settings_changed(SET_VOLUME);
-    }
-    note("The game's own options also have music and sound levels and the rhythm calibration.");
+    note("Sound and music volume and the rhythm calibration are in the game's own Options.");
 }
 
 static void page_controls(void) {

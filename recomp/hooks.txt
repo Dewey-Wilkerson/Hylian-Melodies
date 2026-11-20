@@ -2,3 +2,5 @@
 # Addresses are those of the supported game version (1.4.0, installer/known.py).
 main 0x7000061770 hm_hook_options_build
 main 0x700053cdf0 hm_hook_text_lookup
+main 0x7000067470 hm_hook_toggle_update
+main 0x7000065550 hm_hook_options_layout

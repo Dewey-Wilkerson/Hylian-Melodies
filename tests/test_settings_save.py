@@ -41,13 +41,13 @@ class SettingsSave(unittest.TestCase):
     def test_default_file_commented_examples_replaced_in_place(self):
         with open(DEFAULT_INI) as f:
             old = f.read()
-        new = self.save(old, 'show_fps=1', 'volume=0.5')
+        new = self.save(old, 'upscale_filter=2', 'frame_pacing=0')
         ol, nl = old.splitlines(), new.splitlines()
         self.assertEqual(len(ol), len(nl))
         diff = [(a, b) for a, b in zip(ol, nl) if a != b]
         self.assertEqual(len(diff), 2)
-        self.assertTrue(any(b.startswith('show_fps = 1 ') and b.endswith(a.split('#', 2)[2]) for a, b in diff))
-        self.assertIn('volume = 0.50', nl)
+        self.assertTrue(any(b.startswith('upscale_filter = 2 ') and b.endswith(a.split('#', 2)[2]) for a, b in diff))
+        self.assertTrue(any(b.startswith('frame_pacing = 0 ') for a, b in diff))
 
     def test_uncommented_line_wins_and_others_kept(self):
         old = '# my notes\nfoo = 7\n# fullscreen = 0\nfullscreen = 0   # mine\nkey.a = J\n'
@@ -56,7 +56,7 @@ class SettingsSave(unittest.TestCase):
 
     def test_unchanged_keys_not_written(self):
         old = 'fullscreen = 0\n'
-        self.assertEqual(self.save(old, 'volume=0.25'), 'fullscreen = 0\n\n# --- set in the menu\nvolume = 0.25\n')
+        self.assertEqual(self.save(old, 'upscale_filter=1'), 'fullscreen = 0\n\n# --- set in the menu\nupscale_filter = 1\n')
 
     def test_missing_file_created(self):
         self.assertEqual(self.save(None, 'frame_pacing=0'), '\n# --- set in the menu\nframe_pacing = 0\n')
@@ -77,9 +77,9 @@ class SettingsSave(unittest.TestCase):
     def test_second_save_joins_the_menu_block(self):
         first = self.save('foo = 1\n', 'fullscreen=1')
         self.assertEqual(first, 'foo = 1\n\n# --- set in the menu\nfullscreen = 1\n')
-        second = self.save(first + '\n# --- controls (set in the menu; docs/controls.md)\npad.a = north\n', 'show_fps=1')
+        second = self.save(first + '\n# --- controls (set in the menu; docs/controls.md)\npad.a = north\n', 'frame_pacing=0')
         self.assertEqual(second.count('# --- set in the menu'), 1)
-        self.assertIn('fullscreen = 1\nshow_fps = 1\n\n# --- controls', second)
+        self.assertIn('fullscreen = 1\nframe_pacing = 0\n\n# --- controls', second)
 
     def test_bindings_reset_drops_their_heading(self):
         old = 'a = 1\n\n# --- controls (set in the menu; docs/controls.md)\npad.a = north\n'

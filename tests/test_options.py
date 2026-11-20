@@ -74,15 +74,15 @@ class Settings(unittest.TestCase):
             self.assertIn('\nfullscreen = 1\n', text)
             self.assertRegex(text, r'\ngpu = 1  # which graphics card')  # (the default's example line, comment kept)
             self.assertIn('\nlog_input = 1  # 1: the buttons', text)
-            self.assertIn('# volume = 1.0', text)  # (the rest of the default as it was)
+            self.assertIn('# audio_period = 256', text)  # (the rest of the default as it was)
             self.assertEqual(O.current(path)['gpu'], 1)
             with open(path, 'a') as f:  # what the menu and the player add
-                f.write('volume = 0.40\n\n# --- controls (set in the menu; docs/controls.md)\nkey.a = J\n')
+                f.write('upscale_filter = 1\n\n# --- controls (set in the menu; docs/controls.md)\nkey.a = J\n')
             O.write_settings(path, {'fullscreen': False, 'gpu': 'auto', 'log_input': False, 'audio_stats': 10})
             with open(path) as f:
                 text = f.read()
             for want in ('\n# fullscreen = 0\n', '\n# gpu = auto  #', '\n# log_input = 0  #', '\naudio_stats = 10  #',
-                         '\nvolume = 0.40\n', '\nkey.a = J\n'):
+                         '\nupscale_filter = 1\n', '\nkey.a = J\n'):
                 self.assertIn(want, text)
             self.assertEqual(O.read_settings(path), {'audio_stats': 10})
             self.assertNotIn('set by the installer', text)

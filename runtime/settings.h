@@ -14,10 +14,8 @@ typedef struct {
     int upscaler;          // UPSCALE_*
     int upscale_filter;    // game image -> window: 0 sharp bilinear (default), 1 linear, 2 nearest
     int screen_filter;     // always 0 (off): the present shader's colour filter parameter, not a setting here
-    bool show_fps;
     bool frame_pacing;     // the Switch display's 60 Hz cadence at each present (default on; nvn/objects.c)
     // audio
-    double volume;         // master volume 0..1
     int audio_period;      // device period asked of the audio server, frames at 48 kHz (default 256 = 5.3 ms)
     double audio_queue_ms; // what the output stream may hold before the next game buffer is taken (0 = one period)
     // game
@@ -38,8 +36,8 @@ void settings_resolve_defaults(bool integrated);
 const char *settings_language(void);
 
 // Saving (the overlay menu): only what was changed is written; every other line of the file stays as it was.
-enum { SET_FULLSCREEN = 1 << 0, SET_UPSCALE_FILTER = 1 << 1, SET_SHOW_FPS = 1 << 2, SET_FRAME_PACING = 1 << 3,
-       SET_VOLUME = 1 << 4 };
+// (show_fps and volume were removed 2026-11-19: old lines in the file are left alone and ignored)
+enum { SET_FULLSCREEN = 1 << 0, SET_UPSCALE_FILTER = 1 << 1, SET_FRAME_PACING = 1 << 3 };
 void settings_changed(unsigned which);                // SET_* bits: written at the next save
 void settings_set_binding_lines(const char *lines);   // key./pad. lines to replace all of the file's ("" = none: defaults)
 bool settings_save(void);                             // hylian-melodies.ini in the working directory (the player's folder)

@@ -37,7 +37,7 @@ class Pack(unittest.TestCase):
         ini = os.path.join(self.root, 'usr/share/hylian-melodies-recomp/hylian-melodies.ini')
         self.assertEqual(options.read_settings(ini), {'fullscreen': True})
         with open(ini) as f:
-            self.assertIn('# volume = 1.0', f.read())
+            self.assertIn('# audio_period = 256', f.read())
 
     def test_tree(self):
         files = pack.build_root(self.stage, ROOT, self.root)

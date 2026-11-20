@@ -1,10 +1,11 @@
 # The port's settings in the game's own Options menu (prototype)
 
 Branch `in-game-gui`, 2026-11-19. Goal: replace the Dear ImGui overlay (F1, `runtime/ui/menu.cpp`) with rows in the
-game's own Options menu. Status: **one row works** — "FULLSCREEN" (Yes/No) at the end of the game's Graphics page,
-with its own description in the game's text box. Flipping it switches fullscreen at once and writes `fullscreen` to
-`hylian-melodies.ini`. Checked by scripted input and window captures (1856x1044 windowed, 3840x2161 after flipping).
-Not checked by hand with real presses. The overlay is still there, unchanged.
+game's own Options menu. Status (2026-11-19): the Graphics page has the port's **Fullscreen** and **Frame pacing** rows (Yes/No, saved to
+`hylian-melodies.ini`, applied at once), in all 11 of the game's languages; the Fullscreen row follows F11 / Alt+Enter;
+pages longer than the game's 8 rows get a tighter layout so the panel stays clear of the title and the description
+box. Checked by scripted input and captures (English, German, Japanese; F11 sent with xdotool under XWayland). The
+FPS-in-title and master-volume settings are gone. The overlay is still there for the rest.
 
 ## How it works
 
@@ -18,7 +19,9 @@ Not checked by hand with real presses. The overlay is still there, unchanged.
   - **Text lookup** (text id -> {i32 style, `std::u32string`}): ids from `0x484d0000` up are ours. For one of ours it
     runs the original with a borrowed id of the game's (label or description), so the style field is right, then
     swaps in our text.
-- `HM_GAME_MENU=0` turns the row off (comparison runs).
+- **Toggle update** (every frame, each toggle on the open page): brings our Fullscreen row in step after F11.
+- **Page layout** (every frame): pages of more than 8 visible rows are laid out by our code, the rest by the game's.
+- `HM_GAME_MENU=0` leaves the menu as the game ships it (comparison runs).
 
 ## What was learned (1.4.0; facts only)
 
@@ -44,6 +47,11 @@ Not checked by hand with real presses. The overlay is still there, unchanged.
   (`hle_register`) works as the function pointer, so the game calls straight into host code.
 - **Layout is automatic**: the panel grows for an eighth row and the selection and description box follow. No drawing
   code was touched.
+- **Layout** (per frame, 640x360 units): visible rows (byte +0x2c) 30 apart, the block centred on y = 183, the panel
+  17 above the first row and 18 taller than the rows, 408 or 328 wide; each row gets its y through vtable +0x20. The
+  free space between the title and the description box is about y 35..303: 8 rows fit, 9 at the game's pitch don't.
+- **Language**: the text lookup's language argument is in/out; after the call it holds the game's current code
+  (`en`, `de`, `ja`, ...), so our text follows the game's own language setting.
 - Labels need the text lookup hook. The row's draw code calls the lookup by id, and an unknown id aborts in the
   game's text formatting.
 
@@ -53,18 +61,19 @@ Rows go by topic, beside the game's own. Done when every item below is in and De
 
 | Overlay setting | Decision | Work |
 |---|---|---|
-| Fullscreen | Yes/No row, Graphics | done; keep it in step when F11 / Alt+Enter switch (remember the row, set +0x88, refresh) |
+| Fullscreen | Yes/No row, Graphics | done, follows F11 / Alt+Enter |
 | Scaling filter (3 choices, next start) | three-way row, Graphics | find a multiple-choice row type (the Language page's list row first); description says "next start" |
-| FPS in the window title | removed | drop the row, `show_fps` in settings and the ini, the title code |
-| Frame pacing | Yes/No row, Graphics | same toggle pattern as Fullscreen |
-| Master volume | removed | drop `volume` (the game's Sound and Music sliders stay); ignore old ini lines |
+| FPS in the window title | removed | done (old ini lines are ignored) |
+| Frame pacing | Yes/No row, Graphics | done |
+| Master volume | removed | done (old ini lines are ignored; `HM_AUDIO_GAIN` stays for tests) |
 | Rebinding (16 buttons, keyboard and gamepad, reset) | new Controls page | a button row in the main Options list opening a page (button rows: label = the current keys through the text hook; A starts a "press a key" capture in host code, as `input.c` does for the overlay; a Reset row) |
 | About (version, folder, keys) | version on the title screen | the port's version beside the game's own version text |
 | F1 / Minus+Plus | freed | remove the shortcut; Minus+Plus reach the game like on a Switch |
 
 Also:
-- Our text in all 11 of the game's languages (en, ja, de, fr, cafr, es, uses, it, kr, sc, tc). The hook gets the
-  language string. The agent drafts the translations; a native check is wanted.
+- Our text in all 11 of the game's languages (en, ja, de, fr, cafr, es, uses, it, kr, sc, tc): done for the rows so
+  far, drafted by the agent; a native check is wanted. New rows add their text to the table in `game_menu.c`
+  (`tests/test_recomp.py` checks every text has every language).
 - Check the pause menu's Options (same builder or another one?).
 - Then drop Dear ImGui: `runtime/ui/menu.cpp`, `imgui_glue.cpp`, `tools/fetch_imgui.py` and its patch, and the build
   and packaging steps that fetch it. Keep the input-capture and window-request parts the hooks use.

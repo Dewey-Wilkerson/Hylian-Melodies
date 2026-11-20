@@ -1,6 +1,6 @@
 // Harness for runtime/settings.c's saving (tests/test_settings_save.py): loads <path>, applies changes from the
 // command line, saves into <path>.
-//   test_settings <path> [fullscreen=1] [volume=0.5] [show_fps=1] [upscale_filter=2] [frame_pacing=0]
+//   test_settings <path> [fullscreen=1] [upscale_filter=2] [frame_pacing=0]
 //                        [bindings=<text with \n>]
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,8 +18,6 @@ int main(int argc, char **argv) {
         *eq = 0;
         const char *k = argv[i], *v = eq + 1;
         if (!strcmp(k, "fullscreen")) g_settings.fullscreen = atoi(v), settings_changed(SET_FULLSCREEN);
-        else if (!strcmp(k, "volume")) g_settings.volume = atof(v), settings_changed(SET_VOLUME);
-        else if (!strcmp(k, "show_fps")) g_settings.show_fps = atoi(v), settings_changed(SET_SHOW_FPS);
         else if (!strcmp(k, "upscale_filter")) g_settings.upscale_filter = atoi(v), settings_changed(SET_UPSCALE_FILTER);
         else if (!strcmp(k, "frame_pacing")) g_settings.frame_pacing = atoi(v), settings_changed(SET_FRAME_PACING);
         else if (!strcmp(k, "bindings")) {

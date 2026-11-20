@@ -4,7 +4,6 @@
 - Black around small rooms (castle interiors) is the game's own framing, not a fault.
 - Occasional hitches during loads: the 833 ms one was the game's own work loading an area (827 ms of game CPU);
   a few 50-80 ms frames are loads too, two were our render thread (texture work). Not pursued further.
-- `show_fps = 1` shows the frame rate in the window title (not checked by eye yet).
 - The window has no icon of its own; desktops show the menu entry's icon through the app id (`hylian-melodies`).
 - Loading and the splash videos run at 30 fps (the game's own choice while loading; to confirm on hardware).
 - The software keyboard returns the initial text unchanged.

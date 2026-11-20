@@ -18,8 +18,8 @@ them: **the sound card is the clock**, as the console's audio hardware is.
 |---|---|---|
 | `audio_period` | 256 | device period asked of the audio server (PipeWire, Pulse), in frames: 256 = 5.3 ms |
 | `audio_queue_ms` | 0 (= one period) | how much our stream may hold before the next game buffer is taken |
-| `volume` | 1.0 | master gain |
 
+Sound and music volume are the game's own (Options > Audio); `HM_AUDIO_GAIN` scales the whole output (tests).
 `HM_AUDIO_PERIOD`, `HM_AUDIO_QUEUE_MS` override them; `HM_NO_AUDIO=1` releases buffers on a timer without a device.
 
 The game has its own audio/video calibration; use it for the remaining offset of your speakers or headphones.

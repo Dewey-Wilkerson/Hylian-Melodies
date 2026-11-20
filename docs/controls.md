@@ -35,12 +35,15 @@ F11 or Alt+Enter switches between a window and fullscreen (borderless, the deskt
 
 ## Settings menu
 
+The game's own Options > Graphics page also has the port's Fullscreen and Frame pacing rows (branch `in-game-gui`,
+docs/IN-GAME-MENU.md); the overlay below is on its way out.
+
 **F1**, or **Minus + Plus** held together on a gamepad (or its Home button), opens and closes the settings menu over
 the game; Esc, B, Z or Backspace also close it. While it is open the game gets no input. Arrows / W A S D or the d-pad
 move, Enter / X or the right face button choose, L / R or Q / E change page; the mouse works too. (Esc alone doesn't
 open it: Esc is the game's +.)
 
-Pages: Video (fullscreen, scaling filter, FPS in the title, frame pacing), Audio (volume), Controls (rebinding: choose
+Pages: Video (fullscreen, scaling filter, frame pacing), Audio (a pointer to the game's own volumes), Controls (rebinding: choose
 a binding, then press the new key or gamepad button; Esc or Home cancels; "Reset all to defaults"), About (version,
 the settings and saves folder). Changes apply at once, except the scaling filter (next start), and are written to
 `hylian-melodies.ini` when the menu closes: only the changed lines, the rest of the file stays as it is.
