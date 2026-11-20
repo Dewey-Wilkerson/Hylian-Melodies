@@ -540,3 +540,6 @@ How the checks of this session were done (to repeat them):
 - 2026-11-19 `v0.1.1` is a full release, marked latest (owner). README's install line is now
   `releases/latest/download/install.sh`: each release's install.sh pins its own tag and tarball SHA-256, so the
   README needs no change per release. That exact line run anonymously: v0.1.1 downloaded, checked, installer started.
+- 2026-11-19 owner ran the public one-line install end to end on their own machine (dump to installed package, game
+  started). "Early test release" dropped from the v0.1.1 release notes (their install line now names
+  releases/latest too) and from the README's status line.

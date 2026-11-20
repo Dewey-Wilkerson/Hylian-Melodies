@@ -7,7 +7,7 @@ x86-64 program running on a small C runtime (Horizon OS services, NVN on Vulkan,
 **Personal use only.** This repository contains no game code, assets or keys. The game is built on your machine from
 your own cartridge dump and your own console's keys, and the resulting package must never be shared.
 
-Status: playable from the title through the first dungeons at a steady 60 fps; early test release. See
+Status: playable from the title through the first dungeons at a steady 60 fps; the one-line install below is tested end to end. See
 [docs/PROGRESS.md](docs/PROGRESS.md) and [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md).
 
 ## Installing
