@@ -4,8 +4,8 @@
 
 Full-screen curses screens on a terminal of 80x24 or more (installer/screens.py), else (or with --plain, or with
 TERM=dumb) the same questions as plain numbered prompts; both run the same Plan and flow. With --answers nothing
-is asked: the file holds the plan's fields (base, keys, and optionally update, output, march, keep_cache, work,
-out, settings = {"fullscreen": true, "gpu": 1}: keys of the game's ini, installer/options.py) and the exit status
+is asked: the file holds the plan's fields (base, keys, and optionally update, output ("package" or "appimage"; an
+immutable system such as SteamOS takes only "appimage"), march, keep_cache, work, out, settings = {"fullscreen": true, "gpu": 1}: keys of the game's ini, installer/options.py) and the exit status
 says how it went: 0 built, 1 failed, 2 the plan is wrong, 3 packages are missing (the
 command to install them is printed). The installer never runs as root: at the end it offers to run the
 package manager's install command (sudo asks for the password on the terminal), or prints it; --answers only prints it.
@@ -18,6 +18,8 @@ import shlex
 import subprocess
 import sys
 
+from . import appimage as A
+from . import deps
 from . import flow as F
 from . import options as O
 from . import plan as P
@@ -191,7 +193,8 @@ def existing(io, plan, repo, gpus):
     section(io, 'Your build')
     io.say('Already built on this computer:')
     for e in m['installs']:
-        io.say(f"  - version {e.get('version')}, {e.get('built', '?')}: {e.get('package', {}).get('file', '?')}")
+        where = e.get('location') if e.get('output') == 'appimage' else e.get('package', {}).get('file', '?')
+        io.say(f"  - version {e.get('version')}, {e.get('built', '?')}: {where}")
     e = m['installs'][-1]
     a = choose(io, 'What now?', [('again', 'Build it again (after an update, or with other build options)'),
                                   ('settings', 'Change the game settings (fullscreen, graphics card, '
@@ -199,6 +202,16 @@ def existing(io, plan, repo, gpus):
                                   ('remove', 'Remove it'), ('fresh', 'Start over with other files')], 'again')
     if a == 'settings':
         change_settings(io, plan, repo, gpus)
+        return 'quit'
+    if a == 'remove' and e.get('output') == 'appimage':
+        files = e.get('appimage', {}).get('files', [e.get('location')])
+        io.say('These files are deleted (your saves and settings stay):')
+        for f in files:
+            io.say('  ' + f)
+        if choose(io, 'Delete the AppImage now?', [('yes', 'Yes, delete it'), ('no', 'No')], 'yes') == 'yes':
+            A.remove(files)
+            P.forget_install(plan.manifest, e['id'])
+            io.say('Deleted.')
         return 'quit'
     if a == 'remove':
         io.say('The package manager removes it (your saves and settings stay):')
@@ -209,12 +222,33 @@ def existing(io, plan, repo, gpus):
     return e if a == 'again' else None
 
 
+def this_system():
+    """-> the name of this system when it is an immutable one (installer/deps.py), else None."""
+    return deps.immutable(F.read_os_release())
+
+
+def ask_output(io, plan, immutable):
+    """What to build: the package or the generic AppImage; on an immutable system only the AppImage."""
+    if immutable:
+        io.say(f'{immutable} is an immutable system: its system folders are read-only, so no package can be '
+               'installed on it. The installer builds the generic AppImage instead: one file holding the game, '
+               'built in a container (podman), that you start from the menu or add to Steam.')
+        plan.output = 'appimage'
+        return
+    io.say('The package is installed with your package manager like any other program. The generic AppImage is '
+           'one file that runs on any current Linux (also on SteamOS or Bazzite, if you copy it there); it is '
+           'built in a container, so it needs podman or Docker but none of the build packages.')
+    plan.output = choose(io, 'What should the installer build?', list(P.OUTPUTS.items()),
+                         plan.output if plan.output in P.OUTPUTS else 'package')
+
+
 def ask_build_folder(io, plan, env=None, free_gib=None):
     """Where the build happens and the package is written: the cache folder, or another folder (with room)."""
     free = free_gib or P._free_gib
     default = P.cache_home(env)
+    result = 'the AppImage' if plan.output == 'appimage' else 'the package'
     io.say(f'The build needs about {P.NEED_WORK_GIB} GiB of free space while it runs and {P.NEED_OUT_GIB} GiB for '
-           'the package. Another folder (on a bigger disk, say) gets a hylian-melodies folder inside it.')
+           f'{result}. Another folder (on a bigger disk, say) gets a hylian-melodies folder inside it.')
     cur = P.build_folder(plan, env)
     while True:
         def label(path):
@@ -244,7 +278,7 @@ def ask_build_folder(io, plan, env=None, free_gib=None):
         plan.work, plan.out = before  # (asked again with the folder it was, not the one refused)
 
 
-def interactive(io, plan, repo, make_flow, gpus=O.gpus, run=run_command, env=None):
+def interactive(io, plan, repo, make_flow, gpus=O.gpus, run=run_command, env=None, immutable=None):
     io.say(WELCOME.split('\n', 2)[2] if hasattr(io, 'section') else WELCOME)  # (screens: the title is in the bar)
     if hasattr(io, 'section') and not P.load_manifest(plan.manifest)['installs']:  # (screens: the welcome alone first)
         if choose(io, 'Ready?', [('go', 'Go on'), ('q', 'Quit')], 'go') != 'go':
@@ -257,6 +291,11 @@ def interactive(io, plan, repo, make_flow, gpus=O.gpus, run=run_command, env=Non
         plan.update = prev['inputs'].get('update', {}).get('path', '')
         plan.march = prev.get('build', {}).get('march', plan.march)
         plan.keep_cache = bool(prev.get('build', {}).get('keep_cache', False))
+        plan.output = prev.get('output', plan.output)
+    section(io, 'What to build')  # 0. the package or the AppImage
+    ask_output(io, plan, immutable)
+    if plan.output == 'appimage':
+        plan.march = 'v2'
     flow = make_flow(plan, repo, Progress(io))
     section(io, 'System check')
     while True:  # 1. what the system lacks
@@ -286,15 +325,18 @@ def interactive(io, plan, repo, make_flow, gpus=O.gpus, run=run_command, env=Non
             if not pause(io, 'Choose the files again'):
                 return 1
     section(io, 'Build options')  # 3. options
-    levels = [(k, t) for k, t in P.MARCH.items() if k != 'v3' or P.cpu_has_v3()]
-    plan.march = choose(io, 'Which CPUs should the game run on?', levels,
-                        plan.march if plan.march in dict(levels) else 'v2')
+    if plan.output == 'appimage':
+        io.say('The AppImage is generic: it runs on any x86-64 CPU (CPU level v2).')
+    else:
+        levels = [(k, t) for k, t in P.MARCH.items() if k != 'v3' or P.cpu_has_v3()]
+        plan.march = choose(io, 'Which CPUs should the game run on?', levels,
+                            plan.march if plan.march in dict(levels) else 'v2')
     plan.keep_cache = choose(io, 'Keep the build files (several GiB) so a later rebuild is faster?',
                              [('no', 'No'), ('yes', 'Yes')], 'yes' if plan.keep_cache else 'no') == 'yes'
     ask_build_folder(io, plan, env)
     section(io, 'Game settings')
     plan.settings = ask_settings(io, O.current(plan.settings_file), gpus)
-    bad = P.validate(plan, fmt=flow.format)
+    bad = P.validate(plan, fmt=flow.format, immutable=immutable)
     if bad:
         for _, t in bad:
             io.say('  ' + t)
@@ -303,13 +345,17 @@ def interactive(io, plan, repo, make_flow, gpus=O.gpus, run=run_command, env=Non
     io.say('Ready to build:')
     io.say(f'  cartridge dump   {plan.base}')
     io.say(f'  keys             {plan.keys}')
-    io.say(f'  result           a {flow.format} package in {plan.out}')
+    io.say(f'  result           ' + (f'the generic AppImage in {plan.out} (built in a container)'
+                                     if plan.output == 'appimage' else f'a {flow.format} package in {plan.out}'))
     io.say(f'  CPU level        {plan.march}')
     io.say(f'  game starts      {settings_summary(plan.settings)}')
     io.say(f'  work folder      {plan.work}' + ('  (kept afterwards)' if plan.keep_cache else '  (emptied afterwards)'))
     for what, path, need, free in P.space(plan):
         io.say(f'  disk space       about {need} GiB {what}, ' + (f'{free:.0f} GiB free' if free is not None else
                                                                    'free space unknown'))
+    if plan.output == 'appimage':
+        io.say('  The first AppImage build also downloads the build container (Debian 12 and the build tools, '
+               'about 1.5 GB on disk, kept for the next build).')
     io.say('  This takes a few minutes, mostly compiling.')
     if choose(io, 'Start?', [('yes', 'Yes'), ('no', 'No')], 'yes') != 'yes':
         return 0
@@ -324,6 +370,8 @@ def interactive(io, plan, repo, make_flow, gpus=O.gpus, run=run_command, env=Non
 def finish(io, result, run=None, plan=None, repo=None, env=None):
     """The end: the package and how to install it, then what stays on this computer. run: offer to install it now
     with that runner (the questions; an answers file only prints the command)."""
+    if result['result'] == 'ok' and result.get('output') == 'appimage':
+        return finish_appimage(io, result, run, plan, repo, env)
     if result['result'] == 'ok':
         section(io, 'Done')
         io.say('Done. The package: ' + result['file'])
@@ -343,13 +391,45 @@ def finish(io, result, run=None, plan=None, repo=None, env=None):
     return 1
 
 
+def finish_appimage(io, result, ask, plan, repo, env=None):
+    """The AppImage is built: offer to move it into ~/Applications with a menu entry (no root needed); an answers
+    file (ask is None) only says where it is."""
+    section(io, 'Done')
+    io.say('Done. The AppImage: ' + result['file'])
+    io.say('It contains the game: it is for you alone, never share it.')
+    dest = os.path.join(A.apps_dir(env), A.NAME)
+    if ask and choose(io, 'Put it in your Applications folder and add it to the menu?',
+                      [('yes', 'Yes: ' + dest), ('no', 'No, leave it where it is')], 'yes') == 'yes':
+        try:
+            done = A.install(result['file'], result.get('icon'), env)
+        except OSError as e:
+            io.say(f'  Could not move it: {e.strerror}. It stays where it was built.')
+        else:
+            result['file'] = done['file']
+            if plan and result.get('entry'):
+                entry = dict(result['entry'], location=done['file'])
+                entry['appimage'] = dict(entry['appimage'], file=done['file'], files=done['files'])
+                P.record_install(plan.manifest, entry)
+            io.say('In place: ' + done['file'] + ', with a menu entry "Hylian Melodies".')
+    io.say('Start it from the menu or by running the file. On a Steam Deck in Game Mode: add it in desktop mode with '
+           'Steam\'s "Add a Non-Steam Game" (choose the AppImage file). Your saves and settings are kept in '
+           + os.path.dirname(plan.manifest if plan else P.Plan(env).manifest) + '.')
+    io.say('To remove it later, run this installer again and choose "Remove it", or delete the file.')
+    if plan:
+        show_leftovers(io, plan, repo, result['file'] if os.path.dirname(result['file']) == plan.out else None, env)
+        io.say(f'The build container stays for the next build; remove it with: podman rmi {A.image_tag()}'
+               ' (or docker rmi).')
+    return 0
+
+
 def show_leftovers(io, plan, repo, package, env=None):
     """What stays on this computer besides the installed game, with sizes, so the player can delete what they wish."""
     items = P.leftovers(plan, repo, package)
     if not items:
         return
     io.say()
-    io.say('Files this left on your computer (the installed game itself is managed by the package manager):')
+    io.say('Files this left on your computer' + (':' if plan.output == 'appimage' else
+                                                  ' (the installed game itself is managed by the package manager):'))
     for path, size, what, removable in items:
         io.say(f'  {P.size_text(size):>10}  {path}')
         io.say(f'              {what}' + ('  [can be deleted]' if removable else ''))
@@ -398,7 +478,7 @@ def from_answers(io, path, repo, make_flow, env=None):
         io.say(f'Cannot use the answers file {path}: {e}')
         return 2
     flow = make_flow(plan, repo, Progress(io))
-    bad = P.validate(plan, fmt=flow.format)
+    bad = P.validate(plan, fmt=flow.format, immutable=getattr(flow, 'immutable', None))
     if bad:
         for field, t in bad:
             io.say(f'{field}: {t}')
@@ -415,7 +495,7 @@ def screens_usable():
     return screens.usable(sys.stdin, sys.stdout, os.environ)
 
 
-def run_screens(a, env, make_flow, gpus, run):
+def run_screens(a, env, make_flow, gpus, run, immutable=None):
     """The questions as curses screens (installer/screens.py); the last screen's text stays on the terminal."""
     import curses
     import locale
@@ -429,7 +509,7 @@ def run_screens(a, env, make_flow, gpus, run):
         if a.source_note:
             io.say('Source: ' + a.source_note)
             io.say()
-        return interactive(io, P.Plan(env), a.root, make_flow, gpus, run, env)
+        return interactive(io, P.Plan(env), a.root, make_flow, gpus, run, env, immutable)
     rc = curses.wrapper(body)
     text = box['io'].transcript()
     if text:
@@ -437,7 +517,7 @@ def run_screens(a, env, make_flow, gpus, run):
     return rc
 
 
-def main(argv=None, io=None, make_flow=F.Flow, env=None, gpus=O.gpus, run=run_command):
+def main(argv=None, io=None, make_flow=F.Flow, env=None, gpus=O.gpus, run=run_command, immutable=this_system):
     ap = argparse.ArgumentParser(prog='python -m installer.tui', description=__doc__.splitlines()[0])
     ap.add_argument('--answers', help='a JSON file with the plan: nothing is asked')
     ap.add_argument('--source-note', default='', help='where this copy came from (install.sh): shown first')
@@ -451,10 +531,11 @@ def main(argv=None, io=None, make_flow=F.Flow, env=None, gpus=O.gpus, run=run_co
         io.say('Source: ' + a.source_note)
     if a.answers:
         return from_answers(io, a.answers, a.root, make_flow, env)
+    imm = immutable() if callable(immutable) else immutable
     try:
         if not why_not:
-            return run_screens(a, env, make_flow, gpus, run)
-        return interactive(io, P.Plan(env), a.root, make_flow, gpus, run, env)
+            return run_screens(a, env, make_flow, gpus, run, imm)
+        return interactive(io, P.Plan(env), a.root, make_flow, gpus, run, env, imm)
     except (EOFError, KeyboardInterrupt):
         io.say()
         io.say('Stopped. Nothing was installed.')

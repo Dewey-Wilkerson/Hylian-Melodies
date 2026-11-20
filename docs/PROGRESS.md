@@ -542,3 +542,18 @@ How the checks of this session were done (to repeat them):
   README needs no change per release. That exact line run anonymously: v0.1.1 downloaded, checked, installer started.
 - 2026-11-19 owner ran the public one-line install end to end on their own machine. "Early test release" dropped from the v0.1.1 release notes (their install line now names
   releases/latest too) and from the README's status line.
+- 2026-11-19 generic AppImage and immutable systems (owner: detect an immutable distro and build a generic AppImage
+  there, the only option; offer it to everyone). `installer/deps.py` `immutable()` (os-release IDs and atomic
+  variants, `/run/ostree-booted`, read-only `/usr`); `plan.OUTPUTS` gains `appimage` (always v2; refused for another
+  output on an immutable system); the TUI asks "What should the installer build?" (not on an immutable system, where
+  it says why) and skips the CPU question for the AppImage. `installer/appimage.py` + `flow.ContainerFlow`: the
+  build runs in a Debian 12 podman/Docker container (each step as `python3 -m installer.flow --inside`), the AppDir
+  is the package tree plus copied libraries (used only where the host lacks them), `mksquashfs` + pinned type-2
+  runtime; at the end it can go to `~/Applications` with a menu entry; "Remove it" deletes those files. Launcher
+  now clears `HM_GAME_DIR` before starting the game. 147 unit tests pass.
+- 2026-11-19 AppImage tried for real (owner's OK to pull `debian:12`): the answers file built it in the container on
+  the first try; the file starts here and reaches the title screen with the movie playing through the copied FFmpeg
+  (docs/installer.md, section 4). Container image and storage removed; the built AppImage kept for the owner at
+  `~/.cache/hylian-melodies/Hylian-Melodies-x86_64.AppImage` (1.8 GiB, delete when done). Not tried: SteamOS,
+  Bazzite, Docker.
+

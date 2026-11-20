@@ -129,8 +129,8 @@ DEVELOPER = {
 }
 # Read by the launcher or the build, not by the game: named so nobody takes them for settings.
 OUTSIDE = {
-    'HM_GAME_DIR': 'the launcher too: the installed game instead of /opt/hylian-melodies (tests)',
-    'HM_SUPPORT_DIR': 'the launcher: the support files instead of /usr/share/hylian-melodies-recomp (tests)',
+    'HM_GAME_DIR': 'the launcher too: the installed game instead of /opt/hylian-melodies (the AppImage, tests)',
+    'HM_SUPPORT_DIR': 'the launcher: the support files instead of /usr/share/hylian-melodies-recomp (the AppImage, tests)',
 }
 
 

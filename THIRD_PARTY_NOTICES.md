@@ -25,6 +25,8 @@ needs the owner's approval first.
 | Dear ImGui (ocornut/imgui) | fetched at `97428e8` (v1.91.9) by `tools/fetch_imgui.py`, never vendored; its Vulkan backend gets `tools/imgui/0001-dynamic-vertex-input.patch` (from LAS Recomp, MIT) | MIT |
 | SDL 3 | system library, dynamically linked; where a release has no package, fetched at `f00dc91` (release-3.4.20) by `tools/build_sdl3.py` and statically linked, never vendored | zlib |
 | Vulkan loader / headers | system | Apache-2.0 |
+| AppImage type-2 runtime (AppImage/type2-runtime) | `runtime-x86_64` of release `20251108`, fetched and checked against its SHA-256 by `installer/appimage.py` at the front of the generic AppImage; never vendored | MIT |
+| Debian 12 container image (`docker.io/library/debian:12`) and its packages | the generic AppImage's build container, pulled by podman/Docker on the player's machine; the FFmpeg libraries and their dependencies from it are copied into the player's own AppImage (personal use, as open question 2) | various (Debian's) |
 | Capstone | lifter dependency (disassembly) | BSD-3-Clause |
 | Vulkan Memory Allocator | fetched at `0f1a757` (v3.5.0) by `tools/fetch_vma.py`, never vendored; compiled by `runtime/nvn/vulkan/vma.cpp` | MIT |
 | shaderc | system library (GLSL to SPIR-V for translated shaders); where a release's package cannot be used, fetched at `b64fd42` (v2026.4, with glslang `e1b562a`, SPIRV-Tools `ef96ed7`, SPIRV-Headers `04fd3ca`) by `tools/build_shaderc.py` and statically linked, never vendored | Apache-2.0 (glslang: BSD-3-Clause and others, see its LICENSE.txt; SPIRV-Headers: MIT) |

@@ -146,5 +146,43 @@ class Deps(unittest.TestCase):
         self.assertEqual(len(r['needs']), len([n for n in deps.NEEDS if n['group'] not in ('sdl3-own', 'own')]))
 
 
+class Immutable(unittest.TestCase):
+    OSR = {
+        'steamos': 'NAME="SteamOS"\nID=steamos\nID_LIKE=arch\nVARIANT_ID=steamdeck\n',
+        'bazzite': 'NAME="Bazzite"\nID=bazzite\nID_LIKE="fedora"\nVARIANT_ID=bazzite-deck\n',
+        'silverblue': 'NAME="Fedora Linux"\nID=fedora\nVERSION_ID=43\nVARIANT_ID=silverblue\n',
+        'aeon': 'NAME="openSUSE Aeon"\nID="opensuse-aeon"\nID_LIKE="suse opensuse opensuse-tumbleweed"\n',
+    }
+
+    def test_by_os_release(self):
+        for name, text in self.OSR.items():
+            self.assertTrue(deps.immutable(deps.parse_os_release(text), markers=False), name)
+        self.assertEqual(deps.immutable(deps.parse_os_release(self.OSR['steamos']), markers=False), 'SteamOS')
+        for name in ('cachyos', 'debian13', 'fedora', 'tumbleweed', 'void'):
+            self.assertIsNone(deps.immutable(deps.parse_os_release(OS[name]), markers=False), name)
+        ws = deps.parse_os_release('NAME="Fedora Linux"\nID=fedora\nVARIANT_ID=workstation\n')
+        self.assertIsNone(deps.immutable(ws, markers=False))
+
+    def test_by_markers(self):
+        osr = deps.parse_os_release(OS['fedora'])
+        no = lambda *a: False
+        self.assertIsNone(deps.immutable(osr, exists=no, read_only=no))
+        self.assertTrue(deps.immutable(osr, exists=lambda p: p == deps.OSTREE_MARKER, read_only=no))
+        self.assertTrue(deps.immutable(osr, exists=no, read_only=lambda: True))
+        self.assertIsNone(deps.immutable(osr, markers=False, exists=lambda p: True, read_only=lambda: True))
+
+    def test_container(self):
+        pkgs = deps.container_packages()
+        self.assertEqual(len(pkgs), len(set(pkgs)))
+        for p in ('python3', 'squashfs-tools', 'clang-19', 'lld-19', 'cmake', 'libpipewire-0.3-dev', 'dpkg',
+                  'libavcodec-dev', 'git'):
+            self.assertIn(p, pkgs)
+        for p in ('clang', 'libsdl3-dev', 'libshaderc-dev'):  # (Debian 12: renamed, or built from source)
+            self.assertNotIn(p, pkgs)
+        self.assertEqual(deps.container_engine(lambda n: n == 'docker'), 'docker')
+        self.assertEqual(deps.container_engine(lambda n: True), 'podman')
+        self.assertIsNone(deps.container_engine(lambda n: False))
+
+
 if __name__ == '__main__':
     unittest.main()

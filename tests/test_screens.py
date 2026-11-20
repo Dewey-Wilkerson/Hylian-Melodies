@@ -124,7 +124,7 @@ from installer import tui
 from test_tui import FakeFlow
 FakeFlow.calls, FakeFlow.packed_settings = [], None
 sys.exit(tui.main(['--source-note', 'a test'], make_flow=FakeFlow, env={'HOME': sys.argv[2]}, gpus=lambda: [],
-                  run=lambda argv: print('(would run: ' + ' '.join(argv) + ')') or 0))
+                  run=lambda argv: print('(would run: ' + ' '.join(argv) + ')') or 0, immutable=None))
 '''
 
 
@@ -178,6 +178,7 @@ class Screens(unittest.TestCase):
     def test_straight_through(self):
         enter, ctrl_o = '\r', '\x0f'
         keys = [enter,  # welcome: go on
+                enter,  # what to build: the package
                 self.t + '/', ctrl_o, enter,  # the dump: the folder typed, then the in-terminal list, on its first dump
                 '\x15' + self.keys, enter,  # the keys typed
                 enter, enter, enter,  # CPU level, keep the build files, build in the cache folder

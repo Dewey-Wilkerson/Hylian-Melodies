@@ -25,6 +25,11 @@ and keys (both are only read where they are), tells you which packages your syst
 minutes and makes a package for your package manager (pacman, apt, dnf or zypper). It never needs root itself; at
 the end it offers to install the package with sudo. Run it again later to rebuild, change settings or remove it.
 
+Instead of the package it can build a generic AppImage: one file that runs on any current x86-64 Linux, built in a
+Debian 12 container (needs podman or Docker, none of the build packages). On an immutable system such as SteamOS,
+Bazzite or Fedora Silverblue, where no package can be installed, that is what it builds. (New in 2026-11; built and run on
+an ordinary distro, not yet tried on those systems.)
+
 From a checkout instead: `git clone https://github.com/Dewey-Wilkerson/Hylian-Melodies && cd Hylian-Melodies &&
 sh install.sh --source .` What the package puts where: [docs/packaging.md](docs/packaging.md).
 

@@ -123,7 +123,7 @@ share it**.
 |---|---|---|---|---|
 | **System package** (default on Arch, Debian/Ubuntu, Fedora/openSUSE) | the distro's packaging tool | `/opt/hylian-melodies` | `${XDG_DATA_HOME:-~/.local/share}/hylian-melodies` (launcher, as today) | rerun the UI to build the new package; remove with the package manager (saves kept) |
 | **Loose folder** (any distro, no root) | nothing extra | the chosen folder (default `~/Games/Hylian Melodies`) | inside the same folder | rerun the UI; uninstall asks whether to keep `profile/` (saves) and the ini |
-| **AppImage** (portable) | `mksquashfs`; zig (fetched, pinned) | inside the image | XDG data folder, like the package | replace the file; uninstall removes it and its menu entry |
+| **Generic AppImage** (any distro; the only output on immutable systems) | podman or Docker (the build runs in a Debian 12 container) | inside the image | XDG data folder, like the package | rebuild and replace the file; "Remove it" deletes the file, its menu entry and icon (saves kept) |
 | **Flatpak** (last) | `flatpak-builder` | inside the app, built locally, never exported to a remote | the app's data folder | `flatpak uninstall` |
 
 - **System package** (the first output built; section 9 has the packages each distro needs). Implemented:
@@ -158,10 +158,37 @@ share it**.
 - **Loose folder.** The install folder itself, with the executable at its top, plus (optional) a menu entry and icon
   in `~/.local/share/applications` and `~/.local/share/icons`. The launcher logic (player folder = install folder)
   becomes a mode of `hylian-melodies.sh` instead of a second script.
-- **AppImage.** The portable variant: always x86-64-v2; built with `zig cc -target x86_64-linux-gnu.2.28` so it runs
-  on old glibc; SDL3, ffmpeg and shaderc built or copied in and found through `$ORIGIN` rpaths; Vulkan loader and
-  driver from the host. Squashfs plus the AppImage type-2 runtime, both pinned by version and SHA-256. Open: where
-  zig and the runtime come from and whether that download is acceptable (docs/OPEN-QUESTIONS.md).
+- **Generic AppImage** (built 2026-11-19, `installer/appimage.py`; owner: offered to everyone, and the only output
+  on an immutable system). The build runs in a **Debian 12 container** (podman, else Docker), never on the host:
+  Debian 12's C library (2.36) makes the result start on any current distro, and an immutable system cannot install
+  the build packages but ships podman. The image (`localhost/hylian-melodies-builder:<hash of its recipe>`) is
+  `debian:12` plus the Debian 12 packages of `installer/deps.py`'s table (`deps.container_packages()`), Python and
+  `squashfs-tools`; built once, kept for the next build. The host's `ContainerFlow` (`installer/flow.py`) runs each
+  ordinary step inside it (`python3 -m installer.flow --inside PLAN --do tools|check|setup|appimage`) with the repo,
+  the dump and the keys mounted read-only at their own paths, the work, output and its own toolchain folder
+  (`toolchain-appimage`: tools built against Debian 12) read-write, `--userns=keep-id` (Docker: `--user`) and
+  `label=disable` (SELinux: no relabelling of the player's files). Events come through as for the setup.
+  - AppDir: the package's tree (`pack.build_root`), `AppRun`, the menu entry and icon at the top, `.DirIcon`, and the
+    libraries: everything `ldd` lists for the executable except the C library, the C++ runtime and the graphics
+    stack (Vulkan, GL, DRM, gbm), each in `usr/lib/<soname>/`. AppRun adds a folder to `LD_LIBRARY_PATH` only when
+    `ldconfig -p` shows the host has no library of that name, so the host's own (newer) copy always wins over
+    Debian 12's. Then `AppRun` runs the package's launcher with `HM_GAME_DIR` / `HM_SUPPORT_DIR` pointing into the
+    mounted image; the launcher clears both before starting the game (which reads `HM_GAME_DIR`) and prunes dead
+    links into an earlier `/tmp/.mount_*`.
+  - `mksquashfs -comp zstd` behind the AppImage type-2 runtime (AppImage/type2-runtime release `20251108`, MIT,
+    fetched and checked against its SHA-256, never vendored). No zig and no appimagetool: the container supplies the
+    old C library.
+  - At the end the installer offers to move it to `~/Applications/Hylian-Melodies-x86_64.AppImage` with a menu entry
+    `hylian-melodies-appimage.desktop` and icon in the player's own XDG data folder (no root); it names Steam's
+    "Add a Non-Steam Game" for Game Mode. Saves and settings are the same player folder as the package's.
+  - Tried 2026-11-19 on the dev machine with the real dump (scratch XDG folders, owner's OK to pull `debian:12`):
+    answers file to AppImage with exit 0 (image built, tools, extraction, lift, compile, AppImage); 1.8 GiB, 127
+    copied libraries (160 MB: FFmpeg 5.1 and what it loads), the executable needing nothing newer than
+    `GLIBC_2.36`; started from the file: player folder set up with links into `/tmp/.mount_*`, title screen
+    reached (1046 frames in 25 s), the splash movie decoded by the copied FFmpeg; no key value in any of the 1868
+    logs. Image and podman storage removed afterwards. (podman keeps its images under `$XDG_DATA_HOME`.)
+  - Host needs: x86-64, glibc 2.36 or newer, a C++ runtime from GCC 12 or newer, a Vulkan driver, FUSE
+    (`fusermount`/`fusermount3`) to mount the image.
 - **Flatpak.** A manifest on `org.freedesktop.Platform`, built with `flatpak-builder --user --install`. After the
   others work.
 
@@ -246,7 +273,8 @@ Owner, 2026-11-14: the first version gets the system packages right; the other o
    2026-11-15 (`installer/options.py`, section 5).
 5. Bootstrap and `tools/release.py`: done 2026-11-15 (`install.sh`, `tests/test_bootstrap.py`, `file://` releases;
    dash checked in a container). Still: a test against the private repository (push only with the owner's OK then).
-6. Curses screens and the file picker: done 2026-11-15. Then loose folder; AppImage; Flatpak last.
+6. Curses screens and the file picker: done 2026-11-15. Generic AppImage: done 2026-11-19. Then loose folder;
+   Flatpak last.
 
 ### 9. System packages (checked 2026-11-14)
 
@@ -372,9 +400,10 @@ python3 -m installer.tui [--answers FILE.json]
 ```
 
 - Prompts: welcome; an existing build (build again with last time's files and options / remove: the package
-  manager's command, then forgotten / start over); what the system lacks and the one command, "check again";
+  manager's command, then forgotten; an AppImage: its files deleted / start over); what to build (package or
+  generic AppImage; not asked on an immutable system); what the system lacks and the one command, "check again";
   the dump and the keys (typed or dropped paths, quotes and `file://` handled), checked at once against the keys;
-  CPU level (v3 only offered when this CPU has it); keep the build files; game settings; summary; progress;
+  CPU level (v3 only offered when this CPU has it; not asked for the AppImage); keep the build files; game settings; summary; progress;
   install it now (the package manager through sudo) or the install command.
 - `--answers`: exit status 0 built, 1 failed, 2 the plan is wrong, 3 packages are missing (command printed).
 - Everything under `${XDG_CACHE_HOME:-~/.cache}/hylian-melodies/` (`toolchain/`, `temp/`, `packages/`) and the
@@ -391,10 +420,11 @@ python3 -m installer.tui [--answers FILE.json]
   install command) is printed to the terminal when the screens close.
 - Still to come from sections 2 to 6: parallel jobs.
 
-**Immutable systems (SteamOS and the like): the AppImage channel** (owner, 2026-11-14). A system whose root is
-read-only cannot install a package, so it gets its own output, `appimage`; the plan, the answers file and the
-manifest already know the name (and refuse it until it is built). What that channel has to solve, beyond
-section 4's notes:
+**Immutable systems (SteamOS and the like): the AppImage channel** (owner, 2026-11-14; built 2026-11-19, section 4).
+A system whose root is read-only cannot install a package, so it gets the output `appimage`, and only that: the
+installer detects it (`deps.immutable`: os-release `ID` such as `steamos`, `bazzite`, `opensuse-aeon`, Fedora's
+atomic `VARIANT_ID`s, `/run/ostree-booted`, or `/usr` mounted read-only), skips the output question and refuses
+another output in an answers file. The design notes it started from (the container answer was taken):
 
 - *Where it is built.* Such a system cannot install the build packages either (clang, the development files).
   Either the AppImage is built on another Linux computer and copied over (it is portable: x86-64-v2), or the build

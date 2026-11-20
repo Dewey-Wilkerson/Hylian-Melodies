@@ -4,7 +4,7 @@
 # (/proc/self/exe), where it also writes settings, saves, logs and caches. So each player gets
 # $XDG_DATA_HOME/hylian-melodies (~/.local/share/hylian-melodies) with a copy of the executable (a symlink would
 # resolve back to /opt) and symlinks to everything else. HM_GAME_DIR / HM_SUPPORT_DIR override the system folders
-# (tests only). Arguments go to the game (--fullscreen, --windowed). Settings, including the ones the installer
+# (the AppImage's AppRun points them into the mounted image; tests). Arguments go to the game (--fullscreen, --windowed). Settings, including the ones the installer
 # asks about, are the game's own hylian-melodies.ini in that folder (installer/options.py).
 set -eu
 
@@ -47,7 +47,8 @@ prune() {
     for l in "$1"/* "$1"/.[!.]*; do
         [ -L "$l" ] || continue
         t=$(readlink "$l")
-        case $t in "$game"/*) [ -e "$t" ] || rm -f "$l" ;; esac
+        # (an AppImage is mounted at a new /tmp/.mount_* folder each start: links into an earlier one go too)
+        case $t in "$game"/*|*/.mount_*/opt/hylian-melodies/*) [ -e "$t" ] || rm -f "$l" ;; esac
     done
 }
 prune "$dir"
@@ -82,4 +83,6 @@ if [ ! -e "$dir/$settings" ]; then
 fi
 
 cd "$dir"
+# (the game reads HM_GAME_DIR as its data folder: it must use this player's folder, not the read-only install)
+unset HM_GAME_DIR HM_SUPPORT_DIR
 exec "$dir/$exe" "$@"

@@ -26,3 +26,8 @@
   its frame controller goes there with that much headroom is not yet known.
 - Started without a display (seen in containers), the game ends with an abort and a core dump instead of saying
   that it found no display or no Vulkan device.
+- The generic AppImage was built and started on the dev machine (Arch-based, rootless podman) only: a start on
+  SteamOS / Bazzite / Silverblue, with Docker instead of podman, and on a system without some of the copied
+  libraries is unchecked. Rootless podman needs the user's `/etc/subuid` range for the image's apt
+  step; whether SteamOS's `deck` user has one is not known. Running the package and the AppImage on one computer
+  shares the player folder: each start re-links it to the one started.

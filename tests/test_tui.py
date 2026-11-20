@@ -132,10 +132,18 @@ class PlanTests(Base):
         self.assertEqual(fields(P.Plan(self.env, base=self.xci, keys=self.keys, march='v3'), has_v3=False), ['march'])
         self.assertEqual(fields(P.Plan(self.env, base=self.xci, keys=self.keys, march='v3'), has_v3=True), [])
         self.assertEqual(fields(P.Plan(self.env, base=self.xci, keys=self.keys, march='v9')), ['march'])
-        for out in ('appimage', 'folder', 'flatpak', 'tarball'):  # (named already, not built yet / unknown)
+        for out in ('folder', 'flatpak', 'tarball'):  # (named already, not built yet / unknown)
             self.assertEqual(fields(P.Plan(self.env, base=self.xci, keys=self.keys, output=out)), ['output'])
-        self.assertIn('SteamOS', P.validate(P.Plan(self.env, base=self.xci, keys=self.keys, output='appimage'),
-                                            free_gib=ok)[0][1])
+        app = P.Plan(self.env, base=self.xci, keys=self.keys, output='appimage')
+        self.assertEqual(fields(app), [])
+        self.assertEqual(fields(app, immutable='SteamOS'), [])
+        self.assertEqual(fields(P.Plan(self.env, base=self.xci, keys=self.keys, output='appimage', march='v3'),
+                                has_v3=True), ['march'])  # (the AppImage is always generic)
+        self.assertEqual(fields(p, immutable='SteamOS'), ['output'])  # (a package: not on an immutable system)
+        self.assertIn('immutable', P.validate(p, free_gib=ok, immutable='SteamOS')[0][1])
+        colon = P.Plan(self.env, base=self.xci, keys=self.keys, output='appimage', work='/tmp/a:b/w')
+        self.assertEqual(fields(colon), ['work'])
+        self.assertEqual(fields(P.Plan(self.env, base=self.xci, keys=self.keys, work='/tmp/a:b/w')), [])
         self.assertEqual(fields(P.Plan(self.env, base=self.xci, keys=self.keys, keep_cache='yes')), ['keep_cache'])
         spaced = P.Plan(self.env, base=self.xci, keys=self.keys, work='/tmp/a b/w')
         self.assertEqual(fields(spaced, fmt='rpm'), ['work'])
@@ -223,19 +231,20 @@ class FlowTests(Base):
 
 
 class TuiTests(Base):
-    def run_tui(self, *answers, argv=(), gpus=(), install_rc=0):
+    def run_tui(self, *answers, argv=(), gpus=(), install_rc=0, immutable=None):
         io = Script(*answers)
         self.ran = []
 
         def run(argv):
             self.ran.append(argv)
             return install_rc
-        rc = tui.main(list(argv), io=io, make_flow=FakeFlow, env=self.env, gpus=lambda: list(gpus), run=run)
+        rc = tui.main(list(argv), io=io, make_flow=FakeFlow, env=self.env, gpus=lambda: list(gpus), run=run,
+                      immutable=immutable)
         return rc, io
 
     def test_straight_through(self):
         os.makedirs(P.Plan(self.env).toolchain)  # (what a real build leaves: listed at the end)
-        rc, io = self.run_tui(f'"{self.xci}"', self.keys, '', '', '', '', '', '', '', '')  # (install it now, delete it)
+        rc, io = self.run_tui('', f'"{self.xci}"', self.keys, '', '', '', '', '', '', '', '')  # (install it now, delete it)
         self.assertEqual(rc, 0, io.text())
         self.assertEqual(self.ran, [['sudo', 'apt', 'install', os.path.join(self.t, '.cache', 'hylian-melodies',
                                                                              'packages', 'x.deb')]])
@@ -254,7 +263,7 @@ class TuiTests(Base):
 
     def test_missing_packages_then_check_again(self):
         FakeFlow.missing_rounds = 1
-        rc, io = self.run_tui('', self.xci, self.keys, '', '', '', '', '', '', 'no')
+        rc, io = self.run_tui('', '', self.xci, self.keys, '', '', '', '', '', '', 'no')
         self.assertEqual(rc, 0, io.text())
         self.assertEqual(self.ran, [])  # (not now: the command is shown)
         self.assertIn('Install it with:', io.said)
@@ -265,12 +274,12 @@ class TuiTests(Base):
         self.assertIn('  sudo apt install ninja-build', io.said)
         self.assertEqual(FakeFlow.calls[:2], ['check_system', 'check_system'])
         FakeFlow.missing_rounds, FakeFlow.calls = 1, []
-        rc, io = self.run_tui('q')
+        rc, io = self.run_tui('', 'q')
         self.assertEqual((rc, FakeFlow.calls), (3, ['check_system']))
 
     def test_wrong_files_are_asked_again(self):
         FakeFlow.bad_inputs_rounds = 1
-        rc, io = self.run_tui('/no/such.xci', self.xci, self.keys, '', self.xci, self.keys, '', '', '', '', '', '', 'no')
+        rc, io = self.run_tui('', '/no/such.xci', self.xci, self.keys, '', self.xci, self.keys, '', '', '', '', '', '', 'no')
         self.assertEqual(rc, 0, io.text())
         self.assertIn('  The cartridge dump is not a file: /no/such.xci', io.said)
         self.assertIn('  Cannot read the dump with these keys', io.said)
@@ -299,7 +308,7 @@ class TuiTests(Base):
         self.assertEqual(plan.work, os.path.join(P.cache_home(self.env), 'temp'))
 
     def test_install_fails(self):
-        rc, io = self.run_tui(self.xci, self.keys, '', '', '', '', '', '', 'yes', install_rc=1)
+        rc, io = self.run_tui('', self.xci, self.keys, '', '', '', '', '', '', 'yes', install_rc=1)
         self.assertEqual(rc, 0, io.text())
         self.assertEqual(len(self.ran), 1)
         t = io.text()
@@ -312,7 +321,7 @@ class TuiTests(Base):
         self.assertIn('Install it with:', io.said)
 
     def test_options_and_decline(self):
-        rc, io = self.run_tui(self.xci, self.keys, 'native', '2', '', '', '', 'no')
+        rc, io = self.run_tui('', self.xci, self.keys, 'native', '2', '', '', '', 'no')
         self.assertEqual(rc, 0)
         self.assertNotIn('setup', FakeFlow.calls)
         self.assertIn('  CPU level        native', io.said)
@@ -320,11 +329,11 @@ class TuiTests(Base):
 
     def test_failure_and_input_ending(self):
         FakeFlow.fail_setup = True
-        rc, io = self.run_tui(self.xci, self.keys, '', '', '', '', '', '')
+        rc, io = self.run_tui('', self.xci, self.keys, '', '', '', '', '', '')
         self.assertEqual(rc, 1)
         self.assertIn('It did not work: Compiling the game failed', io.said)
         self.assertIn('The full log: /setup.log', io.said)
-        rc, io = self.run_tui(self.xci)  # (the terminal went away mid-question)
+        rc, io = self.run_tui('', self.xci)  # (the terminal went away mid-question)
         self.assertEqual(rc, 1)
         self.assertIn('Stopped. Nothing was installed.', io.said)
 
@@ -334,7 +343,7 @@ class TuiTests(Base):
                                'inputs': {'base': {'path': self.xci}, 'keys': {'path': self.keys}},
                                'build': {'march': 'native', 'keep_cache': True},
                                'package': {'file': '/p/x.deb', 'remove': 'sudo apt remove x'}})
-        rc, io = self.run_tui('', '', '', '', '', '', '', '', '', 'no')  # again, and every default: the files and options of last time
+        rc, io = self.run_tui('', '', '', '', '', '', '', '', '', '', 'no')  # again, and every default: the files and options of last time
         self.assertEqual(rc, 0, io.text())
         self.assertIn('  CPU level        native', io.said)
         self.assertIn(f'  cartridge dump   {self.xci}', io.said)
@@ -349,7 +358,7 @@ class TuiTests(Base):
     def test_settings_questions(self):
         cards = [(0, 'Fast Card'), (1, 'Built-in Graphics')]
         # fullscreen yes; the second card; troubleshooting one by one: pacing no, shaders yes, the rest no; start
-        rc, io = self.run_tui(self.xci, self.keys, '', '', '', 'yes', '3', 'pick', '', 'yes', '', '', '', '', 'no',
+        rc, io = self.run_tui('', self.xci, self.keys, '', '', '', 'yes', '3', 'pick', '', 'yes', '', '', '', '', 'no',
                               gpus=cards)
         self.assertEqual(rc, 0, io.text())
         self.assertIn('  3. Built-in Graphics', io.said)
@@ -395,7 +404,7 @@ class TuiTests(Base):
                                                 settings={'fullscreen': True, 'gpu': 1}))
         self.assertEqual(rc, 0, io.text())
         self.assertEqual(FakeFlow.packed_settings, {'fullscreen': True, 'gpu': 1})
-        for bad in (dict(base=self.xci), dict(base=self.xci, keys=self.keys, output='appimage'),
+        for bad in (dict(base=self.xci), dict(base=self.xci, keys=self.keys, output='flatpak'),
                     dict(base=self.xci, keys=self.keys, settings={'HM_NO_AUDIO': '1'}),
                     dict(base=self.xci, keys=self.keys, settings={'gpu': 'fast; rm -rf'}),
                     dict(base=self.xci, keys=self.keys, nonsense=1)):

@@ -9,7 +9,7 @@ import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LAUNCHER = os.path.join(ROOT, 'packaging', 'hylian-melodies.sh')
-FAKE_EXE = '#!/bin/sh\necho "ran $(pwd) $*" > "$HOME/ran.txt"\n# v%d\n'
+FAKE_EXE = '#!/bin/sh\necho "ran $(pwd) $*" > "$HOME/ran.txt"\necho "${HM_GAME_DIR:-unset}" > "$HOME/gamedir.txt"\n# v%d\n'
 
 
 class Launcher(unittest.TestCase):
@@ -58,6 +58,17 @@ class Launcher(unittest.TestCase):
             self.assertEqual(f.read(), 'default=1\n')
         with open(os.path.join(self.home, 'ran.txt')) as f:
             self.assertEqual(f.read().strip(), f'ran {self.dir} --x y z')
+        with open(os.path.join(self.home, 'gamedir.txt')) as f:  # (the game uses the player's folder, not the install)
+            self.assertEqual(f.read().strip(), 'unset')
+
+    def test_links_into_an_earlier_appimage_mount_go(self):
+        os.makedirs(self.dir)
+        old = '/tmp/.mount_HylianXXXXXX/opt/hylian-melodies/dropped.dat'  # (gone: the image is mounted elsewhere now)
+        os.symlink(old, self.p('dropped.dat'))
+        os.symlink('/no/such/file', self.p('mine'))  # (the player's own dead link: left alone)
+        self.run_launcher()
+        self.assertFalse(os.path.lexists(self.p('dropped.dat')))
+        self.assertTrue(os.path.islink(self.p('mine')))
 
     def test_copy_renewed_when_install_changes(self):
         self.run_launcher()

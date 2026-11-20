@@ -10,12 +10,14 @@ import os
 
 from . import options as O
 
-# Outputs. Only 'package' is built so far. The others are named so plans, answers files and the manifest keep one
-# vocabulary when they arrive: 'appimage' is the channel for immutable systems such as SteamOS, where no package can
-# be installed (docs/installer.md, section 4).
-OUTPUTS = {'package': "A package for this system's package manager (pacman, apt, dnf, zypper)"}
-PLANNED = {'folder': 'a plain folder', 'appimage': 'an AppImage (for immutable systems such as SteamOS)',
-           'flatpak': 'a Flatpak'}
+# Outputs. 'appimage' is the generic one: built in a Debian 12 container for x86-64-v2, it runs on any current
+# distro, and it is the only output on an immutable system such as SteamOS or Bazzite, where no package can be
+# installed (installer/appimage.py). The others are named so plans, answers files and the manifest keep one vocabulary
+# when they arrive (docs/installer.md, section 4).
+OUTPUTS = {'package': "A package for this system's package manager (pacman, apt, dnf, zypper)",
+           'appimage': 'A generic AppImage: one file that runs on any current x86-64 Linux, also on immutable systems '
+                       'such as SteamOS and Bazzite (built in a container: needs podman or Docker)'}
+PLANNED = {'folder': 'a plain folder', 'flatpak': 'a Flatpak'}
 MARCH = {'v2': 'Generic: runs on any x86-64 CPU since about 2009, also on other computers',
          'v3': "Optimized for 2013+ CPUs (AVX2): may be a little faster, won't start on an older CPU",
          'native': "Optimized for exactly this computer's CPU: won't start on a different one"}
@@ -78,6 +80,11 @@ class Plan:
             setattr(self, k, v)
 
     @property
+    def container_toolchain(self):
+        """The AppImage build's own tools (built in the container, against its older C library)."""
+        return self.toolchain + '-appimage'
+
+    @property
     def stage(self):
         return os.path.join(self.work, 'stage', 'hylian-melodies')
 
@@ -89,8 +96,9 @@ def _free_gib(path):
     return st.f_bavail * st.f_frsize / GiB
 
 
-def validate(plan, fmt=None, has_v3=None, free_gib=_free_gib):
-    """-> [(field, text)]: everything wrong with the plan, in the order the questions are asked."""
+def validate(plan, fmt=None, has_v3=None, free_gib=_free_gib, immutable=None):
+    """-> [(field, text)]: everything wrong with the plan, in the order the questions are asked. immutable: the name
+    of this system when it is an immutable one (installer/deps.py), where only the AppImage can be built."""
     bad = []
     for field, what in (('base', 'cartridge dump'), ('keys', 'keys file'), ('update', 'update file')):
         p = getattr(plan, field)
@@ -105,13 +113,22 @@ def validate(plan, fmt=None, has_v3=None, free_gib=_free_gib):
         bad.append(('output', f'This version cannot build {PLANNED[plan.output]} yet; choose: ' + ', '.join(OUTPUTS)))
     elif plan.output not in OUTPUTS:
         bad.append(('output', f'Unknown output "{plan.output}"; choose: ' + ', '.join(OUTPUTS)))
-    if plan.march not in MARCH:
+    elif immutable and plan.output != 'appimage':
+        bad.append(('output', f'{immutable} is an immutable system: no package can be installed on it; only the '
+                              'generic AppImage can be built (output "appimage")'))
+    if plan.output == 'appimage' and plan.march != 'v2':
+        bad.append(('march', 'The generic AppImage is always built for any x86-64 CPU (CPU level v2)'))
+    elif plan.march not in MARCH:
         bad.append(('march', f'Unknown CPU level "{plan.march}"; choose: ' + ', '.join(MARCH)))
     elif plan.march == 'v3' and not (cpu_has_v3() if has_v3 is None else has_v3):
         bad.append(('march', "This computer's CPU lacks AVX2/FMA/BMI2: a v3 build could not start here; use v2"))
     if not isinstance(plan.keep_cache, bool):
         bad.append(('keep_cache', 'keep_cache must be true or false'))
     bad += [('settings', t) for t in O.check_settings(plan.settings)]
+    if plan.output == 'appimage':  # (each is given to the container as "-v PATH:PATH")
+        for field in ('base', 'keys', 'update', 'work', 'out'):
+            if ':' in getattr(plan, field):
+                bad.append((field, f'The AppImage build cannot use a path with ":" in it: {getattr(plan, field)}'))
     if fmt == 'rpm':
         for field in ('work', 'out'):
             if ' ' in getattr(plan, field):
@@ -184,11 +201,15 @@ def leftovers(plan, repo, package=None):
     cache = os.path.dirname(plan.toolchain)  # (the plan's own cache folder, as the build used it)
     items = []
     if package and os.path.isfile(package):
-        items.append((package, 'the package file: not needed once it is installed', True))
+        items.append((package, 'the AppImage, where it was built: keep it, or let the installer move it to '
+                               '~/Applications' if plan.output == 'appimage' else
+                      'the package file: not needed once it is installed', plan.output != 'appimage'))
     if os.path.isdir(plan.work) and os.listdir(plan.work):
         items.append((plan.work, 'build files' + (' kept for a faster rebuild' if plan.keep_cache else
                                                   ' (logs; the game files were removed)'), True))
     items.append((plan.toolchain, 'tools the build made (hactool and the like); made again when needed', True))
+    items.append((plan.container_toolchain, 'tools the AppImage build made in its container; made again when needed',
+                  True))
     src = os.path.join(cache, 'src')
     if os.path.realpath(repo).startswith(os.path.realpath(src) + os.sep):
         items.append((src, "the installer's source that install.sh downloaded", True))

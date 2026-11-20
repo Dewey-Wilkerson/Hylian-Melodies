@@ -124,6 +124,73 @@ def family(osr):
     return None
 
 
+# Immutable ("atomic") systems: the root file system is read-only, so no package can be installed and the build
+# packages cannot be either. They get the generic AppImage, built in a container (installer/appimage.py).
+# os-release ID -> name; VARIANT_ID values of Fedora's atomic desktops; and two markers on the running system.
+IMMUTABLE_IDS = {'steamos': 'SteamOS', 'bazzite': 'Bazzite', 'bluefin': 'Bluefin', 'aurora': 'Aurora',
+                 'opensuse-microos': 'openSUSE MicroOS', 'opensuse-aeon': 'openSUSE Aeon',
+                 'opensuse-kalpa': 'openSUSE Kalpa', 'nixos': 'NixOS', 'vanillaos': 'Vanilla OS',
+                 'vanilla': 'Vanilla OS', 'endless': 'Endless OS', 'blendos': 'blendOS', 'chimeraos': 'ChimeraOS'}
+IMMUTABLE_VARIANTS = ('silverblue', 'kinoite', 'sericea', 'onyx', 'cosmic-atomic', 'atomic', 'coreos', 'iot')
+OSTREE_MARKER = '/run/ostree-booted'  # (every rpm-ostree / bootc system: Silverblue, Kinoite, Bazzite, Bluefin...)
+
+
+def usr_read_only(path='/usr'):
+    try:
+        return bool(os.statvfs(path).f_flag & os.ST_RDONLY)
+    except OSError:
+        return False
+
+
+def immutable(osr, markers=True, exists=os.path.exists, read_only=usr_read_only):
+    """-> the system's name when it is an immutable one (read-only root: no packages can be installed), else None.
+    markers=False looks at the os-release fields only (tests, and an os-release that is not this system's)."""
+    ids = [osr.get('ID', '').lower()] + osr.get('ID_LIKE', '').lower().split()
+    name = osr.get('NAME') or osr.get('ID') or 'This system'
+    for i in ids:
+        if i in IMMUTABLE_IDS:
+            return osr.get('NAME') or IMMUTABLE_IDS[i]
+    variant = osr.get('VARIANT_ID', '').lower()
+    if any(variant == v or variant.endswith('-' + v) or variant.startswith(v + '-') for v in IMMUTABLE_VARIANTS):
+        return name
+    if markers and (exists(OSTREE_MARKER) or read_only()):
+        return name
+    return None
+
+
+# The AppImage is built in a container from this image: Debian 12's C library (2.36, 2022) is old enough that the
+# result starts on every current distro, and Debian 12 is a release the build was tried on (docs/installer.md).
+CONTAINER_BASE = 'docker.io/library/debian:12'
+CONTAINER_OS = {'ID': 'debian', 'VERSION_ID': '12'}
+CONTAINER_EXTRA = ('python3', 'squashfs-tools')  # (the base image has no Python; mksquashfs makes the AppImage)
+
+
+def container_engine(which=shutil.which):
+    """-> 'podman' or 'docker' (the first found), else None."""
+    for name in ('podman', 'docker'):
+        if which(name):
+            return name
+    return None
+
+
+class _Nothing:
+    """A probe of an empty system: every need is missing (to list the container's packages)."""
+    def cmd(self, name): return False
+    def pc(self, module, minimum=None): return False
+    def py(self, module): return False
+    def clang_major(self): return 0
+    def cxx(self): return False
+
+
+def container_packages():
+    """The Debian 12 packages the build container installs: every need of this table, as for a bare Debian 12."""
+    r = check(CONTAINER_OS, _Nothing())
+    pkgs = []
+    for n in r['needs']:
+        pkgs += [p for p in n['packages'] if p not in pkgs]
+    return list(CONTAINER_EXTRA) + [p for p in pkgs if p not in CONTAINER_EXTRA]
+
+
 def _version(s):
     out = []
     for part in s.split('.'):
