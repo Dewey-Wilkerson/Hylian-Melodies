@@ -530,3 +530,10 @@ How the checks of this session were done (to repeat them):
   Not checked through this route: a full build (needs the dump). The `v0.1.0` release is the source as of 2026-11-15:
   it still carries the old PKGBUILD and the localhost package addresses; a `v0.1.1` would bring the release up to
   `main`.
+- 2026-11-19 `v0.1.1` released (owner's OK): VERSION 0.1.1, annotated tag on `d979995`, `tools/release.py` (184
+  files, SHA-256 6dfb47f9...), GitHub pre-release with the tarball, the filled install.sh and SHA256SUMS; README's
+  install line names v0.1.1. The README's exact line run anonymously (no token, scratch XDG folders): downloaded,
+  SHA-256 checked, unpacked 0.1.1 (packaging/ without arch/, no localhost), installer started. `v0.1.0` stays up.
+  To make a later release: bump VERSION, commit, `git tag -a vX.Y.Z`, push both, `python3 tools/release.py
+  --repo-url https://github.com/Dewey-Wilkerson/Hylian-Melodies --tag vX.Y.Z`, `gh release create` with its three
+  files, README line.
