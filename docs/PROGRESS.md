@@ -557,3 +557,8 @@ How the checks of this session were done (to repeat them):
   `~/.cache/hylian-melodies/Hylian-Melodies-x86_64.AppImage` (1.8 GiB, delete when done). Not tried: SteamOS,
   Bazzite, Docker.
 
+- 2026-11-19 `v0.1.2` released (owner's OK): VERSION 0.1.2 (`edae051`), annotated tag, `tools/release.py` (186
+  files, SHA-256 ab83929e...), full release marked latest with the tarball, install.sh and SHA256SUMS; notes name the
+  generic AppImage and immutable systems. The README's line run anonymously (no token, scratch XDG folders):
+  v0.1.2 downloaded, SHA-256 checked, installer started (with an answers file asking for `appimage`: stopped at
+  "no cartridge dump given").
