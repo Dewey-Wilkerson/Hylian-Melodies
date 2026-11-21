@@ -636,3 +636,11 @@ How the checks of this session were done (to repeat them):
   Pause menu Options: our rows there (captures). Gamepad binding: SDL virtual pad (`HM_VIRTUAL_PAD`, new developer
   variable) bound Switch A to the right face button on the Controls page and the ini was saved. The real GitHub
   check answered as expected (a 0.2.0 build sees v0.3.0). Not done yet: rumble path, the container builds.
+- 2026-11-21 `v0.4.0` released (owner's request): commits `f9321fd`, `8cf51bc`, `cd47364`, VERSION 0.4.0 (`1376086`),
+  annotated tag, `tools/release.py` (SHA-256 2ff9043c...), release marked latest with the tarball, install.sh and
+  SHA256SUMS; notes from `CHANGELOG.md`. Before: the installer from scratch into a new folder (extract, lift, compile,
+  cleanup: exit 0, no errors), that build started to the title (window icon, version lines); 159 unit tests; content
+  guard clean. After, anonymously: `releases/latest/download/install.sh` pins v0.4.0 and that SHA-256, the tarball
+  downloads with it; a 0.3.0 build against GitHub showed "Update Available: v0.4.0" and its button started the
+  (stand-in) terminal. Left from the owner's list: rumble (the virtual pad now logs rumble requests), the container
+  builds.

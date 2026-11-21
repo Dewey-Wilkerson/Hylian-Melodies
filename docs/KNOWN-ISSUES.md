@@ -7,9 +7,10 @@
   screen with all our rows (checked 2026-11-21). Not yet checked: the translations of our rows other than English
   (drafted, not checked by native speakers). Key names on the Controls page are SDL's (English).
 - The update check and the title screen's version lines were checked against a file:// release (HM_UPDATE_URL), in
-  English, German and Japanese; not yet against GitHub itself (the first release after 0.3.0 will tell).
+  English, German and Japanese, and against GitHub itself after 0.4.0 was published (a 0.3.0 build: notice, button,
+  A, the stand-in terminal started with the install line).
 - The Update button was checked with stand-in terminals (the command it runs, the order it looks for one); not yet with a
-  real terminal and a real new release. Gaming Mode (Steam Deck): the button asks, then switches to Desktop Mode
+  real terminal running the installer to the end. Gaming Mode (Steam Deck): the button asks, then switches to Desktop Mode
   with `steamos-session-select plasma` and leaves a one-shot autostart entry that opens the installer there; checked
   with stand-ins only (the session switch, the entry's command line), not on a Deck. Gaming Mode is detected by
   `XDG_CURRENT_DESKTOP=gamescope` or gamescope on SteamOS (not confirmed on hardware).
