@@ -605,3 +605,7 @@ How the checks of this session were done (to repeat them):
   gear, order Exit - gear - main column, Exit closes), Options (Controls in Change Controllers' row, our Graphics rows
   first, Controls page), pause (Save and Return to Title -> title; Save and Quit -> saved, closed). The headless
   target links. 151 unit tests pass; content guard clean. `CHANGELOG.md` started (all releases).
+- 2026-11-21 `v0.3.0` released (owner's request): VERSION 0.3.0 (`4ea7491`), annotated tag, `tools/release.py` (195
+  files, SHA-256 54372365...), full release marked latest with the tarball, install.sh and SHA256SUMS; notes from
+  `CHANGELOG.md`. Checked anonymously: `releases/latest/download/install.sh` pins v0.3.0 and that SHA-256; the
+  tarball downloads with that SHA-256.
