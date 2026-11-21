@@ -3,6 +3,23 @@
 What changed for players in each release, newest first. Nothing of the game is in this repository or its releases:
 the installer builds the game from your own cartridge dump and keys.
 
+## 0.4.0 (2026-11-21)
+
+Title screen
+- The bottom right shows what is running: the game's version and DLC packs, and the Hylian Melodies version.
+- **Update notice**: at start the game asks GitHub whether a newer Hylian Melodies is out and, if so, says
+  "Update Available" above those lines. Nothing about you is sent. Off unless you turn it on: the installer asks
+  (recommended), and Options > Gameplay > Check for updates switches it any time.
+- **Update button**: while an update is available, an activated Sheikah Stone appears right of the gear. Choosing it
+  closes the game and opens your terminal with the installer, which offers to build the new version from the same
+  files as last time. In the Steam Deck's Gaming Mode it asks first, then switches to Desktop Mode, where the
+  installer opens by itself.
+
+Other
+- The game window has the same icon as the menu entry.
+- Started without a display or without a Vulkan driver, the game now says so plainly (and what to do) instead of
+  crashing.
+
 ## 0.3.0 (2026-11-21)
 
 Picture

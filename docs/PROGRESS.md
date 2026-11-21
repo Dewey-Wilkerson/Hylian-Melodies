@@ -609,3 +609,30 @@ How the checks of this session were done (to repeat them):
   files, SHA-256 54372365...), full release marked latest with the tarball, install.sh and SHA256SUMS; notes from
   `CHANGELOG.md`. Checked anonymously: `releases/latest/download/install.sh` pins v0.3.0 and that SHA-256; the
   tarball downloads with that SHA-256.
+- 2026-11-21 update notice and version lines (owner). `runtime/update_check.c`: one check per start on a thread,
+  the system's curl against GitHub's latest release, `HM_UPDATE_URL` for tests; setting `check_updates` (default
+  off, owner) with a row at the end of Options > Gameplay, and an installer question (default No, Yes recommended;
+  plain prompts and the curses screens, `installer/tui.py`). Title screen, bottom right: "Update Available: vX" (only when newer),
+  "Game Version: v1.4.0 + DLC 1, 2, 3, 4" (the game's own version element, text replaced, one line up), "Hylian
+  Melodies: v0.3.0" (ours, in the version's old place). Found on the way: where the game's "v1.4.0" comes from (the
+  open question in docs/IN-GAME-MENU.md). Checked by scripted runs with a file:// release: the lines (English,
+  German, Japanese), the row and its description, turning it off writes `check_updates = 0`. No new hooks (the
+  title build and layout hooks do it). 156 unit tests pass (+ `tests/test_update_check.py`). Not checked against
+  GitHub itself. Next (owner): a third title button right of the gear that closes the game and starts the installer.
+- 2026-11-21 Update button (owner). Title screen, right of the gear, only while a newer version is known: the game's
+  icon-button class with a 5-frame sprite of the game's activated Sheikah Stone (frames 1-4 cycling every 8 game
+  frames, scaled 0.65), found in textures.xml by its FNV-1a hash. Column 3: left/right go Exit - gear - Update - main
+  column; it fades in with the game's buttons (checked frame by frame: all three appear at the same frame). A: the
+  game closes and, at exit, `update_run_installer()` starts the default terminal with the README's install line
+  (`xdg-terminal-exec`, `$TERMINAL`, `x-terminal-emulator`, a fixed list; else `xdg-open` on the releases page).
+  Checked in scripted runs with a stand-in `xdg-terminal-exec` (the window closes, then it gets `sh -c <install
+  line>`), the column order and highlight by captures; `tests/test_update_check.py` covers the terminal order, the
+  browser fallback and the AppImage environment. Not tried with a real terminal or a real release.
+- 2026-11-21 Gaming Mode, window icon, start-up messages, checks (owner's list toward 1.0, items 5 and 6).
+  Gaming Mode update flow (update_check.c, title hook): ask, one-shot autostart entry, `steamos-session-select
+  plasma` at exit; `--run-installer`; checked in a run with `XDG_CURRENT_DESKTOP=gamescope` and a stand-in
+  session switch, the entry's command line by `tests/test_update_check.py`. Window icon from the menu entry's PNG
+  (`runtime/ui/window_icon.c`, FFmpeg). No display / no Vulkan driver: plain message and exit 1 (both reproduced).
+  Pause menu Options: our rows there (captures). Gamepad binding: SDL virtual pad (`HM_VIRTUAL_PAD`, new developer
+  variable) bound Switch A to the right face button on the Controls page and the ini was saved. The real GitHub
+  check answered as expected (a 0.2.0 build sees v0.3.0). Not done yet: rumble path, the container builds.

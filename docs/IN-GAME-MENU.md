@@ -127,6 +127,18 @@ eShop button is gone (our button took its object).
   so it draws ours at the gear's place; we draw the gear at (56, 306)), the update (left from the gear stops on ours,
   right from ours goes to the gear, A on ours quits: `runtime/ui/menu.c`, 0.4 s later for the sound).
 
+- **Update button** (2026-11-21): column 3 of the title update (the game moves 3 -> 2 on left, ignores right, and
+  highlights the gear (+0x88) for any column it doesn't know; our hook sets 0 <-> 3 <-> 2 and the highlight,
+  `0x700024aaa0 (button, selected, 0 | -1)`, which the title calls on every button every frame). The icon button
+  keeps its sprite at +0x78 and draws it each frame at its middle (`0x700024baf0`), with the frame the sprite holds
+  (i32 sprite +0x68; the draw `0x700022f7e0` reads it when called with frame -1), the pivot the button set in its
+  constructor (doubles +0x1a0 / +0x1a8, 0.5) and an offset it rewrites each frame (+0x188). A sprite's scale
+  (`0x700022e390`, doubles +0x108 / +0x110) works from its top left while the pivot counts in unscaled sizes: a
+  scaled sprite is centred with the pivot at half the scale. `0x700022f2a0 (sprite, name, frames, -1)` makes a sprite
+  of a horizontal sheet; the vector at +0x170 and the frame index at +0x12c are for animations made of separate
+  textures (indexing it with a sheet's frame crashed). The title fades its icon buttons in with `0x700024aae0
+  (button, d0 = screen +0x198)` each frame.
+
 ## Plan (owner's decisions, 2026-11-19)
 
 Rows go by topic, beside the game's own.
@@ -139,7 +151,7 @@ Rows go by topic, beside the game's own.
 | Frame pacing | Yes/No row, Graphics | done |
 | Master volume | removed | done (old ini lines are ignored; `HM_AUDIO_GAIN` stays for tests) |
 | Rebinding (16 buttons, keyboard and gamepad, reset) | new Controls page | done: a main-list button opens our page; one choice row per Switch button (its single choice is the bindings text, made at lookup time); A (or left/right) starts a capture in `input.c`, the next key or gamepad button binds that side, Esc / Home cancel; Reset row; the page scrolls (9 rows shown) |
-| About (version, folder, keys) | version on the title screen | **open** (parked by the owner, see below) |
+| About (version, folder, keys) | version on the title screen | done 2026-11-21: game version + DLC and the port's version, bottom right |
 | F1 / Minus+Plus | freed | done (the overlay is gone) |
 
 Also:
@@ -147,12 +159,15 @@ Also:
   far, drafted by the agent; a native check is wanted. New rows add their text to the table in `game_menu.c`
   (`tests/test_recomp.py` checks every text has every language).
 - **Open**: check the pause menu's Options (same builder or another one?). Parked by the owner.
-- **Open**: the version on the title screen. Where the game's "v1.4.0" comes from is not found yet. It is not a text
-  of `localization.xml` and not a "1.4.0" string or immediate in `main`, and the system's display version (am, cmd
-  23) answers "1.0.0". It doesn't go through the UTF-8 to UTF-32 conversion the text lookup uses either: a probe on
-  that function saw nothing on the title screen. The save's `worldGenVersion="1.4.0"` shows the game assembles it
-  itself, probably from numbers. Next: profile the title screen's construction, or search the running game's memory
-  for the UTF-32 text and walk back to whoever wrote it.
+- **Done (2026-11-21)**: the version on the title screen. The game's "v1.4.0" is a text element (`0x7000232df0
+  (text (0xf8), 1, 1, 0, 1)`) the title screen's constructor `0x7000053270` builds at screen +0x98 from the string
+  `0x7000544ef0` returns (x8: a `std::string`, "v" + the version), converted to UTF-32 and set with `0x7000232f60
+  (text, const std::u32string *, 0, const std::string *language)`. The title layout places it with `0x70002337c0
+  (text, d0 = x, d1 = y)` at the doubles behind `0x700089e818` / `0x700089dbd8` (625, 315: its right end), only
+  while the screen is on top. Our layout hook swaps +0x98 for our own element of the same class (the port's
+  version) while the game lays out, then draws the game's element (text replaced: "Game Version: ... + DLC ...")
+  14 units up and the update notice 28 up. (It had not been found by searching: it is no `localization.xml` text,
+  no "1.4.0" string or immediate in `main`, and doesn't go through the text lookup's UTF-8 conversion.)
 - Dear ImGui is gone: done.
 - Addresses stay in the repository (open question 10, answered).
 

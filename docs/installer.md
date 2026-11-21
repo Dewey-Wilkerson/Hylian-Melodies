@@ -211,6 +211,8 @@ saves; `installer/options.py`):
 
 - *Start in fullscreen* (`fullscreen`) and, on a computer with more than one, the *graphics card* (`gpu`). The
   menu entry's "Play fullscreen" action stays.
+- *Check for updates* (`check_updates`): default **No**, Yes marked "(recommended)" (owner, 2026-11-21). With it on,
+  the game asks GitHub at start whether a newer port version is out and says so on the title screen.
 - Behind one "something is wrong" question: frame pacing off, the shader cache off, Vulkan validation, input and
   audio-timing logs (`frame_pacing`, `shader_cache`, `vk_validation`, `log_input`, `audio_stats`).
 - They go into the package's default ini (`/usr/share/hylian-melodies-recomp/hylian-melodies.ini`), which the

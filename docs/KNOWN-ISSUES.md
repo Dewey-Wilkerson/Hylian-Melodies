@@ -2,15 +2,23 @@
 
 - 0.3.0's menu changes (pause menu's Save and Return to Title / Save and Quit, the title screen's Exit) were checked in
   English only; the new texts of the other languages are the agent's drafts, not looked at in the game.
-- The port's settings live in the game's own Options menu (docs/IN-GAME-MENU.md). Not yet checked: binding a gamepad
-  button on the Controls page (only keyboard binding was tried), the pause menu's Options (whether our rows appear
-  there too), and the translations of our rows other than English (drafted, not checked by native speakers). The
-  port's version is not on the title screen yet. Key names on the Controls page are SDL's (English).
+- The port's settings live in the game's own Options menu (docs/IN-GAME-MENU.md). Binding a gamepad button on the Controls page
+  was checked with SDL's virtual gamepad (`HM_VIRTUAL_PAD`), not a physical pad; the pause menu's Options is the same
+  screen with all our rows (checked 2026-11-21). Not yet checked: the translations of our rows other than English
+  (drafted, not checked by native speakers). Key names on the Controls page are SDL's (English).
+- The update check and the title screen's version lines were checked against a file:// release (HM_UPDATE_URL), in
+  English, German and Japanese; not yet against GitHub itself (the first release after 0.3.0 will tell).
+- The Update button was checked with stand-in terminals (the command it runs, the order it looks for one); not yet with a
+  real terminal and a real new release. Gaming Mode (Steam Deck): the button asks, then switches to Desktop Mode
+  with `steamos-session-select plasma` and leaves a one-shot autostart entry that opens the installer there; checked
+  with stand-ins only (the session switch, the entry's command line), not on a Deck. Gaming Mode is detected by
+  `XDG_CURRENT_DESKTOP=gamescope` or gamescope on SteamOS (not confirmed on hardware).
 - Input: gamepad (8BitDo Ultimate 2 Wireless), + / - and the keyboard confirmed by the owner; rumble not yet tested.
 - Black around small rooms (castle interiors) is the game's own framing, not a fault.
 - Occasional hitches during loads: the 833 ms one was the game's own work loading an area (827 ms of game CPU);
   a few 50-80 ms frames are loads too, two were our render thread (texture work). Not pursued further.
-- The window has no icon of its own; desktops show the menu entry's icon through the app id (`hylian-melodies`).
+- The window's icon is the menu entry's PNG, read from the icon theme (checked under XWayland: a 256x256
+  `_NET_WM_ICON`); when the package carries only the project's SVG (no ImageMagick at build time) the window has none.
 - Loading and the splash videos run at 30 fps (the game's own choice while loading; to confirm on hardware).
 - The software keyboard returns the initial text unchanged.
 - LAS Recomp's renderer still carries parts made for its 3D game that this port does not need or has not judged
@@ -31,8 +39,6 @@
   its own waits, ~1 ms of work): in one of two scripted runs 2026-11-14 for most of the run, in the other for ~260
   frames. The game's own choice (the frame pacer no longer holds it there; fixed 2026-11-14, docs/PROGRESS.md); why
   its frame controller goes there with that much headroom is not yet known.
-- Started without a display (seen in containers), the game ends with an abort and a core dump instead of saying
-  that it found no display or no Vulkan device.
 - The generic AppImage was built and started on the dev machine (Arch-based, rootless podman) only: a start on
   SteamOS / Bazzite / Silverblue, with Docker instead of podman, and on a system without some of the copied
   libraries is unchecked. Rootless podman needs the user's `/etc/subuid` range for the image's apt
