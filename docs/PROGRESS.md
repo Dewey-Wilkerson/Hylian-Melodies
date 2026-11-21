@@ -584,3 +584,24 @@ How the checks of this session were done (to repeat them):
     pause-menu check.
   - 149 unit tests pass.
 
+- 2026-11-20 resolution (testers' report: squashed pixel art, Steam Deck): integrated GPUs drew the game's 1280x720
+  targets at 853x480 (LAS Recomp's 720-line rule for 1080-line targets; reproduced with `HM_SCALE=0.6667`): removed,
+  1x is the game's size on every GPU. New Scaling filter choice **Pixel-perfect** (whole-number scale, black borders),
+  in all 11 languages. Window captures: 1856x1160 drawable -> 1280x720 at 1x, centred; 2610x1523 -> 2560x1440, every
+  2x2 block uniform. Not yet tried on a Deck. 150 unit tests pass.
+- 2026-11-20 menus (owner's list): Controls replaces Change Controllers in the Options main list (Back from Controls
+  lands on it: open-page hook); our Graphics rows first; pause menu: Save and Return to Title (was Leaderboards) and
+  Save and Quit (closes the game once saved), both with an "Are you sure? Press A again" step and the select sound.
+  Captured by scripted runs (Options, Graphics, Controls and Back; both pause rows, cancel by moving, quit: "save and
+  quit: saved, closing", "window closed", exit before the run's end); the sound heard by the owner. Labels of other
+  languages not looked at. Title-screen Exit button: open (template `packaging/art/`; notes in docs/IN-GAME-MENU.md).
+  Hooks: `recomp/hooks.txt` +3 (regenerate `main`).
+- 2026-11-21 title screen: Exit button (owner's icon) left of the gear, eShop button removed; left / right Exit - gear
+  - main column, A plays the select and quit sounds and closes the game ("window closed"). The game's gear menu hides
+  both icons. Captured in scripted runs (each step of the order, the gear's menu and back, Exit). New: RomFS extra
+  files from memory, a BNTX writer (`tests/test_bntx.py`), `tools/icon_to_c.py`. Hooks: +3 (regenerate `main`).
+- 2026-11-21 0.3.0 check: the installer from scratch into a new folder (extract, lift with the 12 hooks, compile at
+  the default x86-64-v2, cleanup: exit 0, no errors); that build run with a copied save: title (Exit left of the
+  gear, order Exit - gear - main column, Exit closes), Options (Controls in Change Controllers' row, our Graphics rows
+  first, Controls page), pause (Save and Return to Title -> title; Save and Quit -> saved, closed). The headless
+  target links. 151 unit tests pass; content guard clean. `CHANGELOG.md` started (all releases).

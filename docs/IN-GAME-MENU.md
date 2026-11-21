@@ -2,14 +2,22 @@
 
 Built on branch `in-game-gui` 2026-11-19, on `main` since v0.2.0. Goal: replace the Dear ImGui overlay (F1) with rows
 in the game's own Options menu. Status (2026-11-19): the Graphics page has the port's **Fullscreen** and **Frame pacing** rows (Yes/No, saved to
-`hylian-melodies.ini`, applied at once) and a **Scaling filter** choice row (Sharp / Smooth / Nearest, saved, used
-from the next start); a **Controls** page (button in the main list, after Language) rebinds every Switch button
+`hylian-melodies.ini`, applied at once) and a **Scaling filter** choice row (Sharp / Smooth / Nearest / Pixel-perfect, saved, used
+from the next start; Sharp <-> Pixel-perfect applies at once); a **Controls** page (its button takes the place of the game's Change Controllers, 2026-11-20) rebinds every Switch button
 to a key or a gamepad button, with Reset to defaults, in all 11 of the game's languages; the Fullscreen row follows F11 / Alt+Enter;
 pages longer than the game's 8 rows get a tighter layout so the panel stays clear of the title and the description
 box. Checked by scripted input and captures (English, German, Japanese, French; F11 sent with xdotool under XWayland). The
 FPS-in-title and master-volume settings are gone, and so is the overlay: Dear ImGui, its fetch and patch, the
 renderer's overlay command buffers and the game-font reader were removed (`runtime/ui/menu.c` only applies the
 Fullscreen row's request on the window thread).
+
+**2026-11-20**: the port's three Graphics rows come first on that page; Change Controllers is gone (Controls in its
+row); the pause menu's Leaderboards row (online only) is **Save and Return to Title** and Save and Quit closes the game
+after saving, both asking first ("Are you sure? Press A again" in the description box, with the game's select
+sound); the Options screen is the same one in the pause menu (owner, checked). **2026-11-21**: the title screen has an
+**Exit** button (the owner's icon, `packaging/art/exit-button.png`) left of the gear, in the game's own button frame;
+left / right go Exit - gear - main column; A on it plays the game's select and quit sounds and closes the game. The
+eShop button is gone (our button took its object).
 
 ## How it works
 
@@ -81,6 +89,44 @@ Fullscreen row's request on the window thread).
 - Labels need the text lookup hook. The row's draw code calls the lookup by id, and an unknown id aborts in the
   game's text formatting.
 
+## Pause menu and title screen (1.4.0; facts only)
+
+- **Pause menu** screen object: its rows are text elements in fixed fields (+0x50 Return, +0x58 Options, +0x68
+  Achievements, +0x60 Leaderboards, +0x70 Save and Quit; label ids 5, 46, 230, 103, 6), the selected row an index at
+  +0x104 (0..4 those rows, 5 and 6 the Inventory and Map tabs), +0x118 set while the leaderboard kinds are shown, the
+  description box at +0x48 (set with `0x700024c4c0 (box, text id)`). Per-frame update `0x700006aaa0`, description
+  for the selected row `0x700006a9a0` (called on a change only). Save and Quit asks nothing, commits the save twice and
+  goes to the title.
+- Our hooks: the update (A on rows 3 and 4: first press asks, second runs the game's Save and Quit with the index set
+  to 4; for Quit, `runtime/ui/menu.c` closes the window once a save was committed after the request and save writes
+  stopped for 1.5 s, at most 20 s), the description, and the text lookup (id 103 -> our label).
+- The menu select sound: `0x7000001710 (const std::string *name, 0, 0, std::string *out, d0..d5 = 1, 0, 0, 1, 0, 0)`;
+  the name is read at run time from the game's data (`0x70008cab9f`), never written in the repository.
+- **Options Back**: the game sets the selected main row to the page number it leaves (page 1: row 0) and calls
+  "open page" `0x70000650f0 (screen, 0)`, which also moves the cursor; our hook there selects the Controls row instead
+  when leaving our page.
+- **Title screen** builder `0x7000056530`: the gear is a sprite (`0x700022f170 (sprite (0x1b0 bytes), const
+  std::string *texture name)`) in an icon-button element (`0x700024b940 (element (0x80), sprite, 0x1d60, 0x1e)`) at
+  screen +0x88. Its texture is a 32x32 RGBA8 BNTX in `textures_bin/texture_pack.bin` (one zlib stream, entries listed
+  in `textures.xml`), drawn at the game's pixel scale: the visible art covers x 6..26, y 5..27, white with a one-pixel
+  dark shadow, inside a frame the game draws.
+- **Title layout** `0x70000551c0` (per frame): elements are placed with their vtable +0x10 `(element, x, y, width)`,
+  and placing one draws it that frame; the buttons only while the title screen is on top (`0x700000d070 (screen)`).
+  The gear at (20, 306, 31), the eShop button at (60, 306, 120) only when the byte behind GOT slot `0x7000a34a90` is
+  set (an eShop mode, read in ~20 places; it also makes the gear open Options directly): off in this port.
+- **Title update** `0x7000053ff0`: column at +0xc0 (0 gear, 1 eShop, 2 main), main row at +0xbc, input taken while
+  i32 +0x14c <= 0; actions through `0x700040ebd0 (action, -1, 0)` (left 0x50 / 0x5c, right 0x4f / 0x5e, A 0x28 / 0x0e);
+  left / right skip column 1 when the eShop mode is off; the selected column's button is highlighted (1: +0x90).
+- **Textures by name**: a sprite asks a cache; on a miss `0x700022cc20` -> `0x70004046f0` loads the name from the
+  packs, or else the loose file `data:/textures_bin/<name without .png>.bntx` (the game logs a warning that it was
+  loaded outside a preload block). The port adds `textures_bin/gui/HM_ExitButton.bntx` to the RomFS image from memory
+  (`romfs_layout_ex`), written by `runtime/hle/bntx.c` (32x32 RGBA8, our own writer; checked locally to give the
+  game's gear file byte for byte from the gear's pixels and name).
+- Our hooks: the title builder (makes a sprite with that texture and an icon button, `0x700024b940`, in the eShop
+  field +0x90, deleting the eShop button), the layout (the gear and our button swap fields while the game lays out,
+  so it draws ours at the gear's place; we draw the gear at (56, 306)), the update (left from the gear stops on ours,
+  right from ours goes to the gear, A on ours quits: `runtime/ui/menu.c`, 0.4 s later for the sound).
+
 ## Plan (owner's decisions, 2026-11-19)
 
 Rows go by topic, beside the game's own.
@@ -88,7 +134,7 @@ Rows go by topic, beside the game's own.
 | Overlay setting | Decision | Work |
 |---|---|---|
 | Fullscreen | Yes/No row, Graphics | done, follows F11 / Alt+Enter |
-| Scaling filter (3 choices, next start) | three-way row, Graphics | done (the game's choice row type) |
+| Scaling filter (4 choices, next start) | four-way row, Graphics | done (the game's choice row type; Pixel-perfect added 2026-11-20) |
 | FPS in the window title | removed | done (old ini lines are ignored) |
 | Frame pacing | Yes/No row, Graphics | done |
 | Master volume | removed | done (old ini lines are ignored; `HM_AUDIO_GAIN` stays for tests) |

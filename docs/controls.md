@@ -38,10 +38,15 @@ F11 or Alt+Enter switches between a window and fullscreen (borderless, the deskt
 The port's settings are rows of the game's own Options menu (title screen: the gear, then Options; docs/IN-GAME-MENU.md):
 
 - **Graphics**: *Fullscreen*, *Frame pacing* (a steady 60 Hz, like the Switch's display) and *Scaling filter* (Sharp,
-  Smooth or Nearest; used from the next start), after the game's own rows.
-- **Controls** (after Language): one row per Switch button with its keys and gamepad buttons. Press A (or left /
+  Smooth, Nearest or Pixel-perfect: whole steps only, with black borders; used from the next start, Sharp <->
+  Pixel-perfect at once), before the game's own rows.
+- **Controls** (in the main list where the game had Change Controllers): one row per Switch button with its keys and gamepad buttons. Press A (or left /
   right) on a row, then the key or gamepad button to use: a key replaces the keyboard binding, a gamepad button or
   trigger the gamepad one. Esc or Home cancels. *Reset to defaults* is the last row.
+
+Also the port's: the pause menu's *Save and Return to Title* (where the game had Leaderboards) and *Save and Quit*
+(saves, then closes the game); both ask first (A again to go ahead, move away to cancel). The title screen's *Exit*
+button (left of the gear) closes the game.
 
 Every change is written to `hylian-melodies.ini` at once: only the changed lines, the rest of the file stays as it
 is. Sound and music volume are the game's own (Options > Audio). There is no overlay menu any more: F1 and Minus +

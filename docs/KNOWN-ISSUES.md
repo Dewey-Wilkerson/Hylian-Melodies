@@ -1,5 +1,7 @@
 # Known issues
 
+- 0.3.0's menu changes (pause menu's Save and Return to Title / Save and Quit, the title screen's Exit) were checked in
+  English only; the new texts of the other languages are the agent's drafts, not looked at in the game.
 - The port's settings live in the game's own Options menu (docs/IN-GAME-MENU.md). Not yet checked: binding a gamepad
   button on the Controls page (only keyboard binding was tried), the pause menu's Options (whether our rows appear
   there too), and the translations of our rows other than English (drafted, not checked by native speakers). The
@@ -22,7 +24,9 @@
 - The game is built for x86-64-v2 by default, so a build runs on other x86-64 machines; the installer's CPU level
   question (or `--march v3|native`) optimizes for the building computer, and that copy refuses to start on an older
   CPU.
-- The menu's scaling-filter change takes effect at the next start (the filter is built into the present shader).
+- The menu's scaling-filter change takes effect at the next start (the filter is built into the present shader);
+  between Sharp and Pixel-perfect it applies at once (same shader, only the placement differs). Pixel-perfect and the
+  integrated-GPU resolution fix (2026-11-20) are not yet tried on a Steam Deck.
 - After a load the game sometimes picks its own 30 fps mode and stays in it (frames 33 ms apart, ~32 ms of that in
   its own waits, ~1 ms of work): in one of two scripted runs 2026-11-14 for most of the run, in the other for ~260
   frames. The game's own choice (the frame pacer no longer holds it there; fixed 2026-11-14, docs/PROGRESS.md); why

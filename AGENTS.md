@@ -67,6 +67,13 @@ python3 -m installer --base cadence-base.xci --keys prod.keys --dest ~/.cache/hy
     --temp ~/.cache/hylian-melodies/temp --hactool ~/.cache/hylian-melodies/toolchain/hactool/hactool
 ```
 
+## Releasing (owner's OK in the conversation each time)
+
+1. `CHANGELOG.md`: a section for the new version (player-facing). 2. `VERSION` bumped, committed ("Version X.Y.Z").
+3. Annotated tag `vX.Y.Z`, push `main` and the tag. 4. `python3 tools/release.py --repo-url
+https://github.com/Dewey-Wilkerson/Hylian-Melodies` -> `~/.cache/hylian-melodies/release/vX.Y.Z/`. 5. `gh release create`
+with the tarball, `install.sh` and `SHA256SUMS`, marked latest; notes from the changelog section plus the install line.
+
 ## Facts about the game (from docs/RECON.md)
 
 - Not Unity: custom C++ engine on nn::gfx/NVN, FMOD Studio statically linked, SDK 6.5.0.

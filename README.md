@@ -34,7 +34,8 @@ From a checkout instead: `git clone https://github.com/Dewey-Wilkerson/Hylian-Me
 sh install.sh --source .` What the package puts where: [docs/packaging.md](docs/packaging.md).
 
 Playing: the port's settings (fullscreen, frame pacing, scaling, rebinding the controls) are in the game's own
-Options menu; keys and buttons are in [docs/controls.md](docs/controls.md). Saves and settings live in `~/.local/share/hylian-melodies/`.
+Options menu; keys and buttons are in [docs/controls.md](docs/controls.md). What changed in each release:
+[CHANGELOG.md](CHANGELOG.md). Saves and settings live in `~/.local/share/hylian-melodies/`.
 
 ## More
 
