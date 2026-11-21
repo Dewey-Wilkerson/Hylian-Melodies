@@ -932,6 +932,14 @@ void backend_present_now(NvnTexture *t, uint64_t frame) {
         OutScale os;
         output_scale(dw, dh, false, SDL_GetTicksNS() / 1e9, game_ms, win_ms, &os);
         double sx = os.sx, sy = os.sy, vx = os.vx, vy = os.vy, vw = os.vw, vh = os.vh;
+        if (g_settings.upscale_filter == 3) {
+            // pixel-perfect: the game image (its contents' size) at the largest whole-number scale that fits, centred on
+            // whole pixels; a window smaller than the image keeps the fitted box (sharp bilinear scales it down)
+            double iw = b->width * (b->scalable && b->ax > 0 ? b->sx / b->ax : 1.0);
+            double ih = b->height * (b->scalable && b->ay > 0 ? b->sy / b->ay : 1.0);
+            double k = floor(fmin(dw / iw, dh / ih));
+            if (k >= 1) { vw = iw * k; vh = ih * k; vx = floor((dw - vw) / 2); vy = floor((dh - vh) / 2); }
+        }
         output_scale_log((unsigned long long)frame, dw, dh, &os);  // (diagnostics: [scale] on a change)
         const float crop[4] = {0.0f, 0.0f, 1.0f, 1.0f};  // uv origin and size: the whole game image
         extern void renderer_set_alloc_scale(float ax, float ay);

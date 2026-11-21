@@ -5,8 +5,8 @@
 // image is then drawn into (vx, vy, vw, vh) of the window. Video tab "Internal resolution" (g_settings.res_mode):
 //   Match display  render at the window's own pixel size (default)
 //   1x .. 4x       N times the Switch's docked image: 1080 lines x N (wide windows keep their shape: 32:9 at 2x =
-//                  7680 x 2160); capped to the GPU's 16384-pixel texture limit. 1x on an integrated GPU: 720 lines,
-//                  what the game's own scaler picked there (UHD 770); its scaler is off now (see rt_game_dynres)
+//                  7680 x 2160); capped to the GPU's 16384-pixel texture limit. (This game: 1x = its own
+//                  1280x720 targets, the pixel art at 1:1, on every GPU; the default.)
 //   .75x / .50x / .25x  of Match display (scaled up to the window - with MetalFX on macOS when chosen)
 //   Dynamic        Match display, lowered in steps while the GPU can't hold 60 fps and raised again when it can.
 //                  The render targets stay allocated at the Match display size (ax, ay) and the frame is drawn into
@@ -437,7 +437,9 @@ void output_scale(double dw, double dh, bool reshape_allowed, double now, double
     }
     p_mode = mode, p_ups = g_settings.upscaler;
     if (forced > 0) h = forced;
-    else if (mode >= 1 && mode <= 8) h = mode == 1 && g_gpu_integrated ? 720 / 1080.0 : mode;
+    // (LAS Recomp drew 720 lines at 1x on integrated GPUs: right for its 1080-line targets, but this game's are
+    // 1280x720 already, so that shrank the pixel art to 853x480 on the Steam Deck. 1x is the game's own size everywhere.)
+    else if (mode >= 1 && mode <= 8) h = mode;
     else {
         h = reshape ? dh / 1080.0 : fit;  // Match display
         if (mode == RES_DYNAMIC) {

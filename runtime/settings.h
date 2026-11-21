@@ -12,7 +12,8 @@ typedef struct {
     bool fullscreen;
     int res_mode;          // RES_*: internal resolution
     int upscaler;          // UPSCALE_*
-    int upscale_filter;    // game image -> window: 0 sharp bilinear (default), 1 linear, 2 nearest
+    int upscale_filter;    // game image -> window: 0 sharp bilinear (default), 1 linear, 2 nearest, 3 pixel-perfect
+                           // (whole-number scale, black borders; sharp bilinear only when the window is smaller)
     int screen_filter;     // always 0 (off): the present shader's colour filter parameter, not a setting here
     bool frame_pacing;     // the Switch display's 60 Hz cadence at each present (default on; nvn/objects.c)
     // audio

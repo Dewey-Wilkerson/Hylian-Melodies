@@ -248,7 +248,8 @@ static const char *builtin_src(const char *name, int *stage) {
     if (!strcmp(name, "present.frag")) {
         // The game image into the window. This game is pixel art at 1280x720: "sharp bilinear" (default) keeps each
         // game pixel a crisp square at any window size and smooths only the one-pixel edge between neighbours;
-        // upscale_filter = 1 (linear) or 2 (nearest) in the ini choose the plain filters (settings.h).
+        // upscale_filter = 1 (linear) or 2 (nearest) in the ini choose the plain filters (settings.h). 3 (pixel-perfect)
+        // uses sharp bilinear too: at the whole-number scale device.c gives it, that is exact pixel copies.
         *stage = STAGE_FRAGMENT;
         extern Settings g_settings;
         if (g_settings.upscale_filter == 1)
