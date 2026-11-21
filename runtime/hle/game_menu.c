@@ -15,6 +15,7 @@
 #include "../hle.h"
 #include "../romfs_build.h"
 #include "../settings.h"
+#include "../update_check.h"
 
 // game functions and data (1.4.0)
 #define G_NEW            0x70007c80a0ull  // operator new(size) -> x0
@@ -37,6 +38,7 @@ enum {
     T_SHARP, T_SMOOTH, T_NEAREST, T_PIXEL,
     T_PAUSE_TITLE, T_PAUSE_TITLE_DESC, T_PAUSE_QUIT_DESC, T_CONFIRM_TITLE, T_CONFIRM_QUIT,
     T_CONTROLS, T_CONTROLS_DESC, T_RESET, T_RESET_DESC, T_BIND_DESC, T_CAPTURE,
+    T_UPDATES, T_UPDATES_DESC, T_UPDATE_NOTICE, T_GAME_VERSION, T_UPDATE_DESKTOP_ASK, T_UPDATE_DESKTOP_HINT,
     T_BIND_LABEL,                  // 16: the Switch buttons, in runtime/ui/input.c's order
     T_COUNT = T_BIND_LABEL + 16,   // (the fixed texts end here)
     T_BIND_VALUE = T_COUNT,        // 16 made at lookup time: each button's bindings
@@ -51,6 +53,7 @@ static const uint32_t text_style[T_COUNT - HM_TEXT_BASE] = {
     TEXT_LABEL, TEXT_DESC, TEXT_LABEL, TEXT_DESC, TEXT_LABEL, TEXT_DESC, TEXT_CHOICE, TEXT_CHOICE, TEXT_CHOICE,
     TEXT_CHOICE, TEXT_LABEL, TEXT_DESC, TEXT_DESC, TEXT_DESC, TEXT_DESC,
     TEXT_BUTTON, TEXT_BUTTON_DESC, TEXT_BUTTON, TEXT_BUTTON_DESC, TEXT_DESC, TEXT_CHOICE,
+    TEXT_LABEL, TEXT_DESC, TEXT_DESC, TEXT_DESC, TEXT_DESC, TEXT_DESC,
     TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL,
     TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL,
 };
@@ -170,6 +173,48 @@ static const char *const texts[T_COUNT - HM_TEXT_BASE][NLANG] = {
     {"Press a key or button...", "キーかボタンを押してください...", "Taste drücken...", "Appuyez sur une touche...",
      "Appuyez sur une touche...", "Pulsa una tecla o botón...", "Presiona una tecla o botón...",
      "Premi un tasto o pulsante...", "키나 버튼을 누르세요...", "请按键...", "請按鍵..."},
+    {"CHECK FOR UPDATES", "アップデートを確認", "NACH UPDATES SUCHEN", "RECHERCHER LES MISES À JOUR",
+     "RECHERCHER LES MISES À JOUR", "BUSCAR ACTUALIZACIONES", "BUSCAR ACTUALIZACIONES", "CERCA AGGIORNAMENTI",
+     "업데이트 확인", "检查更新", "檢查更新"},
+    {"At start, ask GitHub whether a newer Hylian Melodies is out and say so on the title screen. Nothing about you is sent.",
+     "起動時に新しい Hylian Melodies が出ているか GitHub に問い合わせ、タイトル画面でお知らせします。あなたに関する情報は送信されません。",
+     "Beim Start bei GitHub nachfragen, ob es ein neueres Hylian Melodies gibt, und es auf dem Titelbildschirm anzeigen. Es werden keine Daten über dich gesendet.",
+     "Au démarrage, demande à GitHub si une version plus récente de Hylian Melodies est sortie et l'indique sur l'écran titre. Aucune information sur vous n'est envoyée.",
+     "Au démarrage, demande à GitHub si une version plus récente de Hylian Melodies est sortie et l'indique sur l'écran titre. Aucune information sur vous n'est envoyée.",
+     "Al iniciar, pregunta a GitHub si hay una versión más reciente de Hylian Melodies y lo indica en la pantalla de título. No se envía ningún dato sobre ti.",
+     "Al iniciar, pregunta a GitHub si hay una versión más reciente de Hylian Melodies y lo indica en la pantalla de título. No se envía ningún dato sobre ti.",
+     "All'avvio chiede a GitHub se è uscita una versione più recente di Hylian Melodies e lo segnala nella schermata del titolo. Non viene inviato alcun dato su di te.",
+     "시작할 때 GitHub에 새 버전의 Hylian Melodies가 있는지 확인하고 타이틀 화면에 알려 줍니다. 사용자에 관한 정보는 전송되지 않습니다.",
+     "启动时向 GitHub 查询是否有新版 Hylian Melodies，并在标题画面提示。不会发送任何关于你的信息。",
+     "啟動時向 GitHub 查詢是否有新版 Hylian Melodies，並在標題畫面提示。不會傳送任何關於你的資訊。"},
+    // the title screen's lines, bottom right (%s: a version; the last line, "Hylian Melodies: v...", is the same in all)
+    {"Update Available: v%s", "アップデートあり：v%s", "Update verfügbar: v%s", "Mise à jour disponible : v%s",
+     "Mise à jour disponible : v%s", "Actualización disponible: v%s", "Actualización disponible: v%s",
+     "Aggiornamento disponibile: v%s", "업데이트 있음: v%s", "有可用更新：v%s", "有可用更新：v%s"},
+    {"Game Version: %s", "ゲームバージョン：%s", "Spielversion: %s", "Version du jeu : %s", "Version du jeu : %s",
+     "Versión del juego: %s", "Versión del juego: %s", "Versione del gioco: %s", "게임 버전: %s", "游戏版本：%s",
+     "遊戲版本：%s"},
+    // Gaming Mode (Steam Deck): the update button asks first, or says how (no steamos-session-select)
+    {"Switch to Desktop Mode to update? Press A again.",
+     "デスクトップモードに切り替えて更新しますか？もう一度Aを押してください。",
+     "Zum Aktualisieren in den Desktop-Modus wechseln? Drücke erneut A.",
+     "Passer en mode Bureau pour mettre à jour ? Appuie de nouveau sur A.",
+     "Passer en mode Bureau pour mettre à jour ? Appuie de nouveau sur A.",
+     "¿Cambiar al modo Escritorio para actualizar? Pulsa A otra vez.",
+     "¿Cambiar al modo Escritorio para actualizar? Presiona A otra vez.",
+     "Passare alla modalità Desktop per aggiornare? Premi di nuovo A.",
+     "데스크톱 모드로 전환해 업데이트할까요? A를 한 번 더 누르세요.",
+     "切换到桌面模式进行更新？再按一次A。", "切換到桌面模式進行更新？再按一次A。"},
+    {"To update, switch to Desktop Mode and use the update button there.",
+     "更新するには、デスクトップモードに切り替えて、そこで更新ボタンを使ってください。",
+     "Zum Aktualisieren in den Desktop-Modus wechseln und dort die Update-Schaltfläche nutzen.",
+     "Pour mettre à jour, passe en mode Bureau et utilise le bouton de mise à jour.",
+     "Pour mettre à jour, passe en mode Bureau et utilise le bouton de mise à jour.",
+     "Para actualizar, cambia al modo Escritorio y usa allí el botón de actualizar.",
+     "Para actualizar, cambia al modo Escritorio y usa allí el botón de actualizar.",
+     "Per aggiornare, passa alla modalità Desktop e usa lì il pulsante di aggiornamento.",
+     "업데이트하려면 데스크톱 모드로 전환한 뒤 그곳에서 업데이트 버튼을 누르세요.",
+     "要更新，请切换到桌面模式，在那里使用更新按钮。", "要更新，請切換到桌面模式，在那裡使用更新按鈕。"},
     // the Switch buttons (runtime/ui/input.c: a b x y lstick rstick l r zl zr plus minus left up right down)
     SAME("A"), SAME("B"), SAME("X"), SAME("Y"),
     {"LEFT STICK (PRESS)", "Lスティック押し込み", "LINKER STICK (DRÜCKEN)", "STICK GAUCHE (APPUI)", "STICK GAUCHE (APPUI)",
@@ -309,6 +354,15 @@ static void on_pacing(Cpu *c) {
     settings_changed(SET_FRAME_PACING);
     save();
     LOG("[game-menu] frame pacing %s\n", v ? "on" : "off");
+}
+
+static void on_updates(Cpu *c) {
+    bool v = c->x[1] & 1;
+    g_settings.check_updates = v;
+    settings_changed(SET_CHECK_UPDATES);
+    save();
+    if (v) update_check_start();  // (once per run; turned off, the title screen just stops showing the notice)
+    LOG("[game-menu] update check %s\n", v ? "on" : "off");
 }
 
 static uint64_t add_toggle(Cpu *c, uint64_t page, uint32_t label, bool value, const char *cb_name, HostFn cb) {
@@ -699,6 +753,126 @@ void hm_hook_pause_update(Cpu *c, GuestFn orig) {  // x0 = the pause screen, eve
 volatile int g_game_menu_quit_now;        // (runtime/ui/menu.c closes the window)
 static uint64_t exit_button, exit_screen;
 
+// The version block, bottom right (owner, 2026-11-21), each line a text element of the class the game's own "v1.4.0"
+// is (built in the title screen's constructor 0x7000053270 at screen +0x98 from the string 0x7000544ef0 returns):
+//   Update Available: v0.4.0        ours, only while runtime/update_check.c knows a newer port version
+//   Game Version: v1.4.0 + DLC 1, 2, 3, 4   the game's element, its text replaced, one line up
+//   Hylian Melodies: v0.3.0         ours, drawn by the game's layout in its version's place (the fields are swapped)
+#define G_TEXT_CTOR       0x7000232df0ull // (text (0xf8 bytes), 1, 1, 0, 1): the version's arguments
+#define G_TEXT_DEPTH      0x7000233720ull // (text, 0x1d60)  (the game's calls after constructing one)
+#define G_TEXT_FLAG       0x7000233710ull // (text, 0)
+#define G_TEXT_SET        0x7000232f60ull // (text, const std::u32string *, 0, const std::string *language ("": current))
+#define G_TEXT_PLACE      0x70002337c0ull // (text, d0 = x, d1 = y): drawn this frame
+#define G_GAME_VERSION    0x7000544ef0ull // () -> std::string (x8): the game's "v1.4.0"
+#define G_VERSION_X       0x700089e818ull // double: the version's x in the title layout (its right end, 625)
+#define G_VERSION_Y       0x700089dbd8ull // double: its y (315)
+#define TITLE_VERSION     0x98            // the version's text element in the title screen
+#define TEXT_SIZE         0xf8
+#define LINE_H            14.0            // one line of that text
+enum { INFO_NOTICE, INFO_GAME, INFO_PORT, NINFO };
+static uint64_t info_text[NINFO];         // INFO_GAME is the screen's own; the others ours, owned here
+static char info_shown[NINFO][128];       // what each says now ("" = nothing set yet)
+static char game_version[32];             // the game's own ("1.4.0"), read when the title screen is built
+extern int aoc_installed(uint32_t *out, int max);  // services/misc.c: the DLC packs found (indices, sorted)
+const char *hm_version(void);             // main.c
+static void put_u32string(Cpu *c, uint64_t s, const char *t);
+static void read_string(uint64_t s, char *out, size_t cap);
+
+// The update button (owner, 2026-11-21): right of the gear, only while a newer port version is known; A closes the
+// game, which then starts the installer (update_check.c). Its icon is the game's own Sheikah Stone (the overworld's
+// fast-travel stone: a 5-frame sheet of 32x46, frame 0 dormant, 1-4 the activated stone's blue pulse), cycling
+// through the activated frames (owner). The texture's name is game data: it is
+// found at run time in the player's textures.xml by its FNV-1a hash, never written here. Its column is 3 (the
+// game's are 0 gear, 1 eShop (our Exit), 2 the main column): the game moves 3 -> 2 on left, ignores right, and
+// highlights the gear for any column it doesn't know, which our update hook corrects.
+#define G_SPRITE_FRAMES_CTOR 0x700022f2a0ull // (sprite (0x1b0), const std::string *texture, frames, -1)
+#define G_SPRITE_SCALE    0x700022e390ull // (sprite, d0): both scales (doubles at +0x108 / +0x110, 1.0 at first)
+#define SPRITE_FRAME      0x68            // i32: the frame of its sheet a sprite shows when drawn with frame -1 (as
+                                          // buttons draw it; the draw 0x700022f7e0 reads it)
+#define SPRITE_PIVOT      0x1a0           // double x, y: the point of the frame put at the drawing position (in
+                                          // unscaled frame sizes; the scale works from the top left)
+#define G_BUTTON_FADE     0x700024aae0ull // (button, d0): what the title passes its icon buttons as they come in
+#define TITLE_FADE        0x198           // double: that value for the gear (and the eShop button)
+#define G_BUTTON_SELECT   0x700024aaa0ull // (button, selected, 0 | -1): the highlight, set by the title every frame
+#define STONE_NAME_FNV    0x44e2e634726c0778ull
+#define STONE_FRAMES      5
+#define STONE_FIRST_LIT   1               // frames 1..4: activated
+#define STONE_SCALE       0.65            // 46 high -> 30: inside the gear's 31-unit frame
+#define STONE_TICKS       8               // frames of the game per frame of the stone
+#define TITLE_COL_UPDATE  3
+#define UPDATE_X          92              // Exit at 20, the gear at 56 (36 apart)
+static uint64_t update_button, update_sprite;
+static uint32_t update_message;           // Gaming Mode: 0, or the text the notice line shows instead (ask / hint)
+volatile int g_game_menu_update_req;      // (the installer at exit is started by update_check.c)
+
+static bool find_stone_texture(char *out, size_t cap) {  // -> its name, from textures.xml in the player's RomFS
+    char path[4096];
+    snprintf(path, sizeof path, "%s/textures.xml", g_romfs_dir ? g_romfs_dir : "romfs");
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+    char line[1024];
+    bool found = false;
+    while (!found && fgets(line, sizeof line, f)) {
+        const char *p = strstr(line, "filename=\"");
+        if (!p) continue;
+        p += 10;
+        const char *e = strchr(p, '"');
+        if (!e || (size_t)(e - p) >= cap) continue;
+        uint64_t h = 0xcbf29ce484222325ull;
+        for (const char *q = p; q < e; q++) h = (h ^ (uint8_t)*q) * 0x100000001b3ull;
+        if (h == STONE_NAME_FNV) {
+            memcpy(out, p, (size_t)(e - p));
+            out[e - p] = 0;
+            found = true;
+        }
+    }
+    fclose(f);
+    return found;
+}
+
+static bool update_visible(void) {
+    return update_button && g_settings.check_updates && update_check_newer() && !g_game_menu_update_req;
+}
+
+static void make_update_button(Cpu *c) {  // (in the title build hook: registers saved by the caller)
+    if (update_button) call1(c, LD64(LD64(update_button) + ROW_VT_DELETE), update_button);  // (the previous screen's)
+    update_button = update_sprite = 0;
+    static char tex[128];
+    static int looked;
+    if (!looked++ && !find_stone_texture(tex, sizeof tex)) LOG("[game-menu] update button: the stone's texture not found\n");
+    if (!tex[0]) return;
+    uint64_t sp0 = c->sp;
+    c->sp -= 0x20;
+    uint64_t name = c->sp;  // a long std::string (the name is longer than 22)
+    size_t n = strlen(tex), alloc = (n + 16) & ~15ull;
+    uint64_t buf = call1(c, G_NEW, alloc);
+    memcpy((void *)buf, tex, n + 1);
+    ST64(name, alloc | 1);
+    ST64(name + 8, n);
+    ST64(name + 16, buf);
+    update_sprite = call1(c, G_NEW, 0x1b0);
+    c->x[0] = update_sprite; c->x[1] = name; c->x[2] = STONE_FRAMES; c->x[3] = 0xffffffffu;
+    guest_call(c, G_SPRITE_FRAMES_CTOR);
+    call1(c, G_DELETE, buf);
+    double sc = STONE_SCALE;
+    uint64_t bits;
+    memcpy(&bits, &sc, 8);
+    c->x[0] = update_sprite;
+    c->v[0] = bits;
+    guest_call(c, G_SPRITE_SCALE);
+    update_button = call1(c, G_NEW, 0x80);
+    c->x[0] = update_button; c->x[1] = update_sprite; c->x[2] = 0x1d60; c->x[3] = 0x1e;
+    guest_call(c, G_ICON_BUTTON_CTOR);
+    // The button draws its sprite at its middle with the pivot it set (0.5, 0.5); scaled, the stone is centred with
+    // the pivot at half the scale.
+    sc = 0.5 * STONE_SCALE;
+    memcpy(&bits, &sc, 8);
+    ST64(update_sprite + SPRITE_PIVOT, bits);
+    ST64(update_sprite + SPRITE_PIVOT + 8, bits);
+    c->sp = sp0;
+}
+static char cur_lang[16];                 // the game's language, from the text lookup
+
 static bool disabled(void);
 
 int game_menu_romfs_extras(const RomfsExtraFile **extra) {
@@ -733,10 +907,96 @@ void hm_hook_title_build(Cpu *c, GuestFn orig) {  // x0 = the title screen
     ST64(self + TITLE_ESHOP, button);
     if (old) call1(c, LD64(LD64(old) + ROW_VT_DELETE), old);
     exit_button = button, exit_screen = self;
+    make_update_button(c);
+    // the version block's own lines (the previous title screen's go: nothing else refers to them)
+    for (int i = 0; i < NINFO; i++) {
+        if (i == INFO_GAME) continue;
+        if (info_text[i]) call1(c, LD64(LD64(info_text[i]) + ROW_VT_DELETE), info_text[i]);
+        info_text[i] = call1(c, G_NEW, TEXT_SIZE);
+        c->x[0] = info_text[i]; c->x[1] = 1; c->x[2] = 1; c->x[3] = 0; c->x[4] = 1;
+        guest_call(c, G_TEXT_CTOR);
+        c->x[0] = info_text[i]; c->x[1] = 0x1d60;
+        guest_call(c, G_TEXT_DEPTH);
+        c->x[0] = info_text[i]; c->x[1] = 0;
+        guest_call(c, G_TEXT_FLAG);
+    }
+    info_text[INFO_GAME] = LD64(self + TITLE_VERSION);
+    if (!game_version[0]) {
+        c->x[8] = c->sp;  // (the name buffer is done with)
+        guest_call(c, G_GAME_VERSION);
+        char v[32];
+        read_string(c->sp, v, sizeof v);
+        if (LD8(c->sp) & 1) call1(c, G_DELETE, LD64(c->sp + 16));
+        snprintf(game_version, sizeof game_version, "%s", v[0] == 'v' ? v + 1 : v);
+    }
+    memset(info_shown, 0, sizeof info_shown);
     c->sp = sp0;
     memcpy(&c->x[19], saved, sizeof saved);
     c->x[0] = r0;
     LOG("[game-menu] title screen %llx: Exit button added\n", (unsigned long long)self);
+}
+
+
+static void fill(char *out, size_t cap, uint32_t tmpl_id, const char *arg) {  // a text of ours with %s filled in
+    const char *t = game_menu_text(tmpl_id, cur_lang), *at = strstr(t, "%s");
+    snprintf(out, cap, "%.*s%s%s", (int)(at ? at - t : (long)strlen(t)), t, arg, at ? at + 2 : "");
+}
+
+static void set_text(Cpu *c, int i, const char *want) {  // (only when it changed: the language, a version arriving)
+    if (!info_text[i] || !strcmp(want, info_shown[i])) return;
+    uint64_t sp0 = c->sp;
+    c->sp -= 0x40;
+    uint64_t u32 = c->sp, lang = c->sp + 0x20;
+    memset((void *)u32, 0, 0x40);
+    put_u32string(c, u32, want);
+    c->x[0] = info_text[i]; c->x[1] = u32; c->x[2] = 0; c->x[3] = lang;
+    guest_call(c, G_TEXT_SET);
+    if (LD8(u32) & 1) call1(c, G_DELETE, LD64(u32 + 16));
+    if (LD8(lang) & 1) call1(c, G_DELETE, LD64(lang + 16));
+    c->sp = sp0;
+    snprintf(info_shown[i], sizeof info_shown[i], "%s", want);
+    LOG("[game-menu] title screen: \"%s\"\n", want);
+}
+
+static void place(Cpu *c, uint64_t text, double x, double y) {
+    uint64_t bx, by;
+    memcpy(&bx, &x, 8);
+    memcpy(&by, &y, 8);
+    c->x[0] = text;
+    c->v[0] = bx;
+    c->v[1] = by;
+    guest_call(c, G_TEXT_PLACE);
+}
+
+static void update_info_texts(Cpu *c) {
+    char t[128], v[64];
+    // the game's version and the DLC packs installed
+    snprintf(v, sizeof v, "v%s", game_version[0] ? game_version : "?");
+    uint32_t dlc[8];
+    int n = aoc_installed(dlc, 8);
+    for (int i = 0; i < n && i < 8; i++)
+        snprintf(v + strlen(v), sizeof v - strlen(v), "%s%u", i ? ", " : " + DLC ", dlc[i]);
+    fill(t, sizeof t, T_GAME_VERSION, v);
+    set_text(c, INFO_GAME, t);
+    int pv[3];
+    snprintf(t, sizeof t, "Hylian Melodies: %s%s", update_version_parse(hm_version(), pv) ? "v" : "", hm_version());
+    set_text(c, INFO_PORT, t);
+    const char *nv = g_settings.check_updates ? update_check_newer() : NULL;
+    if (nv) {
+        if (update_message) snprintf(t, sizeof t, "%s", game_menu_text(update_message, cur_lang));
+        else fill(t, sizeof t, T_UPDATE_NOTICE, nv);
+        set_text(c, INFO_NOTICE, t);
+    }
+}
+
+// The game's layout has just drawn our port line in the version's place (y); the rest goes above it.
+static void draw_info(Cpu *c, uint64_t game_text) {
+    double x, y;
+    memcpy(&x, (const void *)G_VERSION_X, 8);
+    memcpy(&y, (const void *)G_VERSION_Y, 8);
+    if (game_text) place(c, game_text, x, y - LINE_H);
+    if (info_shown[INFO_NOTICE][0] && g_settings.check_updates && update_check_newer())
+        place(c, info_text[INFO_NOTICE], x, y - 2 * LINE_H);
 }
 
 void hm_hook_title_layout(Cpu *c, GuestFn orig) {  // x0 = the title screen, every frame
@@ -744,18 +1004,38 @@ void hm_hook_title_layout(Cpu *c, GuestFn orig) {  // x0 = the title screen, eve
     if (self != exit_screen || LD64(self + TITLE_ESHOP) != exit_button) { orig(c); return; }
     // Placing an element draws it this frame. The game draws the gear at (20, 306), 31 wide, and the eShop field only
     // in its eShop mode: with the two fields swapped for its layout it draws Exit there; the gear goes to its right.
-    uint64_t gear = LD64(self + TITLE_GEAR);
+    uint64_t saved[13], regs[8];
+    memcpy(saved, &c->x[19], sizeof saved);
+    memcpy(regs, &c->x[0], sizeof regs);
+    update_info_texts(c);
+    memcpy(&c->x[19], saved, sizeof saved);
+    memcpy(&c->x[0], regs, sizeof regs);
+    // The version text the same way: ours ("Hylian Melodies: v...") in its place, the game's one line up (draw_info).
+    uint64_t gear = LD64(self + TITLE_GEAR), version = LD64(self + TITLE_VERSION);
+    bool swap_version = version && version == info_text[INFO_GAME] && info_text[INFO_PORT];
     ST64(self + TITLE_GEAR, exit_button);
     ST64(self + TITLE_ESHOP, gear);
+    if (swap_version) ST64(self + TITLE_VERSION, info_text[INFO_PORT]);
     orig(c);
     ST64(self + TITLE_GEAR, gear);
     ST64(self + TITLE_ESHOP, exit_button);
-    uint64_t saved[13], regs[8];
+    if (swap_version) ST64(self + TITLE_VERSION, version);
     memcpy(saved, &c->x[19], sizeof saved);
     memcpy(regs, &c->x[0], sizeof regs);
     if (call1(c, G_SCREEN_ACTIVE, self) & 1) {  // (only while the game draws its own buttons: not under the gear's menu)
         c->x[0] = gear; c->x[1] = 56; c->x[2] = 306; c->x[3] = 31;
         guest_call(c, LD64(LD64(gear) + ELEM_VT_PLACE));
+        draw_info(c, swap_version ? version : 0);
+        if (update_visible()) {
+            static unsigned tick;
+            ST32(update_sprite + SPRITE_FRAME, STONE_FIRST_LIT + (tick++ / STONE_TICKS) % (STONE_FRAMES - STONE_FIRST_LIT));
+            uint64_t fade = LD64(self + TITLE_FADE);  // (comes in with the game's buttons)
+            c->x[0] = update_button;
+            c->v[0] = fade;
+            guest_call(c, G_BUTTON_FADE);
+            c->x[0] = update_button; c->x[1] = (uint64_t)UPDATE_X; c->x[2] = 306; c->x[3] = 31;
+            guest_call(c, LD64(LD64(update_button) + ELEM_VT_PLACE));
+        }
     }
     memcpy(&c->x[19], saved, sizeof saved);
     memcpy(&c->x[0], regs, sizeof regs);
@@ -778,17 +1058,29 @@ static bool action(Cpu *c, uint32_t a1, uint32_t a2) {
     return r;
 }
 
+static void select_button(Cpu *c, uint64_t button, bool on) {
+    uint64_t saved[13], regs[8];
+    memcpy(saved, &c->x[19], sizeof saved);
+    memcpy(regs, &c->x[0], sizeof regs);
+    c->x[0] = button; c->x[1] = on; c->x[2] = on ? 0 : 0xffffffffu;
+    guest_call(c, G_BUTTON_SELECT);
+    memcpy(&c->x[19], saved, sizeof saved);
+    memcpy(&c->x[0], regs, sizeof regs);
+}
+
 void hm_hook_title_update(Cpu *c, GuestFn orig) {  // x0 = the title screen, every frame
     uint64_t self = c->x[0];
     if (self != exit_screen || LD64(self + TITLE_ESHOP) != exit_button || g_game_menu_quit_now) {
         orig(c);
         return;
     }
+    bool upd = update_visible();
+    if (!upd && (int32_t)LD32(self + TITLE_COLUMN) == TITLE_COL_UPDATE) ST32(self + TITLE_COLUMN, 0);  // (it went away)
     int col = (int32_t)LD32(self + TITLE_COLUMN);
     bool ready = (int32_t)LD32(self + TITLE_BUSY) <= 0;
     bool left = ready && action(c, ACT_LEFT1, ACT_LEFT2), right = ready && action(c, ACT_RIGHT1, ACT_RIGHT2);
-    // On screen, left to right: Exit (our column 1), the gear (0), the main column (2). The game moves 2 -> 0 on left
-    // and 0 -> 2 on right by itself (it skips 1); the rest is ours.
+    // On screen, left to right: Exit (our column 1), the gear (0), Update (our 3, while shown), the main column (2).
+    // The game moves 2 -> 0 on left and 0 -> 2 on right by itself (it skips 1), 3 -> 2 on left; the rest is ours.
     if (col == 1 && ready) {
         if (action(c, ACT_OK1, ACT_OK2)) {  // Exit: the game's own close sound, then the window closes
             play_sound(c, G_SOUND_SELECT);
@@ -799,10 +1091,51 @@ void hm_hook_title_update(Cpu *c, GuestFn orig) {  // x0 = the title screen, eve
         }
         if (left) return;  // (nothing further left; the game would move to the gear)
     }
+    if (col != TITLE_COL_UPDATE) update_message = 0;  // (moving away cancels the question)
+    if (col == TITLE_COL_UPDATE && ready && action(c, ACT_OK1, ACT_OK2) && update_gaming_mode()) {
+        // Gaming Mode: first A asks; the second switches to Desktop Mode, where the installer starts by itself
+        if (update_message != T_UPDATE_DESKTOP_ASK && update_desktop_switch_available()) {
+            update_message = T_UPDATE_DESKTOP_ASK;
+            play_sound(c, G_SOUND_SELECT);
+        } else if (update_message == T_UPDATE_DESKTOP_ASK && update_switch_to_desktop_at_exit()) {
+            play_sound(c, G_SOUND_SELECT);
+            play_sound(c, G_SOUND_QUIT);
+            g_game_menu_update_req = 1;
+            g_game_menu_quit_now = 1;
+            LOG("[game-menu] title screen: update (closing, then Desktop Mode)\n");
+        } else {
+            update_message = T_UPDATE_DESKTOP_HINT;
+            LOG("[game-menu] title screen: update in Gaming Mode: no switch to Desktop Mode here, hint shown\n");
+        }
+        return;
+    }
+    if (col == TITLE_COL_UPDATE && ready && action(c, ACT_OK1, ACT_OK2)) {
+        if (update_installer_available()) {  // Update: the game closes; the installer starts as it exits
+            play_sound(c, G_SOUND_SELECT);
+            play_sound(c, G_SOUND_QUIT);
+            g_game_menu_update_req = 1;
+            update_run_installer_at_exit();
+            g_game_menu_quit_now = 1;
+            LOG("[game-menu] title screen: update (closing, then the installer)\n");
+        } else {
+            LOG("[game-menu] title screen: update pressed, but no terminal or browser to start: the game stays\n");
+        }
+        return;
+    }
     orig(c);
     int now = (int32_t)LD32(self + TITLE_COLUMN);
     if (col == 0 && left && now == 0) ST32(self + TITLE_COLUMN, 1), play_sound(c, G_SOUND_MOVE);  // gear -> Exit
     else if (col == 1 && right) ST32(self + TITLE_COLUMN, 0);  // Exit -> gear (the game moved to 2, with its sound)
+    else if (upd && col == 0 && right && now == 2) ST32(self + TITLE_COLUMN, TITLE_COL_UPDATE);  // gear -> Update
+    else if (upd && col == 2 && left && now == 0) ST32(self + TITLE_COLUMN, TITLE_COL_UPDATE);  // main -> Update
+    else if (col == TITLE_COL_UPDATE && left) ST32(self + TITLE_COLUMN, 0);  // Update -> gear (the game went to 2)
+    else if (col == TITLE_COL_UPDATE && right) ST32(self + TITLE_COLUMN, 2), play_sound(c, G_SOUND_MOVE);  // -> main
+    // the highlight: the game set it for its own columns (the gear for ours); Update's is ours
+    now = (int32_t)LD32(self + TITLE_COLUMN);
+    if (upd && ready) {
+        if (now == TITLE_COL_UPDATE) select_button(c, LD64(self + TITLE_GEAR), false);
+        select_button(c, update_button, now == TITLE_COL_UPDATE);
+    }
 }
 
 static bool disabled(void) {
@@ -833,6 +1166,8 @@ void hm_hook_options_build(Cpu *c, GuestFn orig) {
         for (int i = 0; i < 3; i++) ours[i] = LD64(re - 24 + 8 * i);
         for (uint64_t q = re - 8; q >= rb + 24; q -= 8) ST64(q, LD64(q - 24));
         for (int i = 0; i < 3; i++) ST64(rb + 8 * i, ours[i]);
+        if (page - 24 > b)  // the page before Graphics is Gameplay (page 0 is the main list): the update check at its end
+            add_toggle(c, page - 24, T_UPDATES, g_settings.check_updates, "hm_game_menu_updates", on_updates);
         added = 1;
         break;
     }
@@ -962,13 +1297,18 @@ static void read_string(uint64_t s, char *out, size_t cap) {  // libc++ std::str
 void hm_hook_text_lookup(Cpu *c, GuestFn orig) {  // w0 = id, x1 = language (std::string *, in/out), x8 = result
     uint32_t game_id = (uint32_t)c->x[0], id = game_id;
     if (game_id == TEXT_LEADERBOARDS && !disabled()) id = T_PAUSE_TITLE;  // (the pause menu's row, repurposed)
-    if (id < HM_TEXT_BASE || id >= T_END) { orig(c); return; }
     uint64_t res = c->x[8], lang_s = c->x[1];
+    if (id < HM_TEXT_BASE || id >= T_END) {  // the game's: only the language is noted (for the title's notice)
+        orig(c);
+        read_string(lang_s, cur_lang, sizeof cur_lang);
+        return;
+    }
     if (id == game_id)  // ours: a game text of the same kind, for the style field (a game's own id keeps its own)
         c->x[0] = id >= T_COUNT ? TEXT_CHOICE : text_style[id - HM_TEXT_BASE];
     orig(c);                                  // the text is replaced
     char lang[16];
     read_string(lang_s, lang, sizeof lang);  // (the lookup fills in the game's current language when it was empty)
+    memcpy(cur_lang, lang, sizeof cur_lang);
     uint64_t saved[13];
     memcpy(saved, &c->x[19], sizeof saved);
     put_u32string(c, res + 8, game_menu_text(id, lang));

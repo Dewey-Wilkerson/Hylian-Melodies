@@ -137,7 +137,7 @@ def show_needs(io, result):
 
 def ask_settings(io, cur, gpus):
     """The game settings the installer asks about (installer/options.py): fullscreen, the graphics card when there
-    are several, and the troubleshooting settings behind one question. cur: {key: value} now (the player's ini).
+    are several, the update check (default no, yes recommended: owner), and the troubleshooting settings behind one question. cur: {key: value} now (the player's ini).
     -> {key: value} for every setting"""
     new = dict(cur)
     o = O.BY_KEY['fullscreen']
@@ -151,6 +151,11 @@ def ask_settings(io, cur, gpus):
         a = choose(io, 'Which graphics card should draw the game?', pick,
                    str(cur['gpu']) if str(cur['gpu']) in dict(pick) else 'auto')
         new['gpu'] = 'auto' if a == 'auto' else int(a)
+    o = O.BY_KEY['check_updates']
+    io.say(o.title + ': ' + o.text)
+    new['check_updates'] = choose(io, 'Check for updates when the game starts?',
+                                  [('no', 'No'), ('yes', 'Yes (recommended)')],
+                                  'yes' if cur['check_updates'] else 'no') == 'yes'
     trouble = O.offered('troubleshooting')
     on = [o.title for o in trouble if cur[o.key] != o.default]
     io.say('Troubleshooting settings are for when something is wrong; a normal game needs none.'
@@ -173,6 +178,8 @@ def settings_summary(values):
     parts = ['fullscreen' if values.get('fullscreen') else 'in a window']
     if values.get('gpu', 'auto') != 'auto':
         parts.append(f"graphics card {values['gpu']}")
+    if values.get('check_updates'):
+        parts.append('checks for updates')
     parts += [o.title.lower() for o in O.offered('troubleshooting') if values.get(o.key, o.default) != o.default]
     return ', '.join(parts)
 
@@ -198,7 +205,7 @@ def existing(io, plan, repo, gpus):
     e = m['installs'][-1]
     a = choose(io, 'What now?', [('again', 'Build it again (after an update, or with other build options)'),
                                   ('settings', 'Change the game settings (fullscreen, graphics card, '
-                                               'troubleshooting); no rebuild'),
+                                               'update check, troubleshooting); no rebuild'),
                                   ('remove', 'Remove it'), ('fresh', 'Start over with other files')], 'again')
     if a == 'settings':
         change_settings(io, plan, repo, gpus)

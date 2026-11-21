@@ -71,6 +71,9 @@ SETTINGS = [
             'Which graphics card draws the game, on a computer with more than one. Left on auto, the game takes the '
             'separate (faster) card when there is one. The number is the one in the log lines "[vk] gpu N: ...".',
             kind='gpu', default='auto', env='HM_GPU'),
+    Setting('check_updates', 'player', 'Check for updates',
+            'When the game starts, it asks GitHub whether a newer Hylian Melodies is out and says so on the title '
+            'screen. Nothing about you is sent. Also in the game\'s Options > Gameplay.'),
     Setting('frame_pacing', 'troubleshooting', 'Turn off frame pacing',
             "Lets the game run on its own limiter (about 61 pictures a second) instead of the console's steady 60. "
             'Try it if the picture stutters evenly; the beat may then drift against the picture. Also in the '
@@ -100,7 +103,8 @@ DEVELOPER = {
         HM_SOFT_WRITE_TRACKING HM_TICK_SCALE HM_TRACE_SVC HM_UNIT_HEAP_SCALE HM_VSYNC_BT HM_WRITE_TRACKING''',
     'movies': 'HM_LOG_MOVIE HM_MOVIE_CPU_CONVERT HM_MOVIE_EOS_CODE HM_MOVIE_NO_FORMAT_EVENT HM_NO_MOVIE_AUDIO',
     'audio': 'HM_AUDIO_GAIN HM_AUDIO_LOG HM_AUDIO_PERIOD HM_AUDIO_QUEUE_MS HM_AUDOUT_WAV HM_NO_AUDIO',
-    'input and menu': 'HM_DEBUG_KEYS HM_GAME_MENU HM_INPUT_SCRIPT',
+    'input and menu': 'HM_DEBUG_KEYS HM_GAME_MENU HM_INPUT_SCRIPT HM_VIRTUAL_PAD',
+    'update check': 'HM_UPDATE_INSTALLER HM_UPDATE_URL',
     'NVN front end, pacing, shader preparation': '''
         HM_DYN_NO_GPU HM_DYN_START HM_DYN_TEST HM_KEEP_DISCARD HM_LOG_BINDS HM_LOG_DYNRES HM_LOG_INTERVAL
         HM_LOG_PACE HM_LOG_PACKAGED HM_LOG_SYNC HM_LOG_TEXELS HM_PACE HM_RECORD_KEYS HM_RENDER_THREAD

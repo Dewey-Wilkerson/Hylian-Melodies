@@ -58,6 +58,12 @@ class SettingsSave(unittest.TestCase):
         old = 'fullscreen = 0\n'
         self.assertEqual(self.save(old, 'upscale_filter=1'), 'fullscreen = 0\n\n# --- set in the menu\nupscale_filter = 1\n')
 
+    def test_update_check_replaces_the_default_example(self):
+        with open(DEFAULT_INI) as f:
+            out = self.save(f.read(), 'check_updates=1')
+        self.assertIn('\ncheck_updates = 1 ', out)
+        self.assertNotIn('# check_updates', out)
+
     def test_missing_file_created(self):
         self.assertEqual(self.save(None, 'frame_pacing=0'), '\n# --- set in the menu\nframe_pacing = 0\n')
 

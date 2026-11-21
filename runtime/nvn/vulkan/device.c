@@ -144,6 +144,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_cb(VkDebugUtilsMessageSeverityFlagBi
 // vk_validation = 1 in the ini or HM_VK_VALIDATION=1: Khronos validation layer (MSYS2 package vulkan-validation-layers)
 // HM_VK_VALIDATION_STOP=1: require that layer and its callback, and exit nonzero on the first error.
 static bool validating;  // the validation layer is on (validation_exit)
+static _Noreturn void startup_fail(const char *what, const char *fix);  // (below)
+#define NO_VULKAN_FIX "Install your graphics card's Vulkan driver (for example mesa-vulkan-drivers / vulkan-radeon / " \
+                      "vulkan-intel, or NVIDIA's driver); the game needs Vulkan 1.3. vulkaninfo --summary lists what " \
+                      "this computer has."
+
 static void create_instance(void) {
     Uint32 n_sdl = 0;
     const char *const *sdl_ext = SDL_Vulkan_GetInstanceExtensions(&n_sdl);
@@ -173,7 +178,11 @@ static void create_instance(void) {
         r = vkCreateInstance(&ci, NULL, &g_vk.inst);
     }
     validating = validate;
-    if (r != VK_SUCCESS) FATAL("vkCreateInstance: %d (is a Vulkan 1.3 driver installed?)\n", r);
+    if (r != VK_SUCCESS) {
+        char what[96];
+        snprintf(what, sizeof what, "no Vulkan driver could be started (vkCreateInstance: %d).", r);
+        startup_fail(what, NO_VULKAN_FIX);
+    }
     if (validate) {
         PFN_vkCreateDebugUtilsMessengerEXT f =
             (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(g_vk.inst, "vkCreateDebugUtilsMessengerEXT");
@@ -202,7 +211,7 @@ static bool has_ext(VkExtensionProperties *e, uint32_t n, const char *name) {
 static void pick_device(void) {
     uint32_t n = 0;
     vkEnumeratePhysicalDevices(g_vk.inst, &n, NULL);
-    if (!n) FATAL("no Vulkan device\n");
+    if (!n) startup_fail("no graphics card with a Vulkan driver was found.", NO_VULKAN_FIX);
     VkPhysicalDevice *pd = calloc(n, sizeof *pd);
     vkEnumeratePhysicalDevices(g_vk.inst, &n, pd);
     int want = getenv("HM_GPU") ? atoi(getenv("HM_GPU")) : g_settings.gpu, best = -1, best_score = -1;
@@ -216,7 +225,7 @@ static void pick_device(void) {
         if ((int)i == want) score = 100;
         if (score > best_score) { best_score = score; best = (int)i; }
     }
-    if (best < 0) FATAL("no Vulkan 1.3 device\n");
+    if (best < 0) startup_fail("no graphics card supports Vulkan 1.3.", NO_VULKAN_FIX);
     g_vk.phys = pd[best];
     free(pd);
     vkGetPhysicalDeviceProperties(g_vk.phys, &g_vk.props);
@@ -1104,6 +1113,19 @@ static void exit_after_shot(void) {
     _exit(0);
 }
 
+// Start-up problems the player can fix (no display, no Vulkan driver): one plain message on the terminal, in the log
+// and in a message box when there is a display, then exit 1. Not the crash path: no core dump, trace or crash dialog.
+static _Noreturn void startup_fail(const char *what, const char *fix) {
+    LOG("Hylian Melodies cannot start: %s\n%s\n", what, fix);
+    if (plat_console_fd >= 0) dprintf(plat_console_fd, "Hylian Melodies cannot start: %s\n%s\n", what, fix);
+    char text[1024];
+    snprintf(text, sizeof text, "Hylian Melodies cannot start: %s\n\n%s", what, fix);
+    if (SDL_WasInit(SDL_INIT_VIDEO)) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Hylian Melodies", text, NULL);
+    fflush(stdout);
+    fflush(stderr);
+    _exit(1);
+}
+
 // Quitting, before exit() (the window closed; also from exit() itself, quick_exit_handler): the render thread stops
 // between items, so no image is acquired or presented any more; the recorder thread stops making driver calls (the
 // packets it still had are dropped, record.c rec_quit) and is idle; then the GPU finishes and the pipeline cache is
@@ -1147,7 +1169,15 @@ void ui_window_init(void) {
     // the window's class / app id: the desktop entry's StartupWMClass (packaging/hylian-melodies.desktop)
     SDL_SetHint(SDL_HINT_APP_ID, "hylian-melodies");
     SDL_SetHint(SDL_HINT_APP_NAME, "Hylian Melodies");
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) FATAL("SDL_Init: %s\n", SDL_GetError());
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
+        char what[300];
+        snprintf(what, sizeof what, "no display was found (%s).", SDL_GetError());
+        startup_fail(what, getenv("DISPLAY") || getenv("WAYLAND_DISPLAY")
+                               ? "The desktop's display could not be opened; start the game from your desktop session."
+                               : "It needs a graphical desktop (neither WAYLAND_DISPLAY nor DISPLAY is set): start it "
+                                 "from your desktop's menu or a terminal inside the desktop, not over SSH or from a "
+                                 "text console.");
+    }
     input_load_user_mappings();
     int win_w = 1280, win_h = 720;
     if (getenv("HM_WINDOW")) sscanf(getenv("HM_WINDOW"), "%dx%d", &win_w, &win_h);
@@ -1159,7 +1189,14 @@ void ui_window_init(void) {
         if (scripted) SDL_SetHint(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, "0");
     }
     window = SDL_CreateWindow("Hylian Melodies", win_w, win_h, wflags);
-    if (!window) FATAL("SDL_CreateWindow: %s\n", SDL_GetError());
+    if (!window) {  // (with no Vulkan driver this is where it shows: the window is a Vulkan one)
+        const char *err = SDL_GetError();
+        char what[300];
+        snprintf(what, sizeof what, "the game window could not be made (%s).", err);
+        startup_fail(what, strstr(err, "Vulkan") ? NO_VULKAN_FIX : "Start the game from your desktop session.");
+    }
+    extern void ui_window_icon(SDL_Window *w);  // runtime/ui/window_icon.c: the menu entry's picture
+    ui_window_icon(window);
     // the Fullscreen setting applies from the start screen on (not only once the game runs); test windows stay windows
     {   // --fullscreen / --windowed on the command line win over the ini (runtime/main.c)
         extern int g_cli_fullscreen;

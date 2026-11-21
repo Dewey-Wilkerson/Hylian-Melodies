@@ -469,7 +469,63 @@ static void script_frame(uint64_t frame) {
     publish();
 }
 
-void input_frame(uint64_t frame) { script_frame(frame); }
+// HM_VIRTUAL_PAD=<frame>:<button>[/<frames>],... (test runs): an SDL virtual gamepad, attached at the first frame,
+// whose buttons (SDL's names: south, east, west, north, dpup, leftshoulder, start ...) are held from those presented
+// frames (6 by default). It reaches the game the way a real pad does: SDL's gamepad events (binding on the Controls
+// page included).
+static void virtual_pad_frame(uint64_t frame) {
+    static int init;
+    static SDL_Joystick *joy;
+    static struct { uint64_t at, until; int button; } steps[64];
+    static int nsteps;
+    if (!init) {
+        init = 1;
+        const char *p = getenv("HM_VIRTUAL_PAD");
+        while (p && *p && nsteps < 64) {
+            uint64_t at = strtoull(p, (char **)&p, 10), len = 6;
+            if (*p++ != ':') break;
+            char name[32];
+            int n = 0;
+            while (*p && *p != '/' && *p != ',' && n < 31) name[n++] = *p++;
+            name[n] = 0;
+            if (*p == '/') len = strtoull(p + 1, (char **)&p, 10);
+            static const char *const faces[] = {"south", "east", "west", "north"};  // (= SDL_GAMEPAD_BUTTON_SOUTH ..)
+            SDL_GamepadButton b = SDL_GAMEPAD_BUTTON_INVALID;
+            for (int f = 0; f < 4; f++)
+                if (!SDL_strcasecmp(name, faces[f])) b = (SDL_GamepadButton)(SDL_GAMEPAD_BUTTON_SOUTH + f);
+            if (b == SDL_GAMEPAD_BUTTON_INVALID) b = SDL_GetGamepadButtonFromString(name);
+            if (b != SDL_GAMEPAD_BUTTON_INVALID) steps[nsteps].at = at, steps[nsteps].until = at + len, steps[nsteps++].button = b;
+            else LOG("[input] virtual pad: no button \"%s\"\n", name);
+            if (*p == ',') p++; else break;
+        }
+        if (!nsteps) return;
+        SDL_VirtualJoystickDesc d;
+        SDL_INIT_INTERFACE(&d);
+        d.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+        d.naxes = SDL_GAMEPAD_AXIS_COUNT;
+        d.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+        d.name = "Hylian Melodies virtual pad";
+        SDL_JoystickID id = SDL_AttachVirtualJoystick(&d);
+        joy = id ? SDL_OpenJoystick(id) : NULL;
+        LOG("[input] virtual pad: %s, %d steps\n", joy ? "attached" : SDL_GetError(), nsteps);
+    }
+    if (!joy) return;
+    static bool held[SDL_GAMEPAD_BUTTON_COUNT];
+    bool want[SDL_GAMEPAD_BUTTON_COUNT] = {0};
+    for (int i = 0; i < nsteps; i++)
+        if (frame >= steps[i].at && frame < steps[i].until) want[steps[i].button] = true;
+    for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; b++)
+        if (want[b] != held[b]) {
+            SDL_SetJoystickVirtualButton(joy, b, want[b]);
+            held[b] = want[b];
+            if (want[b]) LOG("[input] virtual pad frame %llu: %s\n", (unsigned long long)frame, SDL_GetGamepadStringForButton(b));
+        }
+}
+
+void input_frame(uint64_t frame) {
+    script_frame(frame);
+    virtual_pad_frame(frame);
+}
 
 // The real keyboard and pads stay live in scripted runs too (nothing to block).
 void input_cursor_event(const SDL_Event *e) {

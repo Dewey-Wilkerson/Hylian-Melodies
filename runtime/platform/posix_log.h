@@ -72,8 +72,11 @@ static void session_log_prune(const char *dir) {
     free(logs);
 }
 
+int plat_console_fd = -1;  // (the terminal the game was started from, for start-up problems: nvn/vulkan/device.c)
+
 // stdout / stderr -> <dir>/hylian-melodies.log (path_out: its path, emptied on failure).
 static void session_log_open(const char *dir, char *path_out, size_t n) {
+    if (plat_console_fd < 0) plat_console_fd = fcntl(STDERR_FILENO, F_DUPFD_CLOEXEC, 3);
     snprintf(path_out, n, "%s/hylian-melodies.log", dir);
     bool append = getenv("HM_LOG_APPEND") != NULL;
     if (!append) {

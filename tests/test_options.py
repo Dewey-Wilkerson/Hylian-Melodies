@@ -32,7 +32,7 @@ class Registry(unittest.TestCase):
         self.assertEqual(sorted(set(listed) - code), [], 'in installer/options.py but no longer read in runtime/')
 
     def test_the_owners_cut(self):
-        self.assertEqual([o.key for o in O.offered('player')], ['fullscreen', 'gpu'])
+        self.assertEqual([o.key for o in O.offered('player')], ['fullscreen', 'gpu', 'check_updates'])
         self.assertEqual(O.groups()['HM_NO_AUDIO'], 'developer')  # (a rhythm game: never offered)
         for o in O.SETTINGS:
             self.assertIsNone(o.check(o.default), o.key)

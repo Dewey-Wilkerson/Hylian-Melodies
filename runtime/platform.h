@@ -62,6 +62,7 @@ static inline void plat_thread_perf_core(int role) { (void)role; }
 
 // ---- process
 void plat_init(void);                                // first thing in main()
+extern int plat_console_fd;                          // stderr as it was before the log took it (-1: none)
 bool plat_exe_path(char *buf, size_t size);
 void plat_exec(char *const argv[]);  // replace the process (NULL = same command line); returns only on failure
 #if defined(_WIN32) || defined(__linux__)

@@ -182,7 +182,7 @@ class Screens(unittest.TestCase):
                 self.t + '/', ctrl_o, enter,  # the dump: the folder typed, then the in-terminal list, on its first dump
                 '\x15' + self.keys, enter,  # the keys typed
                 enter, enter, enter,  # CPU level, keep the build files, build in the cache folder
-                enter, enter,  # window, no troubleshooting
+                enter, enter, enter,  # window, no update check, no troubleshooting
                 enter,  # start
                 enter,  # install it now: the (stand-in) package manager runs outside the screens
                 enter,  # back to the installer

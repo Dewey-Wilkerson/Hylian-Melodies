@@ -13,6 +13,8 @@
 
 #include "hle.h"
 #include "kernel.h"
+#include "settings.h"
+#include "update_check.h"
 
 const char *g_romfs_dir, *g_aoc_dir, *g_game_dir;
 
@@ -112,7 +114,8 @@ int g_cli_fullscreen = -1;  // --fullscreen / --windowed (overrides the ini; run
 static void usage(void) {
     fprintf(stderr, "usage: hylian-melodies [--fullscreen | --windowed]\n"
                     "  --fullscreen  borderless fullscreen at the desktop's resolution\n"
-                    "  --windowed    a window (the default; or fullscreen = 1 in hylian-melodies.ini)\n");
+                    "  --windowed    a window (the default; or fullscreen = 1 in hylian-melodies.ini)\n"
+                    "  --run-installer  start the latest installer in a terminal (what the update button does)\n");
 }
 
 int main(int argc, char **argv) {
@@ -120,6 +123,8 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[i], "--fullscreen") || !strcmp(argv[i], "-f")) g_cli_fullscreen = 1;
         else if (!strcmp(argv[i], "--windowed") || !strcmp(argv[i], "-w")) g_cli_fullscreen = 0;
         else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h")) { usage(); return 0; }
+        else if (!strcmp(argv[i], "--run-installer"))  // (the update after a switch from Gaming Mode: update_check.c)
+            return update_run_installer() == UPDATE_RAN_NOTHING;
         else { fprintf(stderr, "hylian-melodies: unknown option %s\n", argv[i]); usage(); return 2; }
     }
     plat_init();
@@ -138,6 +143,8 @@ int main(int argc, char **argv) {
     g_aoc_dir = join(g_game_dir, "aoc");
     if (chdir(g_game_dir)) { perror(g_game_dir); return 1; }
     LOG("[boot] Hylian Melodies, game folder %s%s\n", g_game_dir, g_headless ? " (headless)" : "");
+    settings_load();
+    if (!g_headless) update_check_start();  // (background; the title screen shows the result: hle/game_menu.c)
 
     if (!g_headless) {  // the window and graphics device first, so the guest heap can be the driver's memory before any
         // game thread runs (LAS Recomp: runtime/nvn/vulkan/exec.c backend_guest_heap_prepare)

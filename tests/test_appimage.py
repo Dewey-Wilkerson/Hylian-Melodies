@@ -147,7 +147,7 @@ class Route(Base):
 
     def test_immutable_gets_the_appimage_only(self):
         # (no output question; no CPU question) files, keep files, folder, window, troubleshooting, start, move it
-        rc, io = self.run_tui(self.xci, self.keys, '', '', '', '', '', '', immutable='SteamOS')
+        rc, io = self.run_tui(self.xci, self.keys, '', '', '', '', '', '', '', immutable='SteamOS')
         self.assertEqual(rc, 0, io.text())
         self.assertNotIn('What should the installer build?', io.said)
         self.assertNotIn('Which CPUs should the game run on?', io.said)
@@ -168,7 +168,7 @@ class Route(Base):
         self.assertEqual(P.load_manifest(P.Plan(self.env).manifest)['installs'], [])
 
     def test_chosen_on_an_ordinary_system(self):
-        rc, io = self.run_tui('2', self.xci, self.keys, '', '', '', '', '', 'no')  # AppImage; leave it where it is
+        rc, io = self.run_tui('2', self.xci, self.keys, '', '', '', '', '', '', 'no')  # AppImage; leave it where it is
         self.assertEqual(rc, 0, io.text())
         self.assertIn('What should the installer build?', io.said)
         self.assertNotIn('Which CPUs should the game run on?', io.said)

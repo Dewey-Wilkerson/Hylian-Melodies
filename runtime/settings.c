@@ -32,6 +32,7 @@ void settings_load(void) {
         else if (!strcmp(key, "audio_period")) g_settings.audio_period = (int)v;
         else if (!strcmp(key, "audio_queue_ms")) g_settings.audio_queue_ms = v;
         else if (!strcmp(key, "gpu")) g_settings.gpu = v >= 0 ? (int)v : -1;  // ("auto" does not parse: stays -1)
+        else if (!strcmp(key, "check_updates")) g_settings.check_updates = v != 0;
         else if (!strcmp(key, "shader_cache")) g_settings.shader_cache = v != 0;
         else if (!strcmp(key, "vk_validation")) g_settings.vk_validation = v != 0;
         else if (!strcmp(key, "log_input")) g_settings.log_input = v != 0;
@@ -74,6 +75,7 @@ void settings_set_binding_lines(const char *lines) {
 
 static const struct { unsigned bit; const char *key; } managed[] = {
     {SET_FULLSCREEN, "fullscreen"}, {SET_UPSCALE_FILTER, "upscale_filter"}, {SET_FRAME_PACING, "frame_pacing"},
+    {SET_CHECK_UPDATES, "check_updates"},
 };
 #define NMANAGED (sizeof managed / sizeof managed[0])
 
@@ -82,6 +84,7 @@ static void value_text(unsigned bit, char *out, size_t cap) {
     case SET_FULLSCREEN: snprintf(out, cap, "%d", g_settings.fullscreen); break;
     case SET_UPSCALE_FILTER: snprintf(out, cap, "%d", g_settings.upscale_filter); break;
     case SET_FRAME_PACING: snprintf(out, cap, "%d", g_settings.frame_pacing); break;
+    case SET_CHECK_UPDATES: snprintf(out, cap, "%d", g_settings.check_updates); break;
     }
 }
 

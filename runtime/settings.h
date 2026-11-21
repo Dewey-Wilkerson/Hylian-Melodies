@@ -22,6 +22,7 @@ typedef struct {
     // game
     char language[8];      // the game's language code, e.g. en-US ("language" in the ini; default: system)
     int gpu;               // Vulkan device index, -1 = auto (discrete first); "gpu" in the ini, HM_GPU wins
+    bool check_updates;    // at start, ask GitHub for a newer port version (default off: the installer asks; update_check.c)
     // troubleshooting (written by the installer, installer/options.py; each HM_* variable, when set, wins)
     bool shader_cache;     // the saved SPIR-V cache (default on; HM_VK_NO_SPIRV_CACHE)
     bool vk_validation;    // Khronos validation layer (HM_VK_VALIDATION)
@@ -38,7 +39,7 @@ const char *settings_language(void);
 
 // Saving (the overlay menu): only what was changed is written; every other line of the file stays as it was.
 // (show_fps and volume were removed 2026-11-19: old lines in the file are left alone and ignored)
-enum { SET_FULLSCREEN = 1 << 0, SET_UPSCALE_FILTER = 1 << 1, SET_FRAME_PACING = 1 << 3 };
+enum { SET_FULLSCREEN = 1 << 0, SET_UPSCALE_FILTER = 1 << 1, SET_FRAME_PACING = 1 << 3, SET_CHECK_UPDATES = 1 << 4 };
 void settings_changed(unsigned which);                // SET_* bits: written at the next save
 void settings_set_binding_lines(const char *lines);   // key./pad. lines to replace all of the file's ("" = none: defaults)
 bool settings_save(void);                             // hylian-melodies.ini in the working directory (the player's folder)

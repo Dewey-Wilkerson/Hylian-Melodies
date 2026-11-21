@@ -64,6 +64,7 @@ static int aoc_indices(uint32_t *out, int max) {
     for (int i = 0; out && i < n && i < max; i++) out[i] = idx[i];
     return n;
 }
+int aoc_installed(uint32_t *out, int max) { return aoc_indices(out, max); }  // (the title screen's version line)
 
 SERVICE("aoc:u", aoc_u) {
     (void)s;
