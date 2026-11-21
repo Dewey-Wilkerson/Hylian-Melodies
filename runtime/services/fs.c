@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "../hle.h"
 #include "../ipc.h"
@@ -71,6 +72,7 @@ static void image_read(Image *im, uint8_t *dst, uint64_t n, uint64_t off) {
         RomfsLayoutFile *f = &l->files[i];
         uint64_t a = off > f->start ? off : f->start, b = end < f->start + f->size ? end : f->start + f->size;
         if (a >= b) continue;
+        if (!f->path) { memcpy(dst + (a - off), f->data + (a - f->start), b - a); continue; }  // (an extra file, in memory)
         int fd = image_fd(im, i);
         if (fd <= 0) continue;
         uint64_t done = 0;
@@ -83,10 +85,10 @@ static void image_read(Image *im, uint8_t *dst, uint64_t n, uint64_t off) {
     pthread_mutex_unlock(&im->lock);
 }
 
-static Image *image_open(const char *dir, const char *name) {
+static Image *image_open(const char *dir, const char *name, const RomfsExtraFile *extra, int nextra) {
     Image *im = calloc(1, sizeof *im);
     char why[256];
-    if (!romfs_layout(dir, &im->l, why, sizeof why)) {
+    if (!romfs_layout_ex(dir, extra, nextra, &im->l, why, sizeof why)) {
         LOG("[fs] cannot lay out %s: %s\n", dir, why);
         free(im);
         return NULL;
@@ -119,7 +121,12 @@ static pthread_mutex_t g_image_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static Service *open_romfs_storage(void) {
     pthread_mutex_lock(&g_image_lock);
-    if (!g_base) g_base = image_open(g_romfs_dir, "romfs");
+    if (!g_base) {
+        extern int game_menu_romfs_extras(const RomfsExtraFile **extra);  // (runtime/hle/game_menu.c: the port's art)
+        const RomfsExtraFile *extra;
+        int n = game_menu_romfs_extras(&extra);
+        g_base = image_open(g_romfs_dir, "romfs", extra, n);
+    }
     pthread_mutex_unlock(&g_image_lock);
     return g_base ? service_new("IStorage(romfs)", storage, g_base) : NULL;
 }
@@ -134,7 +141,7 @@ static Service *open_aoc_storage(uint64_t id) {
         snprintf(dir, sizeof dir, "%s/%016llx", g_aoc_dir, (unsigned long long)id);
         snprintf(name, sizeof name, "aoc %016llx", (unsigned long long)id);
         struct stat st;
-        if (!stat(dir, &st) && S_ISDIR(st.st_mode) && (im = image_open(dir, name)))
+        if (!stat(dir, &st) && S_ISDIR(st.st_mode) && (im = image_open(dir, name, NULL, 0)))
             for (int i = 0; i < 16; i++)
                 if (!g_aoc[i]) { g_aoc[i] = im, g_aoc_id[i] = id; break; }
     }
@@ -316,7 +323,15 @@ static void drop_slot(const char *path) {
 }
 // Commit always succeeds for the game (see save_failed). A save that failed is dropped whole. If only the sidecar's
 // rename failed (the data is already replaced), its working copy stays for the next mount to finish the pair.
+// Save activity, for "Save and Quit" (runtime/ui/menu.c: the game closes once the save is committed and writes stopped)
+volatile uint64_t g_save_commits, g_save_activity_ns;
+static void save_activity(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    g_save_activity_ns = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
 static void commit(HostFs *fs) {
+    if (fs->npending) { g_save_commits++; save_activity(); }
     for (int i = 0; i < fs->npending; i++) {
         const char *path = fs->pending[i];
         if (fs->failed[i]) {
@@ -448,6 +463,7 @@ static void file(Service *s, IpcReq *req, IpcResp *resp) {
         if (strstr(f->path, "savedata"))
             LOG("[save] write %s off %lld size %lld <- guest %llx\n", f->path, (long long)off, (long long)size, (unsigned long long)a->addr);
         if (f->dropped) break;  // (reported when it was opened; the game is never told, see save_failed)
+        if (f->fs) save_activity();
         int error = 0;
         for (int64_t done = 0; done < size;) {  // (a short write goes on from where it stopped)
             ssize_t n = pwrite(f->fd, (void *)(uintptr_t)(a->addr + done), (size_t)(size - done), off + done);

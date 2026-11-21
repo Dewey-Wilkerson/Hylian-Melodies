@@ -6,3 +6,9 @@ main 0x7000067470 hm_hook_toggle_update
 main 0x7000065550 hm_hook_options_layout
 main 0x7000068be0 hm_hook_choice_input
 main 0x7000068df0 hm_hook_choice_update
+main 0x70000650f0 hm_hook_options_open_page
+main 0x700006aaa0 hm_hook_pause_update
+main 0x700006a9a0 hm_hook_pause_describe
+main 0x7000056530 hm_hook_title_build
+main 0x70000551c0 hm_hook_title_layout
+main 0x7000053ff0 hm_hook_title_update

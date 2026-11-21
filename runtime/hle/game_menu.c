@@ -10,8 +10,10 @@
 // addresses, offsets, sizes). Guest memory is host memory, so the game's objects are read and written in place.
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "../hle.h"
+#include "../romfs_build.h"
 #include "../settings.h"
 
 // game functions and data (1.4.0)
@@ -32,7 +34,8 @@
 enum {
     HM_TEXT_BASE = 0x484d0000,
     T_FULLSCREEN = HM_TEXT_BASE, T_FULLSCREEN_DESC, T_PACING, T_PACING_DESC, T_FILTER, T_FILTER_DESC,
-    T_SHARP, T_SMOOTH, T_NEAREST,
+    T_SHARP, T_SMOOTH, T_NEAREST, T_PIXEL,
+    T_PAUSE_TITLE, T_PAUSE_TITLE_DESC, T_PAUSE_QUIT_DESC, T_CONFIRM_TITLE, T_CONFIRM_QUIT,
     T_CONTROLS, T_CONTROLS_DESC, T_RESET, T_RESET_DESC, T_BIND_DESC, T_CAPTURE,
     T_BIND_LABEL,                  // 16: the Switch buttons, in runtime/ui/input.c's order
     T_COUNT = T_BIND_LABEL + 16,   // (the fixed texts end here)
@@ -46,6 +49,7 @@ enum {
 #define TEXT_BUTTON_DESC 49
 static const uint32_t text_style[T_COUNT - HM_TEXT_BASE] = {
     TEXT_LABEL, TEXT_DESC, TEXT_LABEL, TEXT_DESC, TEXT_LABEL, TEXT_DESC, TEXT_CHOICE, TEXT_CHOICE, TEXT_CHOICE,
+    TEXT_CHOICE, TEXT_LABEL, TEXT_DESC, TEXT_DESC, TEXT_DESC, TEXT_DESC,
     TEXT_BUTTON, TEXT_BUTTON_DESC, TEXT_BUTTON, TEXT_BUTTON_DESC, TEXT_DESC, TEXT_CHOICE,
     TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL,
     TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL, TEXT_LABEL,
@@ -86,20 +90,55 @@ static const char *const texts[T_COUNT - HM_TEXT_BASE][NLANG] = {
      "像 Switch 螢幕一樣穩定的 60 Hz。僅在畫面規律性卡頓時關閉。"},
     {"SCALING FILTER", "スケーリングフィルター", "SKALIERUNGSFILTER", "MISE À L'ÉCHELLE", "MISE À L'ÉCHELLE",
      "FILTRO DE ESCALADO", "FILTRO DE ESCALADO", "FILTRO DI SCALATURA", "스케일링 필터", "缩放滤镜", "縮放濾鏡"},
-    {"How the picture is scaled to fit the window: Sharp (crisp pixels), Smooth or Nearest. Takes effect at the next start.",
-     "画面をウィンドウに合わせて拡大する方法：シャープ（くっきりしたドット）、スムーズ、ニアレスト。次回の起動時に反映されます。",
-     "Wie das Bild an das Fenster angepasst wird: Scharf (klare Pixel), Weich oder Blockig. Wirkt ab dem nächsten Start.",
-     "Comment l'image est adaptée à la fenêtre : Net (pixels francs), Lisse ou Pixelisé. Prend effet au prochain démarrage.",
-     "Comment l'image est adaptée à la fenêtre : Net (pixels francs), Lisse ou Pixelisé. Prend effet au prochain démarrage.",
-     "Cómo se ajusta la imagen a la ventana: Nítido (píxeles definidos), Suave o Pixelado. Se aplica en el próximo inicio.",
-     "Cómo se ajusta la imagen a la ventana: Nítido (píxeles definidos), Suave o Pixelado. Se aplica la próxima vez que inicies.",
-     "Come l'immagine viene adattata alla finestra: Nitido (pixel definiti), Morbido o Pixelato. Ha effetto dal prossimo avvio.",
-     "화면을 창에 맞게 늘리는 방식: 선명하게(또렷한 픽셀), 부드럽게, 최근접. 다음 실행부터 적용됩니다.",
-     "画面缩放到窗口的方式：清晰（像素分明）、平滑或最近邻。下次启动时生效。",
-     "畫面縮放到視窗的方式：清晰（像素分明）、平滑或最近鄰。下次啟動時生效。"},
+    {"How the picture is scaled to fit the window: Sharp (crisp pixels), Smooth, Nearest, or Pixel-perfect (whole-number steps only, with black borders). Takes effect at the next start.",
+     "画面をウィンドウに合わせて拡大する方法：シャープ（くっきりしたドット）、スムーズ、ニアレスト、整数倍（整数倍のみ、周囲は黒帯）。次回の起動時に反映されます。",
+     "Wie das Bild an das Fenster angepasst wird: Scharf (klare Pixel), Weich, Blockig oder Pixelgenau (nur ganzzahlige Stufen, mit schwarzem Rand). Wirkt ab dem nächsten Start.",
+     "Comment l'image est adaptée à la fenêtre : Net (pixels francs), Lisse, Pixelisé ou Pixel parfait (multiples entiers seulement, bandes noires). Prend effet au prochain démarrage.",
+     "Comment l'image est adaptée à la fenêtre : Net (pixels francs), Lisse, Pixelisé ou Pixel parfait (multiples entiers seulement, bandes noires). Prend effet au prochain démarrage.",
+     "Cómo se ajusta la imagen a la ventana: Nítido (píxeles definidos), Suave, Pixelado o Píxel perfecto (solo múltiplos enteros, con bordes negros). Se aplica en el próximo inicio.",
+     "Cómo se ajusta la imagen a la ventana: Nítido (píxeles definidos), Suave, Pixelado o Píxel perfecto (solo múltiplos enteros, con bordes negros). Se aplica la próxima vez que inicies.",
+     "Come l'immagine viene adattata alla finestra: Nitido (pixel definiti), Morbido, Pixelato o Pixel perfetto (solo multipli interi, con bordi neri). Ha effetto dal prossimo avvio.",
+     "화면을 창에 맞게 늘리는 방식: 선명하게(또렷한 픽셀), 부드럽게, 최근접, 정수배(정수 배율만, 검은 테두리). 다음 실행부터 적용됩니다.",
+     "画面缩放到窗口的方式：清晰（像素分明）、平滑、最近邻或整数倍（仅整数倍放大，四周黑边）。下次启动时生效。",
+     "畫面縮放到視窗的方式：清晰（像素分明）、平滑、最近鄰或整數倍（僅整數倍放大，四周黑邊）。下次啟動時生效。"},
     {"Sharp", "シャープ", "Scharf", "Net", "Net", "Nítido", "Nítido", "Nitido", "선명하게", "清晰", "清晰"},
     {"Smooth", "スムーズ", "Weich", "Lisse", "Lisse", "Suave", "Suave", "Morbido", "부드럽게", "平滑", "平滑"},
     {"Nearest", "ニアレスト", "Blockig", "Pixelisé", "Pixelisé", "Pixelado", "Pixelado", "Pixelato", "최근접", "最近邻", "最近鄰"},
+    {"Pixel-perfect", "整数倍", "Pixelgenau", "Pixel parfait", "Pixel parfait", "Píxel perfecto", "Píxel perfecto",
+     "Pixel perfetto", "정수배", "整数倍", "整數倍"},
+    {"SAVE AND RETURN TO TITLE", "保存してタイトルへ", "SPEICHERN UND ZUM TITEL", "SAUVEGARDER ET RETOUR AU TITRE",
+     "SAUVEGARDER ET RETOUR AU TITRE", "GUARDAR Y VOLVER AL TÍTULO", "GUARDAR Y VOLVER AL TÍTULO", "SALVA E TORNA AL TITOLO",
+     "저장하고 타이틀로", "保存并返回标题", "儲存並返回標題"},
+    {"Save and go back to the title screen", "保存してタイトル画面に戻ります。",
+     "Speichert deinen Fortschritt und bringt dich zum Titelbildschirm zurück.",
+     "Sauvegarder et retourner à l'écran titre.", "Sauvegarder et retourner à l'écran titre.",
+     "Guarda la partida y regresa a la pantalla de título.", "Guarda la partida y regresa a la pantalla de título.",
+     "Salva e torna alla schermata del titolo.", "저장하고 타이틀 화면으로 돌아갑니다.", "保存并返回标题画面。",
+     "儲存並返回標題畫面。"},
+    {"Save and close the game", "保存してゲームを終了します。", "Speichert deinen Fortschritt und beendet das Spiel.",
+     "Sauvegarder et fermer le jeu.", "Sauvegarder et fermer le jeu.", "Guarda la partida y cierra el juego.",
+     "Guarda la partida y cierra el juego.", "Salva e chiudi il gioco.", "저장하고 게임을 종료합니다.", "保存并关闭游戏。",
+     "儲存並關閉遊戲。"},
+    {"Are you sure? Press A again to save and return to the title screen.",
+     "よろしいですか？もう一度Aを押すと保存してタイトル画面に戻ります。",
+     "Bist du sicher? Drücke erneut A, um zu speichern und zum Titelbildschirm zurückzukehren.",
+     "Es-tu sûr ? Appuie de nouveau sur A pour sauvegarder et retourner à l'écran titre.",
+     "Es-tu sûr ? Appuie de nouveau sur A pour sauvegarder et retourner à l'écran titre.",
+     "¿Seguro? Pulsa A otra vez para guardar y volver a la pantalla de título.",
+     "¿Seguro? Presiona A otra vez para guardar y volver a la pantalla de título.",
+     "Sei sicuro? Premi di nuovo A per salvare e tornare alla schermata del titolo.",
+     "정말입니까? A를 한 번 더 누르면 저장하고 타이틀 화면으로 돌아갑니다.",
+     "确定吗？再按一次A保存并返回标题画面。", "確定嗎？再按一次A儲存並返回標題畫面。"},
+    {"Are you sure? Press A again to save and close the game.",
+     "よろしいですか？もう一度Aを押すと保存してゲームを終了します。",
+     "Bist du sicher? Drücke erneut A, um zu speichern und das Spiel zu beenden.",
+     "Es-tu sûr ? Appuie de nouveau sur A pour sauvegarder et fermer le jeu.",
+     "Es-tu sûr ? Appuie de nouveau sur A pour sauvegarder et fermer le jeu.",
+     "¿Seguro? Pulsa A otra vez para guardar y cerrar el juego.",
+     "¿Seguro? Presiona A otra vez para guardar y cerrar el juego.",
+     "Sei sicuro? Premi di nuovo A per salvare e chiudere il gioco.",
+     "정말입니까? A를 한 번 더 누르면 저장하고 게임을 종료합니다.",
+     "确定吗？再按一次A保存并关闭游戏。", "確定嗎？再按一次A儲存並關閉遊戲。"},
     {"CONTROLS", "操作設定", "STEUERUNG", "COMMANDES", "COMMANDES", "CONTROLES", "CONTROLES", "COMANDI", "조작 설정",
      "操作设置", "操作設定"},
     {"Change which keys and gamepad buttons do what", "キーボードとゲームパッドのボタン割り当てを変更します",
@@ -312,11 +351,11 @@ static uint64_t add_toggle(Cpu *c, uint64_t page, uint32_t label, bool value, co
 #define CHOICE_INDEX     0x88             // i32 current choice
 // Choice (32 bytes): std::string value, i32 name text id, i32 description text id (-1: the row's own)
 
-static void on_filter(Cpu *c) {  // x1 = the chosen value (std::string *, "0".."2")
+static void on_filter(Cpu *c) {  // x1 = the chosen value (std::string *, "0".."3")
     uint64_t s = c->x[1];
     const char *p = (const char *)(LD8(s) & 1 ? LD64(s + 16) : s + 1);
     int v = p[0] - '0';
-    if (v < 0 || v > 2) return;
+    if (v < 0 || v > 3) return;
     g_settings.upscale_filter = v;  // (used from the next start: the renderer reads it once)
     settings_changed(SET_UPSCALE_FILTER);
     save();
@@ -405,7 +444,10 @@ static uint64_t add_button(Cpu *c, uint64_t page, uint32_t label, uint32_t desc,
 // ---- the Controls page
 #define G_PAGES_PUSH_SLOW 0x7000014260ull  // vector<vector<unique_ptr<Row>>>::push_back slow path (pages, vector *)
 #define SCREEN_SELECTED   0xc0             // i32: the selected row of the open page
-#define MAIN_CONTROLS_AT  5                // after Language: the game's Back from page 5 selects main row 5
+#define SCREEN_PAGE_INDEX 0xc4             // i32: the open page
+#define LABEL_CHANGE_CONTROLLERS 177       // the main list's "Change Controllers" (the console's controller applet)
+#define ROW_VT_DELETE     0x08             // a row's deleting destructor (what its unique_ptr calls)
+static int controls_main_row = -1;         // where our Controls button sits in the main list
 enum { NBUTTONS = 16 };
 static uint64_t bind_rows[NBUTTONS];
 static unsigned bind_row_gen[NBUTTONS];
@@ -444,8 +486,22 @@ static void add_controls_page(Cpu *c, uint64_t self) {
         call1(c, G_PAGES_PUSH_SLOW, pages);
         if (LD64(vec)) call1(c, G_DELETE, LD64(vec));  // (what a moved-from vector still holds: nothing, normally)
     }
-    add_button(c, LD64(pages), T_CONTROLS, T_CONTROLS_DESC, LD64(G_OPEN_PAGE_GOT), self, (uint32_t)controls_page,
-               MAIN_CONTROLS_AT);
+    // our button takes the place of Change Controllers (no use on a PC): the same row index, so the game's Back from
+    // its own pages (main row = page number) still lands right; Back from ours is put right in the layout hook
+    uint64_t main = LD64(pages);
+    uint64_t row = add_button(c, main, T_CONTROLS, T_CONTROLS_DESC, LD64(G_OPEN_PAGE_GOT), self, (uint32_t)controls_page,
+                              -1);
+    uint64_t mb = LD64(main), me = LD64(main + 8);
+    controls_main_row = (int)((me - mb) / 8) - 1;
+    for (uint64_t q = mb; q < me - 8; q += 8) {
+        uint64_t old = LD64(q);
+        if (LD32(old + ROW_LABEL) != LABEL_CHANGE_CONTROLLERS) continue;
+        ST64(q, row);
+        ST64(main + 8, me - 8);  // (the button's own slot at the end goes)
+        call1(c, LD64(LD64(old) + ROW_VT_DELETE), old);
+        controls_main_row = (int)((q - mb) / 8);
+        break;
+    }
     (void)slot;
     c->sp = sp0;
 }
@@ -489,6 +545,266 @@ void hm_hook_choice_update(Cpu *c, GuestFn orig) {
     orig(c);
 }
 
+// The Options screen's "open page <x1>" (also the game's Back to the main list, after it set the selected row to the
+// page number it leaves): leaving our Controls page selects our button's own row, so the cursor lands on it.
+void hm_hook_options_open_page(Cpu *c, GuestFn orig) {  // x0 = the screen, w1 = the page
+    uint64_t self = c->x[0];
+    if ((uint32_t)c->x[1] == 0 && controls_page > 0 && controls_main_row >= 0 &&
+        (int32_t)LD32(self + SCREEN_PAGE_INDEX) == controls_page)
+        ST32(self + SCREEN_SELECTED, (uint32_t)controls_main_row);
+    orig(c);
+}
+
+// ---- the pause menu (one screen object; its rows are text elements in fixed fields, picked by an index):
+// Leaderboards (online only) becomes "Save and Return to Title" and runs the game's Save and Quit (which goes to the
+// title); Save and Quit keeps its label and also closes the game once the save is written (runtime/ui/menu.c). Both
+// ask first: the first A shows "Are you sure?" in the description box, a second A on the same row goes ahead, moving
+// away (or leaving the menu) cancels.
+#define TEXT_LEADERBOARDS 103             // the pause menu's Leaderboards label
+#define PAUSE_DESC        0x48            // the description box element
+#define PAUSE_SELECTED    0x104           // i32: 0 Return, 1 Options, 2 Achievements, 3 Leaderboards, 4 Save and Quit
+#define PAUSE_SUBMENU     0x118           // u8: the leaderboard kinds are shown instead
+#define PAUSE_ROW_TITLE   3
+#define PAUSE_ROW_QUIT    4
+#define G_PAUSE_DESCRIBE  0x700006a9a0ull // (screen): the description for the selected row (hooked below)
+#define G_DESC_SET        0x700024c4c0ull // (description box, text id)
+volatile uint64_t g_game_menu_quit_req, g_game_menu_quit_commits;  // (runtime/ui/menu.c)
+static uint64_t pause_pending_obj;
+static int pause_pending = -1;
+
+static bool disabled(void);
+
+void hm_hook_pause_describe(Cpu *c, GuestFn orig) {  // x0 = the pause screen
+    uint64_t self = c->x[0];
+    int sel = (int32_t)LD32(self + PAUSE_SELECTED);
+    if (disabled() || LD8(self + PAUSE_SUBMENU) || (sel != PAUSE_ROW_TITLE && sel != PAUSE_ROW_QUIT)) { orig(c); return; }
+    bool ask = pause_pending == sel && pause_pending_obj == self;
+    c->x[0] = LD64(self + PAUSE_DESC);
+    c->x[1] = sel == PAUSE_ROW_TITLE ? (ask ? T_CONFIRM_TITLE : T_PAUSE_TITLE_DESC) : (ask ? T_CONFIRM_QUIT : T_PAUSE_QUIT_DESC);
+    guest_call(c, G_DESC_SET);
+}
+
+// The game's UI sounds: its play function with a sound's name, read from the game's own data where its code builds
+// that name (the names stay out of this repository).
+#define G_PLAY_SOUND      0x7000001710ull // (const std::string *name, 0, 0, std::string *out, d0..d5)
+#define G_SOUND_SELECT    0x70008cab9full // what A on a menu row plays (NUL-terminated, as each below)
+#define G_SOUND_MOVE      0x70008b0637ull // the title screen's left / right
+#define G_SOUND_QUIT      0x70008a4d65ull // the pause menu's Save and Quit, once confirmed
+static void play_sound(Cpu *c, uint64_t name_addr) {
+    uint64_t saved[13], regs[8];
+    __uint128_t vregs[6];
+    memcpy(saved, &c->x[19], sizeof saved);
+    memcpy(regs, &c->x[0], sizeof regs);
+    memcpy(vregs, c->v, sizeof vregs);
+    uint64_t sp0 = c->sp;
+    c->sp -= 0x40;
+    uint64_t name = c->sp, out = c->sp + 0x20, buf = 0;
+    memset((void *)name, 0, 0x40);
+    size_t n = strnlen((const char *)name_addr, 64);
+    if (n <= 22) {  // libc++ std::string: short form in place, else a buffer from the game's allocator
+        ST8(name, n << 1);
+        memcpy((void *)(name + 1), (const void *)name_addr, n);
+    } else {
+        buf = call1(c, G_NEW, (n + 16) & ~15ull);
+        memcpy((void *)buf, (const void *)name_addr, n);
+        ST8(buf + n, 0);
+        ST64(name, ((n + 16) & ~15ull) | 1);
+        ST64(name + 8, n);
+        ST64(name + 16, buf);
+    }
+    c->x[0] = name; c->x[1] = 0; c->x[2] = 0; c->x[3] = out;
+    c->v[0] = c->v[3] = 0x3ff0000000000000ull;  // (as the game passes them: 1.0, 0, 0, 1.0, 0, 0)
+    c->v[1] = c->v[2] = c->v[4] = c->v[5] = 0;
+    guest_call(c, G_PLAY_SOUND);
+    if (LD8(out) & 1) call1(c, G_DELETE, LD64(out + 16));
+    if (buf) call1(c, G_DELETE, buf);
+    c->sp = sp0;
+    memcpy(&c->x[19], saved, sizeof saved);
+    memcpy(&c->x[0], regs, sizeof regs);
+    memcpy(c->v, vregs, sizeof vregs);
+}
+
+static void pause_describe(Cpu *c, uint64_t self) {
+    uint64_t saved[13], regs[8];
+    memcpy(saved, &c->x[19], sizeof saved);
+    memcpy(regs, &c->x[0], sizeof regs);
+    call1(c, G_PAUSE_DESCRIBE, self);
+    memcpy(&c->x[19], saved, sizeof saved);
+    memcpy(&c->x[0], regs, sizeof regs);
+}
+
+void hm_hook_pause_update(Cpu *c, GuestFn orig) {  // x0 = the pause screen, every frame while it's open
+    extern volatile uint64_t g_input_buttons;  // (what the game sees: runtime/hle/input.c)
+    extern uint64_t renderer_present_count(void);
+    extern volatile uint64_t g_save_commits;
+    static uint64_t was, last_frame;
+    uint64_t self = c->x[0], now = g_input_buttons, frame = renderer_present_count();
+    bool fresh = frame > last_frame + 2;  // (the menu wasn't open: a held A is no press, a pending question goes)
+    bool a = !fresh && (now & 1) && !(was & 1);
+    was = now, last_frame = frame;
+    if (disabled()) { orig(c); return; }
+    int sel = (int32_t)LD32(self + PAUSE_SELECTED);
+    bool sub = LD8(self + PAUSE_SUBMENU) != 0;
+    if (pause_pending >= 0 && (fresh || self != pause_pending_obj || sel != pause_pending || sub)) {
+        pause_pending = -1;  // moved away: no longer asked
+        if (!fresh && self == pause_pending_obj && !sub) pause_describe(c, self);
+    }
+    if (a && !sub && (sel == PAUSE_ROW_TITLE || sel == PAUSE_ROW_QUIT)) {
+        if (pause_pending == sel && pause_pending_obj == self) {  // confirmed: the game's own Save and Quit runs
+            pause_pending = -1;
+            ST32(self + PAUSE_SELECTED, PAUSE_ROW_QUIT);
+            if (sel == PAUSE_ROW_QUIT) {
+                struct timespec ts;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                g_game_menu_quit_commits = g_save_commits;
+                g_game_menu_quit_req = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+            }
+            LOG("[game-menu] pause: save and %s\n", sel == PAUSE_ROW_QUIT ? "quit" : "return to the title");
+            orig(c);
+            return;
+        }
+        pause_pending = sel, pause_pending_obj = self;  // first A: ask (the game doesn't see this press)
+        play_sound(c, G_SOUND_SELECT);
+        pause_describe(c, self);
+        return;
+    }
+    orig(c);
+}
+
+// ---- the title screen: an Exit button beside the gear (the port's own art, packaging/art/exit-button.png)
+// The title screen object: +0x70/+0x78/+0x80 Continue / New Game / New Game 2P, +0x88 the gear (an icon button: a
+// sprite in the game's button frame), +0x90 an eShop button the game shows only in a mode this port never has (its
+// GOT slot 0x7000a34a90 -> a byte, off here), +0xbc the main column's row, +0xc0 the column: 0 gear, 1 eShop, 2 the main column (left / right skip
+// 1 while the flag is off; A acts on the column). Our icon button takes the eShop's place (the eShop button goes
+// whatever the flag: no use here): our layout hook puts it where the gear was and the gear to its right (owner),
+// our update hook makes left / right go Exit - gear - main column and acts on A on Exit.
+#include "bntx.h"
+#include "exit_icon.h"
+#define G_SPRITE_CTOR     0x700022f170ull // (sprite (0x1b0 bytes), const std::string *texture name)
+#define G_ICON_BUTTON_CTOR 0x700024b940ull // (button (0x80 bytes), sprite, 0x1d60, 0x1e): what the gear is
+#define G_ACTION_PRESSED  0x700040ebd0ull // (action, -1, 0) -> pressed this frame
+#define TITLE_GEAR        0x88
+#define TITLE_ESHOP       0x90
+#define TITLE_COLUMN      0xc0
+#define TITLE_BUSY        0x14c           // i32 > 0: the menu doesn't take input yet
+#define ELEM_VT_PLACE     0x10            // (element, x, y, width), 640x360 units
+#define G_SCREEN_ACTIVE   0x700000d070ull // (screen) -> the screen is the one on top (the layout's own check)
+#define ACT_LEFT1 0x50
+#define ACT_LEFT2 0x5c
+#define ACT_RIGHT1 0x4f
+#define ACT_RIGHT2 0x5e
+#define ACT_OK1 0x28
+#define ACT_OK2 0x0e
+#define EXIT_TEXTURE      "gui/HM_ExitButton.png"  // -> data:/textures_bin/gui/HM_ExitButton.bntx (ours, in memory)
+volatile int g_game_menu_quit_now;        // (runtime/ui/menu.c closes the window)
+static uint64_t exit_button, exit_screen;
+
+static bool disabled(void);
+
+int game_menu_romfs_extras(const RomfsExtraFile **extra) {
+    static uint8_t bntx[BNTX_RGBA32_SIZE];
+    static RomfsExtraFile files[1];
+    if (!bntx_rgba32("HM_ExitButton", hm_exit_icon, bntx)) return 0;
+    files[0] = (RomfsExtraFile){"textures_bin/gui/HM_ExitButton.bntx", bntx, sizeof bntx};
+    *extra = files;
+    return 1;
+}
+
+void hm_hook_title_build(Cpu *c, GuestFn orig) {  // x0 = the title screen
+    uint64_t self = c->x[0];
+    orig(c);
+    if (disabled()) return;
+    uint64_t saved[13], r0 = c->x[0];
+    memcpy(saved, &c->x[19], sizeof saved);
+    uint64_t sp0 = c->sp;
+    c->sp -= 0x20;
+    uint64_t name = c->sp;
+    memset((void *)name, 0, 0x20);
+    size_t n = strlen(EXIT_TEXTURE);  // (21: a short string)
+    ST8(name, n << 1);
+    memcpy((void *)(name + 1), EXIT_TEXTURE, n);
+    uint64_t sprite = call1(c, G_NEW, 0x1b0);
+    c->x[0] = sprite; c->x[1] = name;
+    guest_call(c, G_SPRITE_CTOR);
+    uint64_t button = call1(c, G_NEW, 0x80);
+    c->x[0] = button; c->x[1] = sprite; c->x[2] = 0x1d60; c->x[3] = 0x1e;
+    guest_call(c, G_ICON_BUTTON_CTOR);
+    uint64_t old = LD64(self + TITLE_ESHOP);
+    ST64(self + TITLE_ESHOP, button);
+    if (old) call1(c, LD64(LD64(old) + ROW_VT_DELETE), old);
+    exit_button = button, exit_screen = self;
+    c->sp = sp0;
+    memcpy(&c->x[19], saved, sizeof saved);
+    c->x[0] = r0;
+    LOG("[game-menu] title screen %llx: Exit button added\n", (unsigned long long)self);
+}
+
+void hm_hook_title_layout(Cpu *c, GuestFn orig) {  // x0 = the title screen, every frame
+    uint64_t self = c->x[0];
+    if (self != exit_screen || LD64(self + TITLE_ESHOP) != exit_button) { orig(c); return; }
+    // Placing an element draws it this frame. The game draws the gear at (20, 306), 31 wide, and the eShop field only
+    // in its eShop mode: with the two fields swapped for its layout it draws Exit there; the gear goes to its right.
+    uint64_t gear = LD64(self + TITLE_GEAR);
+    ST64(self + TITLE_GEAR, exit_button);
+    ST64(self + TITLE_ESHOP, gear);
+    orig(c);
+    ST64(self + TITLE_GEAR, gear);
+    ST64(self + TITLE_ESHOP, exit_button);
+    uint64_t saved[13], regs[8];
+    memcpy(saved, &c->x[19], sizeof saved);
+    memcpy(regs, &c->x[0], sizeof regs);
+    if (call1(c, G_SCREEN_ACTIVE, self) & 1) {  // (only while the game draws its own buttons: not under the gear's menu)
+        c->x[0] = gear; c->x[1] = 56; c->x[2] = 306; c->x[3] = 31;
+        guest_call(c, LD64(LD64(gear) + ELEM_VT_PLACE));
+    }
+    memcpy(&c->x[19], saved, sizeof saved);
+    memcpy(&c->x[0], regs, sizeof regs);
+}
+
+static bool action(Cpu *c, uint32_t a1, uint32_t a2) {
+    uint64_t saved[13], regs[8];
+    memcpy(saved, &c->x[19], sizeof saved);
+    memcpy(regs, &c->x[0], sizeof regs);
+    c->x[0] = a1; c->x[1] = 0xffffffffu; c->x[2] = 0;
+    guest_call(c, G_ACTION_PRESSED);
+    bool r = c->x[0] & 1;
+    if (!r) {
+        c->x[0] = a2; c->x[1] = 0xffffffffu; c->x[2] = 0;
+        guest_call(c, G_ACTION_PRESSED);
+        r = c->x[0] & 1;
+    }
+    memcpy(&c->x[19], saved, sizeof saved);
+    memcpy(&c->x[0], regs, sizeof regs);
+    return r;
+}
+
+void hm_hook_title_update(Cpu *c, GuestFn orig) {  // x0 = the title screen, every frame
+    uint64_t self = c->x[0];
+    if (self != exit_screen || LD64(self + TITLE_ESHOP) != exit_button || g_game_menu_quit_now) {
+        orig(c);
+        return;
+    }
+    int col = (int32_t)LD32(self + TITLE_COLUMN);
+    bool ready = (int32_t)LD32(self + TITLE_BUSY) <= 0;
+    bool left = ready && action(c, ACT_LEFT1, ACT_LEFT2), right = ready && action(c, ACT_RIGHT1, ACT_RIGHT2);
+    // On screen, left to right: Exit (our column 1), the gear (0), the main column (2). The game moves 2 -> 0 on left
+    // and 0 -> 2 on right by itself (it skips 1); the rest is ours.
+    if (col == 1 && ready) {
+        if (action(c, ACT_OK1, ACT_OK2)) {  // Exit: the game's own close sound, then the window closes
+            play_sound(c, G_SOUND_SELECT);
+            play_sound(c, G_SOUND_QUIT);
+            g_game_menu_quit_now = 1;
+            LOG("[game-menu] title screen: exit\n");
+            return;  // (the game doesn't see this press)
+        }
+        if (left) return;  // (nothing further left; the game would move to the gear)
+    }
+    orig(c);
+    int now = (int32_t)LD32(self + TITLE_COLUMN);
+    if (col == 0 && left && now == 0) ST32(self + TITLE_COLUMN, 1), play_sound(c, G_SOUND_MOVE);  // gear -> Exit
+    else if (col == 1 && right) ST32(self + TITLE_COLUMN, 0);  // Exit -> gear (the game moved to 2, with its sound)
+}
+
 static bool disabled(void) {
     const char *e = getenv("HM_GAME_MENU");
     return e && !strcmp(e, "0");
@@ -508,15 +824,21 @@ void hm_hook_options_build(Cpu *c, GuestFn orig) {
         if (rb == re || LD32(LD64(rb) + ROW_LABEL) != LABEL_DISCO) continue;
         fullscreen_row = add_toggle(c, page, T_FULLSCREEN, g_settings.fullscreen, "hm_game_menu_fullscreen", on_fullscreen);
         add_toggle(c, page, T_PACING, g_settings.frame_pacing, "hm_game_menu_pacing", on_pacing);
-        static const uint32_t filters[] = {T_SHARP, T_SMOOTH, T_NEAREST};  // (upscale_filter 0, 1, 2)
-        add_choice(c, page, T_FILTER, T_FILTER_DESC, filters, 3, g_settings.upscale_filter, "hm_game_menu_filter",
+        static const uint32_t filters[] = {T_SHARP, T_SMOOTH, T_NEAREST, T_PIXEL};  // (upscale_filter 0..3)
+        add_choice(c, page, T_FILTER, T_FILTER_DESC, filters, 4, g_settings.upscale_filter, "hm_game_menu_filter",
                    on_filter, 0);
+        // ours first: the three rows just appended move to the top of the page
+        rb = LD64(page), re = LD64(page + 8);
+        uint64_t ours[3];
+        for (int i = 0; i < 3; i++) ours[i] = LD64(re - 24 + 8 * i);
+        for (uint64_t q = re - 8; q >= rb + 24; q -= 8) ST64(q, LD64(q - 24));
+        for (int i = 0; i < 3; i++) ST64(rb + 8 * i, ours[i]);
         added = 1;
         break;
     }
     if (added && have_input()) add_controls_page(c, self);
-    LOG("[game-menu] options screen %llx: %s; Controls page %d\n", (unsigned long long)self,
-        added ? "rows added to Graphics" : "Graphics page not found", controls_page);
+    LOG("[game-menu] options screen %llx: %s; Controls page %d at main row %d\n", (unsigned long long)self,
+        added ? "rows added to Graphics" : "Graphics page not found", controls_page, controls_main_row);
     memcpy(&c->x[19], saved, sizeof saved);
     c->x[0] = r0;
 }
@@ -541,7 +863,6 @@ void hm_hook_toggle_update(Cpu *c, GuestFn orig) {  // x0 = row, every frame for
 // centred on y = 183, the panel 17 above the first row and 18 taller than the rows. The game's pages have at most 8
 // rows; more run into the title and the description box (about y 35..303 is free), so longer pages get a tighter
 // pitch, centred in that space. Pages of 8 or fewer keep the game's own layout.
-#define SCREEN_PAGE_INDEX 0xc4  // i32: the open page
 #define SCREEN_WIDE       0xc8  // u8: panel 408 wide, else 328
 #define SCREEN_PANEL      0x28  // the panel element (set by G_PANEL_SET)
 #define ROW_VISIBLE       0x2c  // u8
@@ -639,10 +960,12 @@ static void read_string(uint64_t s, char *out, size_t cap) {  // libc++ std::str
 }
 
 void hm_hook_text_lookup(Cpu *c, GuestFn orig) {  // w0 = id, x1 = language (std::string *, in/out), x8 = result
-    uint32_t id = (uint32_t)c->x[0];
+    uint32_t game_id = (uint32_t)c->x[0], id = game_id;
+    if (game_id == TEXT_LEADERBOARDS && !disabled()) id = T_PAUSE_TITLE;  // (the pause menu's row, repurposed)
     if (id < HM_TEXT_BASE || id >= T_END) { orig(c); return; }
     uint64_t res = c->x[8], lang_s = c->x[1];
-    c->x[0] = id >= T_COUNT ? TEXT_CHOICE : text_style[id - HM_TEXT_BASE];  // a game text of the same kind, for the style field;
+    if (id == game_id)  // ours: a game text of the same kind, for the style field (a game's own id keeps its own)
+        c->x[0] = id >= T_COUNT ? TEXT_CHOICE : text_style[id - HM_TEXT_BASE];
     orig(c);                                  // the text is replaced
     char lang[16];
     read_string(lang_s, lang, sizeof lang);  // (the lookup fills in the game's current language when it was empty)

@@ -24,7 +24,8 @@
 
 typedef struct Dir Dir;
 typedef struct {
-    char *name, *path;
+    char *name, *path;  // path NULL: an extra file, its data in memory
+    const uint8_t *mem;
     uint64_t size, data_off;
     uint32_t off;  // entry offset in the file table
     Dir *parent;
@@ -77,6 +78,42 @@ static Dir *scan(const char *path, const char *name, Dir *parent, int depth) {
     return dir;
 }
 
+// Adds an extra file (from memory) at `path` under root, making the folders it needs; replaces a file of that name.
+static void add_extra(Dir *root, const RomfsExtraFile *x) {
+    Dir *d = root;
+    const char *p = x->path;
+    for (const char *slash; (slash = strchr(p, '/')); p = slash + 1) {
+        char name[256];
+        size_t n = (size_t)(slash - p);
+        if (!n || n >= sizeof name) return;
+        memcpy(name, p, n), name[n] = 0;
+        Dir *c = NULL;
+        for (int i = 0; i < d->ndirs; i++)
+            if (!strcmp(d->dirs[i]->name, name)) c = d->dirs[i];
+        if (!c) {
+            c = calloc(1, sizeof *c);
+            c->name = strdup(name), c->path = strdup(""), c->parent = d;
+            d->dirs = realloc(d->dirs, sizeof *d->dirs * (d->ndirs + 1));
+            d->dirs[d->ndirs++] = c;
+            qsort(d->dirs, d->ndirs, sizeof *d->dirs, by_name_dir);
+        }
+        d = c;
+    }
+    if (!*p) return;
+    File *f = NULL;
+    for (int i = 0; i < d->nfiles; i++)
+        if (!strcmp(d->files[i]->name, p)) f = d->files[i];
+    if (!f) {
+        f = calloc(1, sizeof *f);
+        f->name = strdup(p), f->parent = d;
+        d->files = realloc(d->files, sizeof *d->files * (d->nfiles + 1));
+        d->files[d->nfiles++] = f;
+        qsort(d->files, d->nfiles, sizeof *d->files, by_name_file);
+    }
+    free(f->path);
+    f->path = NULL, f->mem = x->data, f->size = x->size;
+}
+
 static void free_tree(Dir *d) {
     if (!d) return;
     for (int i = 0; i < d->ndirs; i++) free_tree(d->dirs[i]);
@@ -118,6 +155,11 @@ static void put32(uint8_t *p, uint32_t v) { memcpy(p, &v, 4); }
 static void put64(uint8_t *p, uint64_t v) { memcpy(p, &v, 8); }
 
 bool romfs_layout(const char *dir, RomfsLayout *out, char *why, size_t why_size) {
+    return romfs_layout_ex(dir, NULL, 0, out, why, why_size);
+}
+
+bool romfs_layout_ex(const char *dir, const RomfsExtraFile *extra, int nextra, RomfsLayout *out, char *why,
+                     size_t why_size) {
     #define FAIL(...) do { if (why) snprintf(why, why_size, __VA_ARGS__); goto fail; } while (0)
     bool ok = false;
     uint8_t *dtab = NULL, *ftab = NULL;
@@ -126,6 +168,7 @@ bool romfs_layout(const char *dir, RomfsLayout *out, char *why, size_t why_size)
     memset(out, 0, sizeof *out);
     Dir *root = scan(dir, "", NULL, 0);
     if (!root) FAIL("can't read %s", dir);
+    for (int i = 0; i < nextra; i++) add_extra(root, &extra[i]);
     // table order: root, then each directory's subdirectories as flatten() lists them; files likewise
     if (l.nd == l.cd) l.dirs = realloc(l.dirs, sizeof *l.dirs * (l.cd = 64));
     l.dirs[l.nd++] = root;
@@ -201,7 +244,8 @@ bool romfs_layout(const char *dir, RomfsLayout *out, char *why, size_t why_size)
     out->files = malloc(sizeof *out->files * l.nf);
     out->nfiles = l.nf;
     for (int i = 0; i < l.nf; i++)  // (in data order: sorted by start)
-        out->files[i] = (RomfsLayoutFile){ROMFS_DATA_START + l.files[i]->data_off, l.files[i]->size, strdup(l.files[i]->path)};
+        out->files[i] = (RomfsLayoutFile){ROMFS_DATA_START + l.files[i]->data_off, l.files[i]->size,
+                                          l.files[i]->path ? strdup(l.files[i]->path) : NULL, l.files[i]->mem};
     ok = true;
 fail:
     free(dtab), free(ftab), free(dbuckets), free(fbuckets), free(l.dirs), free(l.files);
