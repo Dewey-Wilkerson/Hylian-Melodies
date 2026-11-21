@@ -469,6 +469,14 @@ static void script_frame(uint64_t frame) {
     publish();
 }
 
+static bool virtual_pad_rumble(void *ud, Uint16 lo, Uint16 hi) {  // (what a real pad's motors would get)
+    (void)ud;
+    static Uint16 last_lo, last_hi;
+    if (lo != last_lo || hi != last_hi) LOG("[input] virtual pad rumble: low %u high %u\n", lo, hi);
+    last_lo = lo, last_hi = hi;
+    return true;
+}
+
 // HM_VIRTUAL_PAD=<frame>:<button>[/<frames>],... (test runs): an SDL virtual gamepad, attached at the first frame,
 // whose buttons (SDL's names: south, east, west, north, dpup, leftshoulder, start ...) are held from those presented
 // frames (6 by default). It reaches the game the way a real pad does: SDL's gamepad events (binding on the Controls
@@ -505,6 +513,7 @@ static void virtual_pad_frame(uint64_t frame) {
         d.naxes = SDL_GAMEPAD_AXIS_COUNT;
         d.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
         d.name = "Hylian Melodies virtual pad";
+        d.Rumble = virtual_pad_rumble;
         SDL_JoystickID id = SDL_AttachVirtualJoystick(&d);
         joy = id ? SDL_OpenJoystick(id) : NULL;
         LOG("[input] virtual pad: %s, %d steps\n", joy ? "attached" : SDL_GetError(), nsteps);
